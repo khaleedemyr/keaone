@@ -50,21 +50,15 @@ git push origin main
 
 ### Hostinger: first deploy (SSH)
 
-1. In hPanel → Domains → `keaone.justusku.co.id` set **document root** to:
-
-   `/home/u933641250/domains/justusku.co.id/public_html/keaone/backend/public`
-
-2. PHP version **8.3+** for that domain.
-
-3. SSH:
+Document root may stay as `.../public_html/keaone` (Hostinger often won't let you edit it).  
+Root `.htaccess` rewrites traffic into `backend/public/`. Use PHP **8.3+**.
 
 ```bash
-cd ~/domains/justusku.co.id/public_html
-# if folder empty / not a git repo yet:
-rm -rf keaone   # only if empty placeholder — backup first if anything important
-git clone https://github.com/khaleedemyr/keaone.git keaone
+cd ~/domains/justusku.co.id/public_html/keaone
+rm -f default.php
+git clone https://github.com/khaleedemyr/keaone.git .
 
-cd keaone/backend
+cd backend
 composer install --no-dev --optimize-autoloader
 cp .env.example .env
 # edit .env: APP_URL, DB_*, FRONTEND_URL
