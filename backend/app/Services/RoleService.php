@@ -249,6 +249,7 @@ class RoleService
         $none = $this->empty('tenant');
 
         $cashier = $none;
+        $cashier['chat'] = $this->flags(true, true, false, false);
         $cashier['pos'] = $this->flags(true, true, false, false);
         $cashier['products'] = $this->flags(true, false, false, false);
         $cashier['categories'] = $this->flags(true, false, false, false);
@@ -269,6 +270,7 @@ class RoleService
 
         $viewer = $none;
         $viewer['insight'] = $this->flags(true, false, false, false);
+        $viewer['chat'] = $this->flags(true, true, false, false);
         $viewer['products'] = $this->flags(true, false, false, false);
         $viewer['categories'] = $this->flags(true, false, false, false);
         $viewer['subcategories'] = $this->flags(true, false, false, false);

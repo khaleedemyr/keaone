@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\CalendarController;
 use App\Http\Controllers\Api\V1\CatalogController;
+use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\ChoiceController;
 use App\Http\Controllers\Api\V1\ChoiceTypeController;
@@ -109,6 +110,13 @@ Route::prefix('v1')->group(function () {
             Route::post('users', [UserController::class, 'store']);
             Route::put('users/{user}', [UserController::class, 'update']);
             Route::delete('users/{user}', [UserController::class, 'destroy']);
+
+            Route::get('chat/peers', [ChatController::class, 'peers']);
+            Route::get('chat/conversations', [ChatController::class, 'conversations']);
+            Route::post('chat/conversations', [ChatController::class, 'storeConversation']);
+            Route::get('chat/conversations/{conversation}/messages', [ChatController::class, 'messages']);
+            Route::post('chat/conversations/{conversation}/messages', [ChatController::class, 'storeMessage']);
+            Route::post('chat/conversations/{conversation}/read', [ChatController::class, 'markRead']);
 
             Route::get('outlets', [OutletController::class, 'index']);
             Route::post('outlets', [OutletController::class, 'store']);

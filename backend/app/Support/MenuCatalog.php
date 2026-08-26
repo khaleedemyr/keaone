@@ -13,6 +13,7 @@ class MenuCatalog
     {
         return [
             self::menu('insight', ['view']),
+            self::menu('chat', ['view', 'create']),
             self::menu('pos', ['view', 'create']),
             self::menu('products', self::ACTIONS),
             self::menu('categories', self::ACTIONS),

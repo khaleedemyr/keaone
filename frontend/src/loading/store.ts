@@ -95,5 +95,11 @@ export function stopLoading() {
 }
 
 export function isSilentRequest(url: string) {
-  return url.includes('/activity-logs/events') || url.includes('/me/preferences')
+  return (
+    url.includes('/activity-logs/events') ||
+    url.includes('/me/preferences') ||
+    url.includes('/chat/conversations') ||
+    url.includes('/chat/peers') ||
+    url.includes('/chat/')
+  )
 }

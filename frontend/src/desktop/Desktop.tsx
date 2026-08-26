@@ -9,6 +9,7 @@ import Dashboard from '../pages/Dashboard'
 import Pos from '../pages/Pos'
 import { useI18n } from '../i18n'
 import AdminApp from './AdminApp'
+import ChatApp from './ChatApp'
 import { ClockTray } from './ClockTray'
 import { DesktopIconsLayer } from './DesktopIconsLayer'
 import { DesktopSurface } from './DesktopSurface'
@@ -112,6 +113,7 @@ export default function Desktop() {
         {desktop.windows.map((win) => (
           <WindowFrame key={win.id} id={win.id} title={titles[win.id] ?? win.id}>
             {win.id === 'insight' ? <Dashboard /> : null}
+            {win.id === 'chat' ? <ChatApp /> : null}
             {win.id === 'pos' ? <Pos /> : null}
             {win.id === 'master' ? <MasterApp /> : null}
             {win.id === 'sales' ? <SalesApp /> : null}

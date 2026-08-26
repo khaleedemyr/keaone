@@ -12,6 +12,7 @@ import type { AclAction, ApiOk, MenuAcl, RoleCatalogPayload, RoleMenu, RoleRecor
 
 const MENU_LABEL: Record<string, MsgKey> = {
   insight: 'menuInsight',
+  chat: 'menuChat',
   pos: 'menuPos',
   products: 'menuProducts',
   categories: 'menuCategories',
@@ -62,6 +63,7 @@ const ACTIONS: { id: AclAction; label: MsgKey }[] = [
 
 const ROLE_GROUPS: { id: string; label: MsgKey; menus: string[] }[] = [
   { id: 'insight', label: 'appInsight', menus: ['insight'] },
+  { id: 'chat', label: 'appChat', menus: ['chat'] },
   { id: 'overview', label: 'appOverview', menus: ['overview'] },
   { id: 'pos', label: 'appPos', menus: ['pos'] },
   { id: 'master', label: 'appMaster', menus: ['products', 'categories', 'subcategories', 'units', 'itemtypes', 'pricechannels', 'discounts', 'promotions', 'customfields', 'choicetypes', 'choices', 'warehouses', 'suppliers', 'customers'] },
