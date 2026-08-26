@@ -33,8 +33,8 @@ export function StoreWidget() {
       </div>
       <div className="os-store-footer">
         {role ? <span className="os-store-pill">{role}</span> : null}
-        {(me?.memberships.length ?? 0) > 1 ? (
-          <span className="os-store-meta">{t('widgetStoreCount', { n: String(me?.memberships.length ?? 0) })}</span>
+        {(me?.memberships?.length ?? 0) > 1 ? (
+          <span className="os-store-meta">{t('widgetStoreCount', { n: String(me?.memberships?.length ?? 0) })}</span>
         ) : null}
       </div>
     </WidgetFrame>

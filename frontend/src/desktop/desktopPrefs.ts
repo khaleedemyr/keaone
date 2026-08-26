@@ -223,13 +223,13 @@ export function resolveIconPosition(
 }
 
 export function resolveWidgetPosition(id: string, prefs: DesktopPreferences): DesktopIconPosition {
-  return prefs.widgets.positions[id] ?? defaultWidgetPosition(id)
+  return prefs.widgets?.positions?.[id] ?? defaultWidgetPosition(id)
 }
 
 export function isDesktopIconVisible(appId: string, prefs: DesktopPreferences) {
-  return prefs.showIcons && !prefs.hiddenApps.includes(appId)
+  return prefs.showIcons !== false && !(prefs.hiddenApps ?? []).includes(appId)
 }
 
 export function isWidgetVisible(id: WidgetId, prefs: DesktopPreferences) {
-  return !prefs.widgets.hidden.includes(id)
+  return !(prefs.widgets?.hidden ?? []).includes(id)
 }

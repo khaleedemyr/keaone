@@ -18,7 +18,7 @@ export function useTenantApps() {
     () => [
       ...(can('insight') ? (['insight'] as TenantAppId[]) : []),
       ...(can('chat') ? (['chat'] as TenantAppId[]) : []),
-      ...(me?.modules.pos && can('pos') ? (['pos'] as TenantAppId[]) : []),
+      ...(me?.modules?.pos && can('pos') ? (['pos'] as TenantAppId[]) : []),
       ...(canAny(
         [
           'products',
@@ -44,7 +44,7 @@ export function useTenantApps() {
       ...(canAdmin ? (['admin'] as TenantAppId[]) : []),
       ...(canAny(['settings', 'possettings', 'cafetables']) ? (['settings'] as TenantAppId[]) : []),
     ],
-    [can, canAny, canAdmin, me?.modules.pos],
+    [can, canAny, canAdmin, me?.modules?.pos],
   )
 
   const titles = useMemo<Partial<Record<AppId, string>>>(

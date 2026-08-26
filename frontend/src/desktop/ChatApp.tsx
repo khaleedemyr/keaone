@@ -47,14 +47,15 @@ export default function ChatApp() {
   const lastIdRef = useRef(0)
 
   const active = useMemo(
-    () => conversations.find((c) => c.id === activeId) ?? null,
+    () => (Array.isArray(conversations) ? conversations : []).find((c) => c.id === activeId) ?? null,
     [conversations, activeId],
   )
 
   const filteredConversations = useMemo(() => {
+    const rows = Array.isArray(conversations) ? conversations : []
     const q = search.trim().toLowerCase()
-    if (!q) return conversations
-    return conversations.filter((c) => {
+    if (!q) return rows
+    return rows.filter((c) => {
       const name = c.peer?.name?.toLowerCase() ?? ''
       const preview = c.last_message?.body?.toLowerCase() ?? ''
       return name.includes(q) || preview.includes(q)

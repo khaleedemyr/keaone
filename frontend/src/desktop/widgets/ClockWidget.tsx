@@ -74,7 +74,7 @@ const REAL_SKINS: ClockSkin[] = ['analog', 'watch', 'wall', 'chrome']
 export function ClockWidget() {
   const { t, locale } = useI18n()
   const { desktop, patchWidgets } = useDesktop()
-  const skin = desktop.widgets.clockSkin
+  const skin = desktop.widgets?.clockSkin ?? 'classic'
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {

@@ -61,12 +61,16 @@ const STORAGE_KEY = 'kea_wallpaper'
 
 export const DEFAULT_WALLPAPER: Wallpaper = { kind: 'preset', id: 'aurora' }
 
+const DEFAULT_WALLPAPER_STYLE =
+  'radial-gradient(1200px 600px at 10% -10%, rgba(62,232,197,.28), transparent 55%), #05070c'
+
 export function wallpaperCss(wallpaper: Wallpaper): string {
   if (wallpaper.kind === 'image' && wallpaper.src) {
     return `center / cover no-repeat url("${wallpaper.src}")`
   }
-  const preset = WALLPAPER_PRESETS.find((item) => item.id === wallpaper.id) ?? WALLPAPER_PRESETS[0]
-  return preset.style
+  const presets = WALLPAPER_PRESETS ?? []
+  const preset = presets.find((item) => item.id === wallpaper.id) ?? presets[0]
+  return preset?.style ?? DEFAULT_WALLPAPER_STYLE
 }
 
 function isWallpaperSrc(src: string): boolean {

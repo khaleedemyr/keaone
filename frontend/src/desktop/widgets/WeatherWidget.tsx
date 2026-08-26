@@ -73,16 +73,16 @@ export function WeatherWidget() {
   const [weather, setWeather] = useState<WeatherState>(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
-  const [cityDraft, setCityDraft] = useState(desktop.widgets.weatherCity)
+  const [cityDraft, setCityDraft] = useState(desktop.widgets?.weatherCity ?? '')
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       setLoading(true)
       try {
-        const coords = await resolveCoords(desktop.widgets.weatherCity)
+        const coords = await resolveCoords(desktop.widgets?.weatherCity ?? '')
         if (!coords || cancelled) return
-        const place = coords.place || desktop.widgets.weatherCity || t('widgetWeatherNear')
+        const place = coords.place || desktop.widgets?.weatherCity || t('widgetWeatherNear')
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current=temperature_2m,relative_humidity_2m,weather_code&timezone=auto`
         const res = await fetch(url)
         if (!res.ok) throw new Error('weather')
@@ -108,7 +108,7 @@ export function WeatherWidget() {
       cancelled = true
       window.clearInterval(id)
     }
-  }, [desktop.widgets.weatherCity, t])
+  }, [desktop.widgets?.weatherCity, t])
 
   const condition = weather ? weatherKey(weather.code) : 'partly'
 
@@ -160,7 +160,7 @@ export function WeatherWidget() {
           type="button"
           className="os-weather-edit os-widget-nodrag"
           onClick={() => {
-            setCityDraft(desktop.widgets.weatherCity)
+            setCityDraft(desktop.widgets?.weatherCity ?? '')
             setEditing(true)
           }}
         >

@@ -140,11 +140,12 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
 
   const setWidgetPosition = useCallback((widgetId: string, position: DesktopIconPosition, persist = true) => {
     setDesktopState((current) => {
+      const widgets = current.widgets ?? DEFAULT_DESKTOP_PREFS.widgets
       const next = normalizeDesktopPrefs({
         ...current,
         widgets: {
-          ...current.widgets,
-          positions: { ...current.widgets.positions, [widgetId]: position },
+          ...widgets,
+          positions: { ...widgets.positions, [widgetId]: position },
         },
       })
       saveDesktopPrefs(next)
@@ -155,12 +156,13 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
 
   const setWidgetVisible = useCallback((widgetId: WidgetId, visible: boolean) => {
     setDesktopState((current) => {
-      const hidden = new Set(current.widgets.hidden)
+      const widgets = current.widgets ?? DEFAULT_DESKTOP_PREFS.widgets
+      const hidden = new Set(widgets.hidden ?? [])
       if (visible) hidden.delete(widgetId)
       else hidden.add(widgetId)
       const next = normalizeDesktopPrefs({
         ...current,
-        widgets: { ...current.widgets, hidden: [...hidden] },
+        widgets: { ...widgets, hidden: [...hidden] },
       })
       saveDesktopPrefs(next)
       persistPrefs({ desktop: next })
@@ -169,8 +171,17 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const patchWidgets = useCallback((patch: Partial<DesktopWidgetsPrefs>, persist = true) => {
-    setDesktop({ widgets: patch as DesktopWidgetsPrefs }, persist)
-  }, [setDesktop])
+    setDesktopState((current) => {
+      const widgets = current.widgets ?? DEFAULT_DESKTOP_PREFS.widgets
+      const next = normalizeDesktopPrefs({
+        ...current,
+        widgets: { ...widgets, ...patch },
+      })
+      saveDesktopPrefs(next)
+      if (persist) persistPrefs({ desktop: next })
+      return next
+    })
+  }, [])
 
   const setAppDesktopVisible = useCallback((appId: string, visible: boolean) => {
     setDesktopState((current) => {

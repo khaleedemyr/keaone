@@ -34,12 +34,12 @@ export async function listPeers(search = '') {
     params: search ? { search } : undefined,
     silent: true,
   })
-  return data.data
+  return Array.isArray(data.data) ? data.data : []
 }
 
 export async function listConversations() {
   const { data } = await api.get<Ok<ChatConversation[]>>('/chat/conversations', { silent: true })
-  return data.data
+  return Array.isArray(data.data) ? data.data : []
 }
 
 export async function openDirect(userId: number) {
@@ -56,7 +56,7 @@ export async function listMessages(conversationId: number, opts?: { afterId?: nu
     },
     silent: true,
   })
-  return data.data
+  return Array.isArray(data.data) ? data.data : []
 }
 
 export async function sendMessage(conversationId: number, body: string) {

@@ -24,6 +24,7 @@ import { StartMenuPanel } from './StartMenuPanel'
 import { useTenantApps } from './useTenantApps'
 import { WallpaperLayer } from './WallpaperLayer'
 import { WindowFrame } from './WindowFrame'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 export default function Desktop() {
   const { t } = useI18n()
@@ -108,17 +109,21 @@ export default function Desktop() {
         ) : null}
 
         <DesktopIconsLayer apps={apps} titles={titles} onOpenApp={openApp} />
-        <DesktopWidgetsLayer />
+        <ErrorBoundary fallback={null}>
+          <DesktopWidgetsLayer />
+        </ErrorBoundary>
 
         {desktop.windows.map((win) => (
           <WindowFrame key={win.id} id={win.id} title={titles[win.id] ?? win.id}>
-            {win.id === 'insight' ? <Dashboard /> : null}
-            {win.id === 'chat' ? <ChatApp /> : null}
-            {win.id === 'pos' ? <Pos /> : null}
-            {win.id === 'master' ? <MasterApp /> : null}
-            {win.id === 'sales' ? <SalesApp /> : null}
-            {win.id === 'admin' ? <AdminApp /> : null}
-            {win.id === 'settings' ? <SettingsApp /> : null}
+            <ErrorBoundary>
+              {win.id === 'insight' ? <Dashboard /> : null}
+              {win.id === 'chat' ? <ChatApp /> : null}
+              {win.id === 'pos' ? <Pos /> : null}
+              {win.id === 'master' ? <MasterApp /> : null}
+              {win.id === 'sales' ? <SalesApp /> : null}
+              {win.id === 'admin' ? <AdminApp /> : null}
+              {win.id === 'settings' ? <SettingsApp /> : null}
+            </ErrorBoundary>
           </WindowFrame>
         ))}
 
@@ -158,13 +163,13 @@ export default function Desktop() {
                 </button>
               ) : null}
 
-              {(me?.memberships.length ?? 0) > 1 ? (
+              {(me?.memberships?.length ?? 0) > 1 ? (
                 <div className="mt-3">
                   <div className="mb-1 text-[10px] uppercase tracking-[0.16em] text-muted">
                     {t('yourCompanies')}
                   </div>
                   <div className="max-h-40 space-y-1 overflow-auto">
-                    {me?.memberships.map((item) => (
+                    {me?.memberships?.map((item) => (
                       <button
                         key={item.company_id}
                         type="button"

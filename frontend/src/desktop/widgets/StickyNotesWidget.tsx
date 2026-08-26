@@ -86,7 +86,7 @@ function StickyNoteCard({
 
 export function StickyNotesWidget() {
   const { desktop, patchWidgets, setWidgetPosition } = useDesktop()
-  const notes = desktop.widgets.stickyNotes
+  const notes = Array.isArray(desktop.widgets?.stickyNotes) ? desktop.widgets.stickyNotes : []
 
   function updateNotes(next: StickyNote[]) {
     patchWidgets({ stickyNotes: next })
