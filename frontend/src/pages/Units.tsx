@@ -1,0 +1,226 @@
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
+import { api, apiMessage } from '../api/client'
+import type { ApiOk, Unit } from '../types'
+import { useFeedback } from '../components/feedback'
+import { PageHeader } from '../components/ui'
+import { MasterFilters, MasterPager, useListQuery } from '../components/MasterListBar'
+import { MasterModal, MasterViewModal, MasterNameButton, ViewField } from '../components/MasterModal'
+import { useI18n } from '../i18n'
+import { useAccess } from '../access'
+
+export default function Units() {
+  const { t } = useI18n()
+  const { can } = useAccess()
+  const feedback = useFeedback()
+  const list = useListQuery()
+  const [items, setItems] = useState<Unit[]>([])
+  const [name, setName] = useState('')
+  const [symbol, setSymbol] = useState('')
+  const [editing, setEditing] = useState<Unit | null>(null)
+  const [viewing, setViewing] = useState<Unit | null>(null)
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function load() {
+    try {
+      const { data } = await api.get<ApiOk<Unit[]>>('/units', {
+        params: {
+          search: list.search || undefined,
+          status: list.status,
+          page: list.page,
+          per_page: list.perPage,
+        },
+      })
+      setItems(data.data)
+      list.applyMeta(data.meta, data.data.length)
+    } catch (err) {
+      feedback.error(apiMessage(err, t('loadFailed')))
+    }
+  }
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void load()
+    }, 200)
+    return () => window.clearTimeout(handle)
+  }, [list.search, list.status, list.page, list.perPage])
+
+  function openCreate() {
+    setEditing(null)
+    setName('')
+    setSymbol('')
+    setError('')
+    setOpen(true)
+  }
+
+  function openEdit(item: Unit) {
+    setEditing(item)
+    setName(item.name)
+    setSymbol(item.symbol ?? '')
+    setError('')
+    setOpen(true)
+  }
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      const payload = { name, symbol: symbol || null }
+      if (editing) await api.put(`/units/${editing.id}`, payload)
+      else await api.post('/units', payload)
+      setOpen(false)
+      await load()
+      feedback.success(t('saved'))
+    } catch (err) {
+      setError(apiMessage(err, t('saveFailed')))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function remove(item: Unit) {
+    const ok = await feedback.confirm({
+      title: t('deleteUnitTitle'),
+      message: t('deleteConfirm', { name: item.name }),
+      confirmLabel: t('delete'),
+      tone: 'danger',
+    })
+    if (!ok) return
+    try {
+      await api.delete(`/units/${item.id}`)
+      await load()
+      feedback.success(t('deleted'))
+    } catch (err) {
+      feedback.error(apiMessage(err, t('deleteFailed')))
+    }
+  }
+
+  async function activate(item: Unit) {
+    try {
+      await api.put(`/units/${item.id}`, { is_active: true })
+      await load()
+      feedback.success(t('saved'))
+    } catch (err) {
+      feedback.error(apiMessage(err, t('saveFailed')))
+    }
+  }
+
+  const canEdit = can('units', 'edit')
+  const canDelete = can('units', 'delete')
+  const showActions = canEdit || canDelete
+
+  return (
+    <div>
+      <PageHeader
+        eyebrow={t('productsEyebrow')}
+        title={t('navUnits')}
+        subtitle={t('unitsSubtitle')}
+        action={
+          can('units', 'create') ? (
+            <button type="button" onClick={openCreate} className="btn-primary">
+              {t('addUnit')}
+            </button>
+          ) : undefined
+        }
+      />
+
+      <MasterFilters {...list.filters} searchPlaceholder={t('searchUnit')} />
+
+      <div className="glass overflow-hidden rounded-3xl">
+        <table className="w-full text-left text-sm">
+          <thead className="text-muted">
+            <tr>
+              <th className="px-4 py-3 font-medium">{t('name')}</th>
+              <th className="px-4 py-3 font-medium">{t('unitSymbol')}</th>
+              <th className="px-4 py-3 font-medium">{t('status')}</th>
+              {showActions ? <th className="px-4 py-3 font-medium"></th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id} className="border-t border-line hover:bg-fill">
+                <td className="px-4 py-3">
+                  <MasterNameButton onClick={() => setViewing(item)}>{item.name}</MasterNameButton>
+                </td>
+                <td className="px-4 py-3 text-muted">{item.symbol ?? '-'}</td>
+                <td className="px-4 py-3">
+                  <span className={item.is_active ? 'text-mint' : 'text-rose-300'}>
+                    {item.is_active ? t('active') : t('inactive')}
+                  </span>
+                </td>
+                {showActions ? (
+                <td className="px-4 py-3 text-right">
+                  {canEdit ? (
+                    <button type="button" className="mr-3 text-mint" onClick={() => openEdit(item)}>
+                      {t('edit')}
+                    </button>
+                  ) : null}
+                  {item.is_active && canDelete ? (
+                    <button type="button" className="text-rose-300" onClick={() => void remove(item)}>
+                      {t('delete')}
+                    </button>
+                  ) : null}
+                  {!item.is_active && canEdit ? (
+                    <button type="button" className="text-mint" onClick={() => void activate(item)}>
+                      {t('activate')}
+                    </button>
+                  ) : null}
+                </td>
+                ) : null}
+              </tr>
+            ))}
+            {items.length === 0 ? (
+              <tr>
+                <td className="px-4 py-8 text-center text-muted" colSpan={showActions ? 4 : 3}>
+                  {t('emptyMaster')}
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+
+      <MasterPager page={list.page} lastPage={list.lastPage} total={list.total} onPage={list.setPage} />
+
+      <MasterModal
+        open={open}
+        title={editing ? t('editUnit') : t('newUnit')}
+        error={error}
+        saving={saving}
+        onClose={() => setOpen(false)}
+        onSubmit={onSubmit}
+      >
+        <label className="text-sm text-muted">
+          {t('name')}
+          <input required className="field" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="text-sm text-muted">
+          {t('unitSymbol')}
+          <input className="field" value={symbol} onChange={(e) => setSymbol(e.target.value)} />
+        </label>
+      </MasterModal>
+
+      <MasterViewModal
+        open={Boolean(viewing)}
+        title={t('viewRecord')}
+        onClose={() => setViewing(null)}
+        onEdit={
+          viewing && canEdit
+            ? () => {
+                const item = viewing
+                setViewing(null)
+                openEdit(item)
+              }
+            : undefined
+        }
+      >
+        <ViewField label={t('name')} value={viewing?.name} />
+        <ViewField label={t('unitSymbol')} value={viewing?.symbol} />
+        <ViewField label={t('status')} value={viewing?.is_active ? t('active') : t('inactive')} />
+      </MasterViewModal>
+    </div>
+  )
+}

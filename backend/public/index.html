@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/logo.svg" />
+    <meta name="theme-color" content="#05070c" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KEA One ERP</title>
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem('kea_theme') || 'dark'
+          document.documentElement.classList.add(theme)
+          document.documentElement.dataset.theme = theme
+          var known = {
+            id: ['id', 'ltr'],
+            en: ['en', 'ltr'],
+            es: ['es', 'ltr'],
+            ar: ['ar', 'rtl'],
+            zh: ['zh-CN', 'ltr'],
+            fr: ['fr', 'ltr'],
+            ja: ['ja', 'ltr'],
+            ru: ['ru', 'ltr'],
+          }
+          var lang = localStorage.getItem('kea_lang') || 'id'
+          var meta = known[lang] || known.id
+          document.documentElement.lang = meta[0]
+          document.documentElement.dir = meta[1]
+        } catch (e) {
+          document.documentElement.classList.add('dark')
+        }
+      })()
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Sora:wght@400;500;600;700;800&family=Syne:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script type="module" crossorigin src="/assets/index-CX7kdeMV.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-hePW80VL.js">
+    <link rel="modulepreload" crossorigin href="/assets/ui-BRcmUIl-.js">
+    <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
+    <link rel="modulepreload" crossorigin href="/assets/auth-BTXM0Lps.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-DG_hkzVZ.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

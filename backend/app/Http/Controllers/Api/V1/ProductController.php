@@ -1,0 +1,880 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Models\Outlet;
+use App\Models\Choice;
+use App\Models\Product;
+use App\Models\ProductBomItem;
+use App\Models\ProductImage;
+use App\Models\StockBalance;
+use App\Models\StockMovement;
+use App\Models\SubCategory;
+use App\Models\Unit;
+use App\Support\CurrentCompany;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+
+class ProductController extends Controller
+{
+    public function index(Request $request): JsonResponse
+    {
+        if ($request->boolean('for_select')) {
+            $this->ensureCanAny(['products', 'pos', 'promotions', 'discounts']);
+        } else {
+            $this->ensureCanAny(['products', 'pos']);
+        }
+        $query = Product::query()->orderBy('name');
+
+        if ($search = $request->string('search')->toString()) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('sku', 'like', "%{$search}%")
+                    ->orWhere('barcode', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('barcode')) {
+            $query->where('barcode', $request->string('barcode')->toString());
+        }
+
+        if ($request->filled('category_id')) {
+            $query->where('category_id', $request->integer('category_id'));
+        }
+
+        if ($request->filled('sub_category_id')) {
+            $query->where('sub_category_id', $request->integer('sub_category_id'));
+        }
+
+        if ($request->filled('type')) {
+            $query->where('type', $request->string('type')->toString());
+        }
+
+        if ($request->boolean('for_select')) {
+            $this->applyActiveStatus($query, $request);
+            $items = $query->limit(500)->get(['id', 'name', 'sku', 'unit', 'unit_id', 'is_active']);
+
+            return $this->ok($items);
+        }
+
+        $query->with($this->listRelations())->withCount('bomItems');
+        $this->applyActiveStatus($query, $request, true);
+
+        if ($request->boolean('for_pos')) {
+            $query->where('sell_price', '>', 0);
+        }
+
+        $outletId = CurrentCompany::outlet()?->id;
+        $products = $query->paginate($this->perPage($request, 50));
+        $ids = $products->getCollection()->pluck('id');
+        $balances = $outletId && $ids->isNotEmpty()
+            ? StockBalance::query()
+                ->where('outlet_id', $outletId)
+                ->whereIn('product_id', $ids)
+                ->pluck('qty', 'product_id')
+            : collect();
+
+        $products->getCollection()->transform(
+            fn (Product $product) => $this->serializeList($product, (int) ($balances[$product->id] ?? 0)),
+        );
+
+        return $this->ok($products->items(), $this->pageMeta($products));
+    }
+
+    public function show(Product $product): JsonResponse
+    {
+        $this->ensureCanAny(['products', 'pos']);
+        $qty = $this->qty($product);
+
+        return $this->ok($this->serialize($this->withRelations($product), $qty));
+    }
+
+    public function barcode(string $code): JsonResponse
+    {
+        $this->ensureCanAny(['products', 'pos']);
+        $product = Product::query()
+            ->with($this->relationList())
+            ->where('is_active', true)
+            ->where(function ($query) use ($code) {
+                $query->where('barcode', $code)->orWhere('sku', $code);
+            })
+            ->first();
+
+        if (! $product) {
+            return $this->error('Produk tidak ditemukan.', [], 404);
+        }
+
+        return $this->ok($this->serialize($product, $this->qty($product)));
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $this->ensureCan('products', 'create');
+
+        [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices] = $this->validated($request);
+        $initialQty = (int) $request->integer('initial_qty', 0);
+
+        $product = DB::transaction(function () use ($data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $initialQty) {
+            $product = Product::query()->create($data);
+            $this->syncOutletPrices($product, $outletPrices);
+            $this->syncChannelPrices($product, $channelPrices);
+            $this->syncChoices($product, $choiceIds);
+            $this->syncBom($product, $bomItems);
+            $this->ensureBalance($product, $initialQty, 'opening');
+
+            return $product;
+        });
+
+        return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)), [], 201);
+    }
+
+    public function update(Request $request, Product $product): JsonResponse
+    {
+        $this->ensureCan('products', 'edit');
+
+        [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices] = $this->validated($request, $product->id);
+
+        $product = DB::transaction(function () use ($product, $data, $outletPrices, $choiceIds, $bomItems, $channelPrices) {
+            $product->update($data);
+            $this->syncOutletPrices($product, $outletPrices);
+            $this->syncChannelPrices($product, $channelPrices);
+            $this->syncChoices($product, $choiceIds);
+            $this->syncBom($product, $bomItems);
+
+            return $product;
+        });
+
+        return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
+    }
+
+    public function destroy(Product $product): JsonResponse
+    {
+        $this->ensureCanAny([['products', 'delete'], ['products', 'edit']]);
+        $product->update(['is_active' => false]);
+
+        return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
+    }
+
+    public function storeImages(Request $request, Product $product): JsonResponse
+    {
+        $this->ensureCanAny([['products', 'create'], ['products', 'edit']]);
+
+        $request->validate([
+            'images' => ['required', 'array', 'max:8'],
+            'images.*' => ['required', 'file', 'image', 'max:4096'],
+        ]);
+
+        $files = $request->file('images', []);
+        if ($files instanceof UploadedFile) {
+            $files = [$files];
+        }
+        $files = array_values(array_filter(is_array($files) ? $files : []));
+        $existing = $product->images()->count();
+        if ($existing + count($files) > 8) {
+            throw ValidationException::withMessages([
+                'images' => ['Maksimal 8 foto produk.'],
+            ]);
+        }
+
+        $hadPrimary = $product->images()->where('is_primary', true)->exists();
+        $primaryIndex = $request->has('primary_index') ? $request->integer('primary_index') : -1;
+
+        $sort = (int) $product->images()->max('sort_order');
+        foreach ($files as $i => $file) {
+            $path = $this->storeImageFile($product, $file);
+            $sort++;
+            $makePrimary = $primaryIndex === $i || ($primaryIndex < 0 && ! $hadPrimary && $i === 0);
+            if ($makePrimary) {
+                $product->images()->update(['is_primary' => false]);
+                $hadPrimary = true;
+            }
+            $product->images()->create([
+                'path' => $path,
+                'sort_order' => $sort,
+                'is_primary' => $makePrimary,
+            ]);
+        }
+
+        $this->ensurePrimary($product);
+
+        return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
+    }
+
+    public function setPrimary(Product $product, ProductImage $productImage): JsonResponse
+    {
+        $this->ensureCanAny([['products', 'create'], ['products', 'edit']]);
+        abort_unless($productImage->product_id === $product->id, 404);
+
+        $this->markPrimary($product, $productImage);
+
+        return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
+    }
+
+    public function destroyImage(Product $product, ProductImage $productImage): JsonResponse
+    {
+        $this->ensureCanAny([['products', 'edit'], ['products', 'delete']]);
+        abort_unless($productImage->product_id === $product->id, 404);
+
+        $file = $productImage->absolutePath();
+        $productImage->delete();
+        if (is_file($file)) {
+            @unlink($file);
+        }
+
+        $this->ensurePrimary($product);
+
+        return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
+    }
+
+    private function markPrimary(Product $product, ProductImage $image): void
+    {
+        $product->images()->update(['is_primary' => false]);
+        $image->update(['is_primary' => true, 'sort_order' => 0]);
+    }
+
+    private function ensurePrimary(Product $product): void
+    {
+        if ($product->images()->where('is_primary', true)->exists()) {
+            return;
+        }
+
+        $next = $product->images()->reorder()->orderBy('sort_order')->orderBy('id')->first();
+        $next?->update(['is_primary' => true]);
+    }
+
+    /**
+     * @return array{0: array<string, mixed>, 1: list<array{outlet_id: int, sell_price: int}>|null, 2: list<int>|null, 3: list<array{component_id: int, qty: float, unit_id: int|null}>|null}
+     */
+    private function validated(Request $request, ?int $id = null): array
+    {
+        $companyId = CurrentCompany::id();
+
+        $data = $request->validate([
+            'name' => [$id ? 'sometimes' : 'required', 'string', 'max:150'],
+            'description' => ['nullable', 'string', 'max:5000'],
+            'type' => ['sometimes', Rule::in(['goods', 'service'])],
+            'category_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('categories', 'id')->where('company_id', $companyId),
+            ],
+            'sub_category_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('sub_categories', 'id')->where('company_id', $companyId),
+            ],
+            'item_type_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('item_types', 'id')->where('company_id', $companyId),
+            ],
+            'sku' => ['nullable', 'string', 'max:50', Rule::unique('products', 'sku')->where(fn ($q) => $q->where('company_id', $companyId))->ignore($id)],
+            'barcode' => ['nullable', 'string', 'max:80'],
+            'unit_id' => [
+                $id ? 'sometimes' : 'required',
+                'nullable',
+                'integer',
+                Rule::exists('units', 'id')->where('company_id', $companyId),
+            ],
+            'sell_price' => [$id ? 'sometimes' : 'required', 'integer', 'min:0'],
+            'outlet_prices' => ['nullable', 'array'],
+            'outlet_prices.*.outlet_id' => [
+                'required',
+                'integer',
+                Rule::exists('outlets', 'id')->where('company_id', $companyId),
+            ],
+            'outlet_prices.*.sell_price' => ['required', 'integer', 'min:0'],
+            'channel_prices' => ['nullable', 'array'],
+            'channel_prices.*.price_channel_id' => [
+                'required',
+                'integer',
+                Rule::exists('price_channels', 'id')->where('company_id', $companyId),
+            ],
+            'channel_prices.*.sell_price' => ['required', 'integer', 'min:0'],
+            'track_stock' => ['sometimes', 'boolean'],
+            'min_stock' => ['sometimes', 'integer', 'min:0'],
+            'custom_fields' => ['nullable', 'array'],
+            'is_active' => ['sometimes', 'boolean'],
+            'choice_ids' => ['nullable', 'array'],
+            'choice_ids.*' => [
+                'integer',
+                Rule::exists('choices', 'id')->where('company_id', $companyId),
+            ],
+            'bom_items' => ['nullable', 'array'],
+            'bom_items.*.component_id' => [
+                'required',
+                'integer',
+                Rule::exists('products', 'id')->where('company_id', $companyId),
+            ],
+            'bom_items.*.qty' => ['required', 'numeric', 'gt:0'],
+            'bom_items.*.unit_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('units', 'id')->where('company_id', $companyId),
+            ],
+        ]);
+
+        if (array_key_exists('sku', $data)) {
+            $data['sku'] = $data['sku'] !== '' && $data['sku'] !== null ? $data['sku'] : null;
+        }
+
+        if (array_key_exists('barcode', $data)) {
+            $data['barcode'] = $data['barcode'] !== '' && $data['barcode'] !== null ? $data['barcode'] : null;
+        }
+
+        if (array_key_exists('description', $data)) {
+            $data['description'] = $data['description'] !== '' && $data['description'] !== null ? $data['description'] : null;
+        }
+
+        if (($data['type'] ?? null) === 'service') {
+            $data['track_stock'] = false;
+        }
+
+        if (array_key_exists('sub_category_id', $data) && $data['sub_category_id']) {
+            $sub = SubCategory::query()->find($data['sub_category_id']);
+            $categoryId = $data['category_id'] ?? ($id ? Product::query()->find($id)?->category_id : null);
+            if (! $sub || (int) $sub->category_id !== (int) $categoryId) {
+                throw ValidationException::withMessages([
+                    'sub_category_id' => ['Sub kategori harus sesuai kategori yang dipilih.'],
+                ]);
+            }
+        }
+
+        if (array_key_exists('item_type_id', $data) && ! $data['item_type_id']) {
+            $data['item_type_id'] = null;
+        }
+
+        if (array_key_exists('unit_id', $data)) {
+            if ($data['unit_id']) {
+                $unit = Unit::query()->find($data['unit_id']);
+                $data['unit'] = $unit?->symbol ?: ($unit?->name ?: 'pcs');
+            } else {
+                $data['unit_id'] = null;
+            }
+        }
+
+        $outletPrices = null;
+        if (array_key_exists('outlet_prices', $data)) {
+            $outletPrices = array_map(fn (array $row) => [
+                'outlet_id' => (int) $row['outlet_id'],
+                'sell_price' => (int) $row['sell_price'],
+            ], $data['outlet_prices'] ?? []);
+            unset($data['outlet_prices']);
+
+            if ($outletPrices !== [] && ! array_key_exists('sell_price', $data)) {
+                $defaultOutletId = Outlet::query()->where('is_default', true)->value('id');
+                $picked = collect($outletPrices)->firstWhere('outlet_id', $defaultOutletId) ?? $outletPrices[0];
+                $data['sell_price'] = $picked['sell_price'];
+            }
+        }
+
+        $choiceIds = array_key_exists('choice_ids', $data)
+            ? array_values($data['choice_ids'] ?? [])
+            : ($id ? null : []);
+        unset($data['choice_ids']);
+
+        $bomItems = null;
+        if (array_key_exists('bom_items', $data)) {
+            $bomItems = [];
+            foreach ($data['bom_items'] ?? [] as $row) {
+                $bomItems[] = [
+                    'component_id' => (int) $row['component_id'],
+                    'qty' => (float) $row['qty'],
+                    'unit_id' => isset($row['unit_id']) && $row['unit_id'] ? (int) $row['unit_id'] : null,
+                ];
+            }
+            $this->assertBomValid($id, $bomItems);
+        } elseif (! $id) {
+            $bomItems = [];
+        }
+        unset($data['bom_items']);
+
+        $channelPrices = null;
+        if (array_key_exists('channel_prices', $data)) {
+            $channelPrices = array_map(fn (array $row) => [
+                'price_channel_id' => (int) $row['price_channel_id'],
+                'sell_price' => (int) $row['sell_price'],
+            ], $data['channel_prices'] ?? []);
+        } elseif (! $id) {
+            $channelPrices = [];
+        }
+        unset($data['channel_prices']);
+
+        if (array_key_exists('custom_fields', $data) || ! $id) {
+            $data['custom_fields'] = app(\App\Services\CustomFieldService::class)
+                ->normalize('product', $data['custom_fields'] ?? []);
+        }
+
+        return [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices];
+    }
+
+    /**
+     * @param  list<array{component_id: int, qty: float, unit_id: int|null}>  $rows
+     */
+    private function assertBomValid(?int $productId, array $rows): void
+    {
+        $ids = array_column($rows, 'component_id');
+        if (count($ids) !== count(array_unique($ids))) {
+            throw ValidationException::withMessages([
+                'bom_items' => ['Komponen tidak boleh dobel.'],
+            ]);
+        }
+
+        foreach ($rows as $row) {
+            if ($productId && $row['component_id'] === $productId) {
+                throw ValidationException::withMessages([
+                    'bom_items' => ['Produk tidak bisa memakai dirinya sendiri sebagai bahan.'],
+                ]);
+            }
+
+            if ($productId && $this->bomReaches($row['component_id'], $productId, [])) {
+                throw ValidationException::withMessages([
+                    'bom_items' => ['BOM membentuk siklus. Pilih komponen lain.'],
+                ]);
+            }
+        }
+    }
+
+    /**
+     * @param  array<int, true>  $seen
+     */
+    private function bomReaches(int $fromProductId, int $targetId, array $seen): bool
+    {
+        if ($fromProductId === $targetId) {
+            return true;
+        }
+
+        if (isset($seen[$fromProductId])) {
+            return false;
+        }
+
+        $seen[$fromProductId] = true;
+        $childIds = ProductBomItem::query()->where('product_id', $fromProductId)->pluck('component_id');
+        foreach ($childIds as $childId) {
+            if ($this->bomReaches((int) $childId, $targetId, $seen)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<int>|null  $choiceIds
+     */
+    private function syncChoices(Product $product, ?array $choiceIds): void
+    {
+        if ($choiceIds === null) {
+            return;
+        }
+
+        $ids = Choice::query()->whereIn('id', $choiceIds ?: [0])->pluck('id')->all();
+        $product->choices()->sync($ids);
+    }
+
+    /**
+     * @param  list<array{component_id: int, qty: float, unit_id: int|null}>|null  $rows
+     */
+    private function syncBom(Product $product, ?array $rows): void
+    {
+        if ($rows === null) {
+            return;
+        }
+
+        $keep = [];
+        foreach ($rows as $i => $row) {
+            if ($row['component_id'] === (int) $product->id) {
+                throw ValidationException::withMessages([
+                    'bom_items' => ['Produk tidak bisa memakai dirinya sendiri sebagai bahan.'],
+                ]);
+            }
+
+            $item = $product->bomItems()->updateOrCreate(
+                ['component_id' => $row['component_id']],
+                [
+                    'company_id' => $product->company_id,
+                    'qty' => $row['qty'],
+                    'unit_id' => $row['unit_id'],
+                    'sort_order' => $i,
+                ],
+            );
+            $keep[] = $item->id;
+        }
+
+        $product->bomItems()->whereNotIn('id', $keep ?: [0])->delete();
+    }
+
+    /**
+     * @param  list<array{outlet_id: int, sell_price: int}>|null  $rows
+     */
+    private function syncOutletPrices(Product $product, ?array $rows): void
+    {
+        if ($rows === null) {
+            return;
+        }
+
+        $keep = [];
+        foreach ($rows as $row) {
+            $item = $product->outletPrices()->updateOrCreate(
+                ['outlet_id' => $row['outlet_id']],
+                ['sell_price' => $row['sell_price']],
+            );
+            $keep[] = $item->id;
+        }
+
+        $product->outletPrices()->whereNotIn('id', $keep ?: [0])->delete();
+    }
+
+    /**
+     * @param  list<array{price_channel_id: int, sell_price: int}>|null  $rows
+     */
+    private function syncChannelPrices(Product $product, ?array $rows): void
+    {
+        if ($rows === null) {
+            return;
+        }
+
+        $keep = [];
+        foreach ($rows as $row) {
+            $item = $product->channelPrices()->updateOrCreate(
+                ['price_channel_id' => $row['price_channel_id']],
+                [
+                    'company_id' => $product->company_id,
+                    'sell_price' => $row['sell_price'],
+                ],
+            );
+            $keep[] = $item->id;
+        }
+
+        $product->channelPrices()->whereNotIn('id', $keep ?: [0])->delete();
+    }
+
+    private function storeImageFile(Product $product, UploadedFile $uploaded): string
+    {
+        abort_unless($uploaded->isValid(), 422, 'Unggahan foto gagal.');
+
+        $info = @getimagesize($uploaded->getRealPath() ?: $uploaded->getPathname());
+        abort_unless($info !== false, 422, 'File bukan gambar yang valid.');
+
+        $ext = match ($info[2] ?? 0) {
+            IMAGETYPE_JPEG => 'jpg',
+            IMAGETYPE_PNG => 'png',
+            IMAGETYPE_WEBP => 'webp',
+            default => null,
+        };
+        abort_unless($ext, 422, 'Format gambar tidak didukung. Pakai JPG, PNG, atau WebP.');
+
+        $dir = storage_path('app/public/products');
+        if (! is_dir($dir) && ! mkdir($dir, 0775, true) && ! is_dir($dir)) {
+            abort(500, 'Tidak bisa membuat folder foto produk.');
+        }
+
+        $name = $product->id.'_'.Str::uuid().'.'.$ext;
+        $uploaded->move($dir, $name);
+        abort_unless(is_file($dir.DIRECTORY_SEPARATOR.$name), 422, 'Tidak bisa menyimpan foto.');
+
+        return 'products/'.$name;
+    }
+
+    /**
+     * @return list<string|\Closure>
+     */
+    private function listRelations(): array
+    {
+        return [
+            'category:id,name',
+            'subCategory:id,name,category_id',
+            'outletPrices:id,product_id,outlet_id,sell_price',
+            'channelPrices.priceChannel:id,name,code',
+            'images' => fn ($q) => $q->where('is_primary', true),
+            'choices.choiceType:id,name',
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function relationList(): array
+    {
+        return ['category', 'subCategory', 'itemType', 'unitMaster', 'images', 'outletPrices', 'channelPrices.priceChannel', 'choices.choiceType', 'bomItems.component', 'bomItems.unitMaster'];
+    }
+
+    private function withRelations(Product $product): Product
+    {
+        return $product->fresh($this->relationList()) ?? $product;
+    }
+
+    private function ensureBalance(Product $product, int $initialQty, string $note): void
+    {
+        if (! $product->track_stock) {
+            return;
+        }
+
+        $outlet = CurrentCompany::outlet();
+        if (! $outlet) {
+            return;
+        }
+
+        $balance = StockBalance::query()->firstOrCreate(
+            [
+                'company_id' => $product->company_id,
+                'outlet_id' => $outlet->id,
+                'product_id' => $product->id,
+            ],
+            ['qty' => 0],
+        );
+
+        if ($initialQty === 0) {
+            return;
+        }
+
+        $balance->qty = $initialQty;
+        $balance->save();
+
+        StockMovement::query()->create([
+            'company_id' => $product->company_id,
+            'outlet_id' => $outlet->id,
+            'product_id' => $product->id,
+            'type' => 'adjustment',
+            'qty_change' => $initialQty,
+            'qty_after' => $initialQty,
+            'ref_type' => 'product',
+            'ref_id' => $product->id,
+            'note' => $note,
+        ]);
+    }
+
+    private function qty(Product $product): int
+    {
+        $outletId = CurrentCompany::outlet()?->id;
+
+        if (! $outletId || ! $product->track_stock) {
+            return 0;
+        }
+
+        return (int) StockBalance::query()
+            ->where('outlet_id', $outletId)
+            ->where('product_id', $product->id)
+            ->value('qty');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeList(Product $product, int $qty): array
+    {
+        $outletId = CurrentCompany::outlet()?->id;
+        $cover = $product->relationLoaded('images') ? $product->images->first() : null;
+
+        return [
+            'id' => $product->id,
+            'category_id' => $product->category_id,
+            'category' => $product->category?->only(['id', 'name']),
+            'sub_category_id' => $product->sub_category_id,
+            'sub_category' => $product->subCategory?->only(['id', 'name', 'category_id']),
+            'name' => $product->name,
+            'sku' => $product->sku,
+            'barcode' => $product->barcode,
+            'unit' => $product->unit,
+            'sell_price' => $product->priceFor($outletId),
+            'images' => $cover && $cover->url()
+                ? [[
+                    'id' => (int) $cover->id,
+                    'url' => $cover->url(),
+                    'sort_order' => (int) $cover->sort_order,
+                    'is_primary' => true,
+                ]]
+                : [],
+            'min_stock' => $product->min_stock,
+            'is_active' => $product->is_active,
+            'stock_qty' => $qty,
+            'has_bom' => (int) ($product->bom_items_count ?? 0) > 0,
+            'choice_types' => $this->serializeListChoiceTypes($product),
+            'channel_prices' => $this->serializeChannelPrices($product),
+        ];
+    }
+
+    /**
+     * @return list<array{id: int, name: string}>
+     */
+    private function serializeListChoiceTypes(Product $product): array
+    {
+        if (! $product->relationLoaded('choices')) {
+            return [];
+        }
+
+        return $product->choices
+            ->groupBy('choice_type_id')
+            ->map(function ($items) {
+                $type = $items->first()?->choiceType;
+                if (! $type) {
+                    return null;
+                }
+
+                return [
+                    'id' => (int) $type->id,
+                    'name' => $type->name,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<array{price_channel_id: int, sell_price: int, name: string|null, code: string|null}>
+     */
+    private function serializeChannelPrices(Product $product): array
+    {
+        if (! $product->relationLoaded('channelPrices')) {
+            return [];
+        }
+
+        return $product->channelPrices
+            ->map(fn ($row) => [
+                'price_channel_id' => (int) $row->price_channel_id,
+                'sell_price' => (int) $row->sell_price,
+                'name' => $row->priceChannel?->name,
+                'code' => $row->priceChannel?->code,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function serialize(Product $product, int $qty): array
+    {
+        $outletId = CurrentCompany::outlet()?->id;
+
+        return [
+            'id' => $product->id,
+            'category_id' => $product->category_id,
+            'category' => $product->category?->only(['id', 'name']),
+            'sub_category_id' => $product->sub_category_id,
+            'sub_category' => $product->subCategory?->only(['id', 'name', 'category_id']),
+            'item_type_id' => $product->item_type_id,
+            'item_type' => $product->itemType?->only(['id', 'name']),
+            'type' => $product->type,
+            'name' => $product->name,
+            'description' => $product->description,
+            'sku' => $product->sku,
+            'barcode' => $product->barcode,
+            'unit' => $product->unit,
+            'unit_id' => $product->unit_id,
+            'unit_master' => $product->unitMaster?->only(['id', 'name', 'symbol']),
+            'sell_price' => $product->priceFor($outletId),
+            'default_sell_price' => (int) $product->sell_price,
+            'outlet_prices' => $product->outletPrices
+                ->map(fn ($row) => [
+                    'outlet_id' => (int) $row->outlet_id,
+                    'sell_price' => (int) $row->sell_price,
+                ])
+                ->values(),
+            'channel_prices' => $this->serializeChannelPrices($product),
+            'images' => $product->images
+                ->map(fn (ProductImage $image) => [
+                    'id' => $image->id,
+                    'url' => $image->url(),
+                    'sort_order' => $image->sort_order,
+                    'is_primary' => (bool) $image->is_primary,
+                ])
+                ->filter(fn (array $row) => $row['url'])
+                ->values(),
+            'track_stock' => $product->track_stock,
+            'min_stock' => $product->min_stock,
+            'custom_fields' => $product->custom_fields,
+            'is_active' => $product->is_active,
+            'stock_qty' => $qty,
+            'choice_ids' => $this->choiceIds($product),
+            'choice_types' => $this->choiceGroups($product),
+            'bom_items' => $this->serializeBom($product),
+        ];
+    }
+
+    /**
+     * @return list<array{id: int, component_id: int, component: array{id: int, name: string, sku: string|null, unit: string, unit_id: int|null}|null, qty: float, unit_id: int|null, unit: array{id: int, name: string, symbol: string|null}|null, sort_order: int}>
+     */
+    private function serializeBom(Product $product): array
+    {
+        $rows = $product->relationLoaded('bomItems')
+            ? $product->bomItems
+            : $product->bomItems()->with(['component', 'unitMaster'])->get();
+
+        return $rows
+            ->map(function (ProductBomItem $row) {
+                return [
+                    'id' => (int) $row->id,
+                    'component_id' => (int) $row->component_id,
+                    'component' => $row->component ? [
+                        'id' => (int) $row->component->id,
+                        'name' => $row->component->name,
+                        'sku' => $row->component->sku,
+                        'unit' => $row->component->unit,
+                        'unit_id' => $row->component->unit_id ? (int) $row->component->unit_id : null,
+                    ] : null,
+                    'qty' => (float) $row->qty,
+                    'unit_id' => $row->unit_id ? (int) $row->unit_id : null,
+                    'unit' => $row->unitMaster?->only(['id', 'name', 'symbol']),
+                    'sort_order' => (int) $row->sort_order,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function choiceIds(Product $product): array
+    {
+        if ($product->relationLoaded('choices')) {
+            return $product->choices->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+        }
+
+        return $product->choices()->pluck('choices.id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * @return list<array{id: int, name: string, is_required: bool, min_select: int, max_select: int, choices: list<array{id: int, name: string, extra_price: int}>}>
+     */
+    private function choiceGroups(Product $product): array
+    {
+        $choices = $product->relationLoaded('choices')
+            ? $product->choices
+            : $product->choices()->with('choiceType')->get();
+
+        return $choices
+            ->groupBy('choice_type_id')
+            ->map(function ($items) {
+                $type = $items->first()?->choiceType;
+                if (! $type) {
+                    return null;
+                }
+
+                return [
+                    'id' => (int) $type->id,
+                    'name' => $type->name,
+                    'is_required' => (bool) $type->is_required,
+                    'min_select' => (int) $type->min_select,
+                    'max_select' => (int) $type->max_select,
+                    'choices' => $items
+                        ->sortBy([['sort_order', 'asc'], ['name', 'asc']])
+                        ->map(fn ($choice) => [
+                            'id' => (int) $choice->id,
+                            'name' => $choice->name,
+                            'extra_price' => (int) $choice->extra_price,
+                        ])
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+}
