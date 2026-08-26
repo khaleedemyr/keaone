@@ -804,6 +804,51 @@ html.light .os-icon-label {
   color: #fff;
 }
 
+.os-notify-btn.has-chat-unread {
+  color: var(--mint, #3ee8c5);
+}
+
+.os-chat-badge {
+  background: #0ea5e9;
+  animation: os-chat-pop 0.45s ease;
+}
+
+@keyframes os-chat-pop {
+  0% { transform: scale(0.6); opacity: 0.4; }
+  70% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.os-chat-flyout {
+  position: absolute;
+  inset-inline-end: 0;
+  bottom: calc(100% + 0.65rem);
+  z-index: 52;
+  display: flex;
+  width: min(44rem, calc(100vw - 1.2rem));
+  height: min(34rem, calc(100vh - 5.8rem));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1.35rem;
+  background: linear-gradient(180deg, var(--glass-a), var(--glass-b));
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.35);
+}
+
+.os-chat-flyout-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  padding: 0.75rem 0.9rem;
+}
+
+.os-chat-flyout-body {
+  min-height: 0;
+  flex: 1;
+}
+
 .os-notify {
   position: absolute;
   inset-inline-end: 0;

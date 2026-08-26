@@ -418,6 +418,8 @@ export const ja: Record<MsgKey, string> = {
     chatSend: 'Send',
     chatStartFailed: 'Could not open chat.',
     chatSendFailed: 'Could not send message.',
+    chatUnread: '{count} unread messages',
+    chatNewMessage: '{count} new chat message(s)',
 
   appAdmin: '管理者',
   adminLead: 'システム管理：ログイン権限、店舗、ルール。',

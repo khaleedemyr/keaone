@@ -418,6 +418,8 @@ export const es: Record<MsgKey, string> = {
     chatSend: 'Send',
     chatStartFailed: 'Could not open chat.',
     chatSendFailed: 'Could not send message.',
+    chatUnread: '{count} unread messages',
+    chatNewMessage: '{count} new chat message(s)',
 
     appAdmin: 'Administrator',
     adminLead: 'System control: who can sign in, branches, and rules.',

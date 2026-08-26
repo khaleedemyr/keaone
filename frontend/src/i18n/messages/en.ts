@@ -420,6 +420,8 @@ export const en: Record<MsgKey, string> = {
     chatSend: 'Send',
     chatStartFailed: 'Could not open chat.',
     chatSendFailed: 'Could not send message.',
+    chatUnread: '{count} unread messages',
+    chatNewMessage: '{count} new chat message(s)',
     adminLead: 'System control: who can sign in, branches, and rules.',
     navUsers: 'Users',
     navRoles: 'Roles',

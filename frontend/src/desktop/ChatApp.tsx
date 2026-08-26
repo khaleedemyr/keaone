@@ -27,7 +27,13 @@ function formatTime(iso: string | null | undefined, locale: string) {
     : d.toLocaleDateString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-export default function ChatApp() {
+export default function ChatApp({
+  compact = false,
+  onActivity,
+}: {
+  compact?: boolean
+  onActivity?: () => void
+}) {
   const { t, locale } = useI18n()
   const { me } = useAuth()
   const feedback = useFeedback()
@@ -66,10 +72,11 @@ export default function ChatApp() {
     try {
       const rows = await listConversations()
       setConversations(rows)
+      onActivity?.()
     } catch (err) {
       feedback.error(apiMessage(err, t('loadFailed')))
     }
-  }, [feedback, t])
+  }, [feedback, onActivity, t])
 
   const loadMessages = useCallback(
     async (conversationId: number, opts?: { silent?: boolean }) => {
@@ -82,13 +89,14 @@ export default function ChatApp() {
         setConversations((prev) =>
           prev.map((c) => (c.id === conversationId ? { ...c, unread_count: 0 } : c)),
         )
+        onActivity?.()
       } catch (err) {
         if (!opts?.silent) feedback.error(apiMessage(err, t('loadFailed')))
       } finally {
         if (!opts?.silent) setLoadingMsgs(false)
       }
     },
-    [feedback, t],
+    [feedback, onActivity, t],
   )
 
   const pollMessages = useCallback(async (conversationId: number) => {
@@ -116,10 +124,11 @@ export default function ChatApp() {
       setConversations((prev) =>
         prev.map((c) => (c.id === conversationId ? { ...c, unread_count: 0 } : c)),
       )
+      onActivity?.()
     } catch {
       /* ignore poll errors */
     }
-  }, [])
+  }, [onActivity])
 
   useEffect(() => {
     void refreshInbox()
@@ -190,8 +199,8 @@ export default function ChatApp() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-3 md:flex-row">
-      <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-panel md:w-72">
+    <div className={`flex h-full min-h-0 flex-col gap-3 ${compact ? 'p-2' : 'p-3'} md:flex-row`}>
+      <aside className={`flex w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-panel ${compact ? 'md:w-56' : 'md:w-72'}`}>
         <div className="flex items-center gap-2 border-b border-line p-3">
           <input
             className="field !mt-0 min-w-0 flex-1"

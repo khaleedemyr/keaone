@@ -9,7 +9,7 @@ import Dashboard from '../pages/Dashboard'
 import Pos from '../pages/Pos'
 import { useI18n } from '../i18n'
 import AdminApp from './AdminApp'
-import ChatApp from './ChatApp'
+import { ChatTray } from './ChatTray'
 import { ClockTray } from './ClockTray'
 import { DesktopIconsLayer } from './DesktopIconsLayer'
 import { DesktopSurface } from './DesktopSurface'
@@ -109,15 +109,12 @@ export default function Desktop() {
         ) : null}
 
         <DesktopIconsLayer apps={apps} titles={titles} onOpenApp={openApp} />
-        <ErrorBoundary fallback={null}>
-          <DesktopWidgetsLayer />
-        </ErrorBoundary>
+        <DesktopWidgetsLayer />
 
         {desktop.windows.map((win) => (
           <WindowFrame key={win.id} id={win.id} title={titles[win.id] ?? win.id}>
             <ErrorBoundary>
               {win.id === 'insight' ? <Dashboard /> : null}
-              {win.id === 'chat' ? <ChatApp /> : null}
               {win.id === 'pos' ? <Pos /> : null}
               {win.id === 'master' ? <MasterApp /> : null}
               {win.id === 'sales' ? <SalesApp /> : null}
@@ -249,6 +246,7 @@ export default function Desktop() {
           <div className="hidden md:block">
             <PrefsBar compact />
           </div>
+          <ChatTray />
           <NotifyTray />
           <ClockTray />
         </footer>

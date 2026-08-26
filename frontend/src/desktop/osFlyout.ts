@@ -1,4 +1,4 @@
-export type OsFlyout = 'clock' | 'notify'
+export type OsFlyout = 'clock' | 'notify' | 'chat'
 
 const EVENT = 'kea-os-flyout'
 

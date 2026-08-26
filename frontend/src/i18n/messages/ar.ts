@@ -418,6 +418,8 @@ export const ar: Record<MsgKey, string> = {
     chatSend: 'Send',
     chatStartFailed: 'Could not open chat.',
     chatSendFailed: 'Could not send message.',
+    chatUnread: '{count} unread messages',
+    chatNewMessage: '{count} new chat message(s)',
 
   appAdmin: 'المسؤول',
   adminLead: 'التحكم بالنظام: من يدخل والفروع والقواعد.',

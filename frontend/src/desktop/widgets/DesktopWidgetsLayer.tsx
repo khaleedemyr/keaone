@@ -1,9 +1,11 @@
 import { useDesktop } from '../DesktopContext'
-import { WIDGET_IDS, isWidgetVisible, type WidgetId } from '../desktopPrefs'
+import { isWidgetVisible } from '../desktopPrefs'
+import { ErrorBoundary } from '../../components/ErrorBoundary'
 import { ClockWidget } from './ClockWidget'
 import { StickyNotesWidget } from './StickyNotesWidget'
 import { StoreWidget } from './StoreWidget'
 import { WeatherWidget } from './WeatherWidget'
+import type { WidgetId } from '../desktopPrefs'
 
 const LABELS: Record<WidgetId, 'widgetClock' | 'widgetStore' | 'widgetWeather' | 'widgetNotes'> = {
   clock: 'widgetClock',
@@ -17,10 +19,26 @@ export function DesktopWidgetsLayer() {
 
   return (
     <div className="os-widgets-layer">
-      {isWidgetVisible('clock', desktop) ? <ClockWidget /> : null}
-      {isWidgetVisible('store', desktop) ? <StoreWidget /> : null}
-      {isWidgetVisible('weather', desktop) ? <WeatherWidget /> : null}
-      {isWidgetVisible('notes', desktop) ? <StickyNotesWidget /> : null}
+      {isWidgetVisible('clock', desktop) ? (
+        <ErrorBoundary fallback={null}>
+          <ClockWidget />
+        </ErrorBoundary>
+      ) : null}
+      {isWidgetVisible('store', desktop) ? (
+        <ErrorBoundary fallback={null}>
+          <StoreWidget />
+        </ErrorBoundary>
+      ) : null}
+      {isWidgetVisible('weather', desktop) ? (
+        <ErrorBoundary fallback={null}>
+          <WeatherWidget />
+        </ErrorBoundary>
+      ) : null}
+      {isWidgetVisible('notes', desktop) ? (
+        <ErrorBoundary fallback={null}>
+          <StickyNotesWidget />
+        </ErrorBoundary>
+      ) : null}
     </div>
   )
 }
@@ -29,4 +47,4 @@ export function widgetLabelKey(id: WidgetId) {
   return LABELS[id]
 }
 
-export { WIDGET_IDS }
+export { WIDGET_IDS } from '../desktopPrefs'

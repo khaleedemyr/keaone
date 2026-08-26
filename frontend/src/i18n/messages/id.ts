@@ -418,6 +418,8 @@ export const id = {
     chatSend: 'Kirim',
     chatStartFailed: 'Gagal membuka chat.',
     chatSendFailed: 'Gagal mengirim pesan.',
+    chatUnread: '{count} pesan belum dibaca',
+    chatNewMessage: '{count} pesan chat baru',
     adminLead: 'Kontrol sistem toko: siapa masuk, cabang, dan aturan.',
     navUsers: 'Pengguna',
     navRoles: 'Peran',
