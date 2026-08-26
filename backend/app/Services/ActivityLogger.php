@@ -198,6 +198,7 @@ class ActivityLogger
                 'companies' => 'tenants',
                 'plans', 'invoices' => 'billing',
                 'business-types' => 'catalog',
+                'blog-posts' => 'blog',
                 'users' => 'operators',
                 default => $part,
             };
@@ -339,6 +340,10 @@ class ActivityLogger
             ['PUT', 'platform/plans/*', 'billing', 'edit', 'Ubah paket'],
             ['POST', 'platform/business-types', 'catalog', 'create', 'Tambah jenis usaha'],
             ['PUT', 'platform/business-types/*', 'catalog', 'edit', 'Ubah jenis usaha'],
+            ['POST', 'platform/blog-posts', 'blog', 'create', 'Tambah artikel blog'],
+            ['PUT', 'platform/blog-posts/*', 'blog', 'edit', 'Ubah artikel blog'],
+            ['DELETE', 'platform/blog-posts/*', 'blog', 'delete', 'Hapus artikel blog'],
+            ['POST', 'platform/blog-posts/*/cover', 'blog', 'edit', 'Unggah cover blog'],
             ['POST', 'platform/invoices/*/pay', 'billing', 'edit', 'Tandai faktur lunas'],
             ['POST', 'platform/invoices/*/void', 'billing', 'edit', 'Batalkan faktur'],
             ['POST', 'platform/roles', 'roles', 'create', 'Tambah peran platform'],

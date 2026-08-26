@@ -66,7 +66,7 @@ export default function Desktop() {
   async function leaveStore() {
     setStartOpen(false)
     await switchCompany(null)
-    navigate('/', { replace: true })
+    navigate('/app', { replace: true })
   }
 
   function openApp(id: AppId) {
@@ -153,7 +153,7 @@ export default function Desktop() {
                   onClick={() => {
                     setStartOpen(false)
                     if (me.access === 'support') void leaveStore()
-                    else navigate('/')
+                    else navigate('/app')
                   }}
                 >
                   {t('openPlatform')}

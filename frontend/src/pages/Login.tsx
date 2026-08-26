@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { LAST_EMAIL_KEY, apiMessage, isRemembered, sessionGet } from '../api/client'
 import { homePath, useAuth } from '../auth'
@@ -36,15 +36,26 @@ export default function Login() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname ?? ''
+  const isDemo = searchParams.get('demo') === '1'
 
-  const [email, setEmail] = useState(() => sessionGet(LAST_EMAIL_KEY) ?? '')
+  const [email, setEmail] = useState(() =>
+    isDemo ? 'owner@demo.test' : (sessionGet(LAST_EMAIL_KEY) ?? ''),
+  )
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(() => isRemembered())
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const busy = useRef(false)
+  const passwordRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    if (!isDemo) return
+    setEmail('owner@demo.test')
+    window.setTimeout(() => passwordRef.current?.focus(), 80)
+  }, [isDemo])
 
   if (loading) {
     return <AuthShell />
@@ -55,7 +66,7 @@ export default function Login() {
     const dest =
       me.user.is_platform
         ? fallback
-        : from && from !== '/login' && from !== '/register' && from !== '/platform'
+        : from && from !== '/login' && from !== '/register' && from !== '/platform' && from !== '/'
           ? from
           : fallback
     return <Navigate to={dest} replace />
@@ -129,6 +140,7 @@ export default function Login() {
               <IconLock />
             </span>
             <input
+              ref={passwordRef}
               type={showPassword ? 'text' : 'password'}
               className="field field-icon-both !mt-0"
               value={password}

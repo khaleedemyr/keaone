@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             CatalogSeeder::class,
             DemoSeeder::class,
             PromotionSeeder::class,
+            BlogSeeder::class,
         ]);
 
         $billing = app(\App\Services\BillingService::class);

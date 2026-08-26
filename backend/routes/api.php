@@ -17,8 +17,10 @@ use App\Http\Controllers\Api\V1\DiscountController;
 use App\Http\Controllers\Api\V1\DiningLayoutController;
 use App\Http\Controllers\Api\V1\DiningTableController;
 use App\Http\Controllers\Api\V1\ItemTypeController;
+use App\Http\Controllers\Api\V1\MarketingBlogController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\OutletController;
+use App\Http\Controllers\Api\V1\PlatformBlogController;
 use App\Http\Controllers\Api\V1\PlatformController;
 use App\Http\Controllers\Api\V1\PriceChannelController;
 use App\Http\Controllers\Api\V1\ProductController;
@@ -43,6 +45,8 @@ Route::prefix('v1')->group(function () {
         ->middleware('throttle:login')
         ->withoutMiddleware('throttle:api');
     Route::get('catalog', [CatalogController::class, 'show']);
+    Route::get('marketing/blog', [MarketingBlogController::class, 'index']);
+    Route::get('marketing/blog/{slug}', [MarketingBlogController::class, 'show']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
@@ -76,6 +80,13 @@ Route::prefix('v1')->group(function () {
             Route::get('platform/business-types', [PlatformController::class, 'businessTypes']);
             Route::post('platform/business-types', [PlatformController::class, 'storeBusinessType']);
             Route::put('platform/business-types/{businessType}', [PlatformController::class, 'updateBusinessType']);
+
+            Route::get('platform/blog-posts', [PlatformBlogController::class, 'index']);
+            Route::post('platform/blog-posts', [PlatformBlogController::class, 'store']);
+            Route::get('platform/blog-posts/{blogPost}', [PlatformBlogController::class, 'show']);
+            Route::put('platform/blog-posts/{blogPost}', [PlatformBlogController::class, 'update']);
+            Route::delete('platform/blog-posts/{blogPost}', [PlatformBlogController::class, 'destroy']);
+            Route::post('platform/blog-posts/{blogPost}/cover', [PlatformBlogController::class, 'storeCover']);
 
             Route::get('platform/invoices', [PlatformController::class, 'invoices']);
             Route::post('platform/invoices/{invoice}/pay', [PlatformController::class, 'payInvoice']);

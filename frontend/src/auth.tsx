@@ -71,7 +71,7 @@ function applySession(data: AuthPayload, remember = true): MePayload {
 }
 
 export function homePath(_me?: MePayload): string {
-  return '/'
+  return '/app'
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -230,7 +230,7 @@ export function RequirePlatform({ children }: { children: ReactNode }) {
   const { me } = useAuth()
 
   if (!me?.user.is_platform) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/app" replace />
   }
 
   return children

@@ -21,6 +21,7 @@ import PlatformOverviewPage from '../pages/platform/Overview'
 import PlatformCompanies from '../pages/platform/Companies'
 import PlatformAdminApp from './PlatformAdminApp'
 import PlatformBillingApp from './PlatformBillingApp'
+import PlatformBlogPage from '../pages/platform/Blog'
 import { usePlatformAccess } from './access'
 
 export default function PlatformDesktop() {
@@ -66,6 +67,11 @@ export default function PlatformDesktop() {
               </div>
             ) : null}
             {win.id === 'billing' ? <PlatformBillingApp /> : null}
+            {win.id === 'blog' ? (
+              <div className="h-full overflow-auto">
+                <PlatformBlogPage />
+              </div>
+            ) : null}
             {win.id === 'admin' ? <PlatformAdminApp /> : null}
             {win.id === 'settings' ? <SettingsApp /> : null}
           </WindowFrame>

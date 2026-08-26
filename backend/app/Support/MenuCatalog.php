@@ -62,6 +62,7 @@ class MenuCatalog
             self::menu('tenants', ['view', 'edit']),
             self::menu('billing', self::ACTIONS),
             self::menu('catalog', self::ACTIONS),
+            self::menu('blog', self::ACTIONS),
             self::menu('operators', self::ACTIONS),
             self::menu('roles', self::ACTIONS),
             self::menu('logs', ['view']),

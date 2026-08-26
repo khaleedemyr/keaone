@@ -56,7 +56,7 @@ export default function PlatformCompanies() {
   async function enter(company: PlatformCompany) {
     try {
       await switchCompany(company.id)
-      navigate('/', { replace: true })
+      navigate('/app', { replace: true })
     } catch (err) {
       feedback.error(apiMessage(err, t('saveFailed')))
     }

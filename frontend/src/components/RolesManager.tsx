@@ -51,6 +51,7 @@ const MENU_LABEL: Record<string, MsgKey> = {
   overview: 'menuOverview',
   tenants: 'menuTenants',
   catalog: 'menuCatalog',
+  blog: 'menuBlog',
   operators: 'menuOperators',
 }
 
@@ -72,6 +73,7 @@ const ROLE_GROUPS: { id: string; label: MsgKey; menus: string[] }[] = [
   { id: 'contacts', label: 'menuContacts', menus: ['contacts'] },
   { id: 'tenants', label: 'appTenants', menus: ['tenants'] },
   { id: 'billing', label: 'appBilling', menus: ['billing', 'catalog'] },
+  { id: 'blog', label: 'appBlog', menus: ['blog'] },
   { id: 'admin', label: 'appAdmin', menus: ['users', 'roles', 'company', 'outlets', 'modules', 'ops', 'logs', 'operators'] },
   { id: 'settings', label: 'appSettings', menus: ['settings', 'possettings', 'cafetables'] },
 ]
