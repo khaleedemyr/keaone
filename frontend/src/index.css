@@ -849,6 +849,31 @@ html.light .os-icon-label {
   flex: 1;
 }
 
+.chat-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.chat-presence {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  border: 2px solid var(--panel, #121820);
+  box-sizing: content-box;
+}
+
+.chat-presence.is-online {
+  background: #34d399;
+}
+
+.chat-presence.is-offline {
+  background: #64748b;
+}
+
 .os-notify {
   position: absolute;
   inset-inline-end: 0;

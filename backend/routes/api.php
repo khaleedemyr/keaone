@@ -112,6 +112,7 @@ Route::prefix('v1')->group(function () {
             Route::delete('users/{user}', [UserController::class, 'destroy']);
 
             Route::get('chat/peers', [ChatController::class, 'peers']);
+            Route::post('chat/presence', [ChatController::class, 'presence']);
             Route::get('chat/conversations', [ChatController::class, 'conversations']);
             Route::post('chat/conversations', [ChatController::class, 'storeConversation']);
             Route::get('chat/conversations/{conversation}/messages', [ChatController::class, 'messages']);

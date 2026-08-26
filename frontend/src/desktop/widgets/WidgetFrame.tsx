@@ -58,6 +58,13 @@ export function WidgetFrame({
   )
 
   useEffect(() => {
+    if (dragPos) return
+    const next = clamp(saved.x, saved.y)
+    if (next.x === saved.x && next.y === saved.y) return
+    setWidgetPosition(id, next)
+  }, [clamp, dragPos, id, saved.x, saved.y, setWidgetPosition])
+
+  useEffect(() => {
     function onPointerMove(event: PointerEvent) {
       const drag = dragRef.current
       if (!drag) return

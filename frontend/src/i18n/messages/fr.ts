@@ -421,6 +421,10 @@ export const fr: Record<MsgKey, string> = {
     chatUnread: '{count} unread messages',
     chatNewMessage: '{count} new chat message(s)',
 
+    chatOnline: 'Online',
+    chatOffline: 'Offline',
+    desktopShowAllWidgets: 'Show all widgets',
+
     appAdmin: 'Administrator',
     adminLead: 'System control: who can sign in, branches, and rules.',
     navUsers: 'Users',

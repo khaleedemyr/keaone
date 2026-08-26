@@ -11,7 +11,7 @@ type DesktopSurfaceProps = {
 
 export function DesktopSurface({ children, onPersonalize }: DesktopSurfaceProps) {
   const { t } = useI18n()
-  const { desktop, setShowDesktopIcons, setWidgetVisible } = useDesktop()
+  const { desktop, setShowDesktopIcons, setWidgetVisible, showAllWidgets } = useDesktop()
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const [widgetsOpen, setWidgetsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -89,6 +89,19 @@ export function DesktopSurface({ children, onPersonalize }: DesktopSurfaceProps)
                 )
               })
             : null}
+          {widgetsOpen ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="os-context-sub"
+              onClick={() => {
+                showAllWidgets()
+                setMenu(null)
+              }}
+            >
+              {t('desktopShowAllWidgets')}
+            </button>
+          ) : null}
           {onPersonalize ? (
             <button
               type="button"

@@ -12,7 +12,7 @@ type SettingsDesktopProps = {
 
 export function SettingsDesktop({ apps, titles }: SettingsDesktopProps) {
   const { t } = useI18n()
-  const { desktop, setShowDesktopIcons, setAppDesktopVisible, setWidgetVisible, patchWidgets } = useDesktop()
+  const { desktop, setShowDesktopIcons, setAppDesktopVisible, setWidgetVisible, showAllWidgets, patchWidgets } = useDesktop()
 
   return (
     <>
@@ -68,6 +68,9 @@ export function SettingsDesktop({ apps, titles }: SettingsDesktopProps) {
             )
           })}
         </div>
+        <button type="button" className="btn-ghost mt-3 !text-xs" onClick={() => showAllWidgets()}>
+          {t('desktopShowAllWidgets')}
+        </button>
 
         <div className="mt-4">
           <div className="mb-2 text-xs font-medium text-muted">{t('widgetClockSkin')}</div>

@@ -421,6 +421,10 @@ export const ru: Record<MsgKey, string> = {
     chatUnread: '{count} unread messages',
     chatNewMessage: '{count} new chat message(s)',
 
+    chatOnline: 'Online',
+    chatOffline: 'Offline',
+    desktopShowAllWidgets: 'Show all widgets',
+
   appAdmin: 'Администрирование',
   adminLead: 'Управление системой: доступ, филиалы и правила.',
   navUsers: 'Пользователи',

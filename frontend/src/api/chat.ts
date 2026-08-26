@@ -6,6 +6,8 @@ export type ChatUser = {
   email?: string | null
   username?: string | null
   avatar?: string | null
+  is_online?: boolean
+  last_seen_at?: string | null
 }
 
 export type ChatMessage = {
@@ -28,6 +30,10 @@ export type ChatConversation = {
 }
 
 type Ok<T> = { data: T }
+
+export async function pingPresence() {
+  await api.post('/chat/presence', {}, { silent: true })
+}
 
 export async function listPeers(search = '') {
   const { data } = await api.get<Ok<ChatUser[]>>('/chat/peers', {

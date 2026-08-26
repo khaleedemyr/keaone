@@ -421,6 +421,10 @@ export const zh: Record<MsgKey, string> = {
     chatUnread: '{count} unread messages',
     chatNewMessage: '{count} new chat message(s)',
 
+    chatOnline: 'Online',
+    chatOffline: 'Offline',
+    desktopShowAllWidgets: 'Show all widgets',
+
   appAdmin: '管理员',
   adminLead: '系统控制：登录权限、门店与规则。',
   navUsers: '用户',

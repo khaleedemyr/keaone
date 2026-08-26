@@ -27,6 +27,32 @@ function formatTime(iso: string | null | undefined, locale: string) {
     : d.toLocaleDateString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+function PresenceDot({ online }: { online?: boolean }) {
+  return (
+    <span
+      className={`chat-presence ${online ? 'is-online' : 'is-offline'}`}
+      aria-hidden
+    />
+  )
+}
+
+function PeerAvatar({
+  name,
+  src,
+  online,
+}: {
+  name: string
+  src?: string | null
+  online?: boolean
+}) {
+  return (
+    <span className="chat-avatar-wrap">
+      <Avatar name={name} src={src} size="sm" />
+      <PresenceDot online={online} />
+    </span>
+  )
+}
+
 export default function ChatApp({
   compact = false,
   onActivity,
@@ -239,8 +265,13 @@ export default function ChatApp({
                     className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-fill"
                     onClick={() => void startChat(peer.id)}
                   >
-                    <Avatar name={peer.name} src={peer.avatar} size="sm" />
-                    <span className="truncate text-sm text-fg">{peer.name}</span>
+                    <PeerAvatar name={peer.name} src={peer.avatar} online={peer.is_online} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-fg">{peer.name}</span>
+                      <span className="block truncate text-[10px] text-muted">
+                        {peer.is_online ? t('chatOnline') : t('chatOffline')}
+                      </span>
+                    </span>
                   </button>
                 ))
               )}
@@ -263,7 +294,7 @@ export default function ChatApp({
                     selected ? 'bg-fill ring-1 ring-line' : 'hover:bg-fill/70'
                   }`}
                 >
-                  <Avatar name={c.peer?.name ?? '?'} src={c.peer?.avatar} size="sm" />
+                  <PeerAvatar name={c.peer?.name ?? '?'} src={c.peer?.avatar} online={c.peer?.is_online} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate text-sm font-medium text-fg">{c.peer?.name ?? t('chatUnknown')}</span>
@@ -292,10 +323,13 @@ export default function ChatApp({
         ) : (
           <>
             <header className="flex items-center gap-3 border-b border-line px-4 py-3">
-              <Avatar name={active.peer?.name ?? '?'} src={active.peer?.avatar} size="sm" />
+              <PeerAvatar name={active.peer?.name ?? '?'} src={active.peer?.avatar} online={active.peer?.is_online} />
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-fg">{active.peer?.name}</div>
-                <div className="truncate text-[11px] text-muted">{active.peer?.email}</div>
+                <div className="truncate text-[11px] text-muted">
+                  {active.peer?.is_online ? t('chatOnline') : t('chatOffline')}
+                  {active.peer?.email ? ` · ${active.peer.email}` : ''}
+                </div>
               </div>
             </header>
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { listConversations } from '../api/chat'
+import { listConversations, pingPresence } from '../api/chat'
 import { useAccess } from '../access'
 import { useFeedback } from '../components/feedback'
 import { useI18n } from '../i18n'
@@ -49,6 +49,15 @@ export function ChatTray() {
     const id = window.setInterval(() => void refreshUnread(), 12000)
     return () => window.clearInterval(id)
   }, [allowed, refreshUnread])
+
+  useEffect(() => {
+    if (!allowed) return
+    void pingPresence().catch(() => {})
+    const id = window.setInterval(() => {
+      void pingPresence().catch(() => {})
+    }, 30000)
+    return () => window.clearInterval(id)
+  }, [allowed])
 
   useEffect(() => {
     if (!open) return

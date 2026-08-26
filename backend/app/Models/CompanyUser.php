@@ -20,12 +20,14 @@ class CompanyUser extends Pivot
         'role',
         'role_id',
         'is_active',
+        'last_seen_at',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'last_seen_at' => 'datetime',
         ];
     }
 

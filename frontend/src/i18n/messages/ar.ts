@@ -421,6 +421,10 @@ export const ar: Record<MsgKey, string> = {
     chatUnread: '{count} unread messages',
     chatNewMessage: '{count} new chat message(s)',
 
+    chatOnline: 'Online',
+    chatOffline: 'Offline',
+    desktopShowAllWidgets: 'Show all widgets',
+
   appAdmin: 'المسؤول',
   adminLead: 'التحكم بالنظام: من يدخل والفروع والقواعد.',
   navUsers: 'المستخدمون',

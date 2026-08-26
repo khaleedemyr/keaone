@@ -16,6 +16,25 @@ use Illuminate\Validation\Rule;
 
 class ChatController extends Controller
 {
+    /** Seconds without heartbeat before a peer is considered offline. */
+    private const ONLINE_WINDOW_SECONDS = 90;
+
+    public function presence(Request $request): JsonResponse
+    {
+        $this->ensureCan('chat', 'view');
+
+        $companyId = CurrentCompany::id();
+        $meId = (int) $request->user()->id;
+
+        CompanyUser::query()
+            ->where('company_id', $companyId)
+            ->where('user_id', $meId)
+            ->where('is_active', true)
+            ->update(['last_seen_at' => now()]);
+
+        return $this->ok(['ok' => true, 'online_window' => self::ONLINE_WINDOW_SECONDS]);
+    }
+
     public function peers(Request $request): JsonResponse
     {
         $this->ensureCan('chat', 'view');
@@ -24,11 +43,14 @@ class ChatController extends Controller
         $meId = (int) $request->user()->id;
         $search = trim($request->string('search')->toString());
 
-        $userIds = CompanyUser::query()
+        $memberships = CompanyUser::query()
             ->where('company_id', $companyId)
             ->where('is_active', true)
             ->where('user_id', '!=', $meId)
-            ->pluck('user_id');
+            ->get(['user_id', 'last_seen_at']);
+
+        $presence = $this->presenceMap($memberships);
+        $userIds = $memberships->pluck('user_id');
 
         $query = User::query()
             ->whereIn('id', $userIds)
@@ -43,7 +65,9 @@ class ChatController extends Controller
             });
         }
 
-        $peers = $query->limit(200)->get()->map(fn (User $user) => $this->serializeUser($user));
+        $peers = $query->limit(200)->get()->map(
+            fn (User $user) => $this->serializeUser($user, $presence[(int) $user->id] ?? null),
+        );
 
         return $this->ok($peers);
     }
@@ -53,6 +77,14 @@ class ChatController extends Controller
         $this->ensureCan('chat', 'view');
 
         $meId = (int) $request->user()->id;
+        $companyId = CurrentCompany::id();
+
+        $presence = $this->presenceMap(
+            CompanyUser::query()
+                ->where('company_id', $companyId)
+                ->where('is_active', true)
+                ->get(['user_id', 'last_seen_at']),
+        );
 
         $rows = Conversation::query()
             ->whereHas('participants', fn ($q) => $q->where('user_id', $meId))
@@ -64,7 +96,7 @@ class ChatController extends Controller
             ->orderByDesc('id')
             ->limit(100)
             ->get()
-            ->map(fn (Conversation $c) => $this->serializeConversation($c, $meId));
+            ->map(fn (Conversation $c) => $this->serializeConversation($c, $meId, $presence));
 
         return $this->ok($rows);
     }
@@ -126,7 +158,14 @@ class ChatController extends Controller
             'participants.user:id,name,email,username,avatar,is_active',
         ]);
 
-        return $this->ok($this->serializeConversation($conversation, $meId), [], $created ? 201 : 200);
+        $presence = $this->presenceMap(
+            CompanyUser::query()
+                ->where('company_id', $companyId)
+                ->where('user_id', $peerId)
+                ->get(['user_id', 'last_seen_at']),
+        );
+
+        return $this->ok($this->serializeConversation($conversation, $meId, $presence), [], $created ? 201 : 200);
     }
 
     public function messages(Request $request, Conversation $conversation): JsonResponse
@@ -215,9 +254,10 @@ class ChatController extends Controller
     }
 
     /**
+     * @param  array<int, array{is_online: bool, last_seen_at: ?string}>  $presence
      * @return array<string, mixed>
      */
-    private function serializeConversation(Conversation $conversation, int $meId): array
+    private function serializeConversation(Conversation $conversation, int $meId, array $presence = []): array
     {
         $peer = $conversation->participants
             ->first(fn (ConversationParticipant $p) => (int) $p->user_id !== $meId)
@@ -238,11 +278,13 @@ class ChatController extends Controller
             $unread = (int) $unreadQuery->count();
         }
 
+        $peerPresence = $peer ? ($presence[(int) $peer->id] ?? null) : null;
+
         return [
             'id' => $conversation->id,
             'type' => $conversation->type,
             'title' => $conversation->title,
-            'peer' => $peer ? $this->serializeUser($peer) : null,
+            'peer' => $peer ? $this->serializeUser($peer, $peerPresence) : null,
             'last_message' => $last ? $this->serializeMessage($last) : null,
             'last_message_at' => optional($conversation->last_message_at)?->toIso8601String(),
             'unread_count' => $unread,
@@ -267,9 +309,10 @@ class ChatController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, email: ?string, username: ?string, avatar: ?string}
+     * @param  array{is_online: bool, last_seen_at: ?string}|null  $presence
+     * @return array{id: int, name: string, email: ?string, username: ?string, avatar: ?string, is_online: bool, last_seen_at: ?string}
      */
-    private function serializeUser(User $user): array
+    private function serializeUser(User $user, ?array $presence = null): array
     {
         return [
             'id' => $user->id,
@@ -277,6 +320,28 @@ class ChatController extends Controller
             'email' => $user->email,
             'username' => $user->username,
             'avatar' => $user->avatarUrl(),
+            'is_online' => (bool) ($presence['is_online'] ?? false),
+            'last_seen_at' => $presence['last_seen_at'] ?? null,
         ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, CompanyUser>  $memberships
+     * @return array<int, array{is_online: bool, last_seen_at: ?string}>
+     */
+    private function presenceMap($memberships): array
+    {
+        $cutoff = now()->subSeconds(self::ONLINE_WINDOW_SECONDS);
+        $map = [];
+
+        foreach ($memberships as $row) {
+            $seen = $row->last_seen_at;
+            $map[(int) $row->user_id] = [
+                'is_online' => $seen !== null && $seen->greaterThanOrEqualTo($cutoff),
+                'last_seen_at' => optional($seen)?->toIso8601String(),
+            ];
+        }
+
+        return $map;
     }
 }

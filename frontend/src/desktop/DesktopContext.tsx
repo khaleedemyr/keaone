@@ -50,6 +50,7 @@ type DesktopApi = {
   setIconPosition: (appId: string, position: DesktopIconPosition, persist?: boolean) => void
   setWidgetPosition: (widgetId: string, position: DesktopIconPosition, persist?: boolean) => void
   setWidgetVisible: (widgetId: WidgetId, visible: boolean) => void
+  showAllWidgets: () => void
   patchWidgets: (patch: Partial<DesktopWidgetsPrefs>, persist?: boolean) => void
   setAppDesktopVisible: (appId: string, visible: boolean) => void
   setShowDesktopIcons: (show: boolean) => void
@@ -163,6 +164,19 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
       const next = normalizeDesktopPrefs({
         ...current,
         widgets: { ...widgets, hidden: [...hidden] },
+      })
+      saveDesktopPrefs(next)
+      persistPrefs({ desktop: next })
+      return next
+    })
+  }, [])
+
+  const showAllWidgets = useCallback(() => {
+    setDesktopState((current) => {
+      const widgets = current.widgets ?? DEFAULT_DESKTOP_PREFS.widgets
+      const next = normalizeDesktopPrefs({
+        ...current,
+        widgets: { ...widgets, hidden: [], positions: {} },
       })
       saveDesktopPrefs(next)
       persistPrefs({ desktop: next })
@@ -296,6 +310,7 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
       setIconPosition,
       setWidgetPosition,
       setWidgetVisible,
+      showAllWidgets,
       patchWidgets,
       setAppDesktopVisible,
       setShowDesktopIcons,
@@ -316,6 +331,7 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
       setIconPosition,
       setWidgetPosition,
       setWidgetVisible,
+      showAllWidgets,
       patchWidgets,
       setAppDesktopVisible,
       setShowDesktopIcons,

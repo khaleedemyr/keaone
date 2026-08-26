@@ -421,6 +421,10 @@ export const ja: Record<MsgKey, string> = {
     chatUnread: '{count} unread messages',
     chatNewMessage: '{count} new chat message(s)',
 
+    chatOnline: 'Online',
+    chatOffline: 'Offline',
+    desktopShowAllWidgets: 'Show all widgets',
+
   appAdmin: '管理者',
   adminLead: 'システム管理：ログイン権限、店舗、ルール。',
   navUsers: 'ユーザー',
