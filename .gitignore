@@ -51,3 +51,5 @@ backend/database/*.sqlite-journal
 .phpunit.result.cache
 backend/.phpunit.cache/
 _ide_helper.php
+
+backend/stderr
