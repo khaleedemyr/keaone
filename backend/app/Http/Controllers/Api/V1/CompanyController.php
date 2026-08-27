@@ -59,13 +59,17 @@ class CompanyController extends Controller
             'settings.receipt_footer' => ['nullable', 'string'],
             'settings.receipt_layout' => ['sometimes', 'array'],
             'settings.pos_mode' => ['sometimes', Rule::in(['retail', 'restaurant', 'cafe'])],
+            'settings.purchase_flow' => ['sometimes', Rule::in(['strict_pr_po_gr', 'po_gr', 'direct'])],
+            'settings.purchase_update_cost' => ['sometimes', 'boolean'],
         ]);
 
         $settingsInput = $data['settings'] ?? [];
         $posKeys = ['pos_mode'];
+        $purchaseKeys = ['purchase_flow', 'purchase_update_cost'];
         $incoming = array_keys($settingsInput);
         $hasPos = array_intersect($incoming, $posKeys) !== [];
-        $hasOps = array_diff($incoming, $posKeys) !== [];
+        $hasPurchase = array_intersect($incoming, $purchaseKeys) !== [];
+        $hasOps = array_diff($incoming, array_merge($posKeys, $purchaseKeys)) !== [];
 
         if (isset($data['modules'])) {
             $this->ensureCan('modules', 'edit');
@@ -73,10 +77,13 @@ class CompanyController extends Controller
         if ($hasPos) {
             $this->ensureCan('possettings', 'edit');
         }
+        if ($hasPurchase) {
+            $this->ensureCanAny(['ops', 'settings']);
+        }
         if ($hasOps) {
             $this->ensureCan('ops', 'edit');
         }
-        if (! isset($data['modules']) && ! $hasPos && ! $hasOps) {
+        if (! isset($data['modules']) && ! $hasPos && ! $hasOps && ! $hasPurchase) {
             $this->ensureCan('ops', 'edit');
         }
 

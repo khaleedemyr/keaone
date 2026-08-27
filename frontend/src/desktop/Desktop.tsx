@@ -11,6 +11,7 @@ import { useI18n } from '../i18n'
 import AdminApp from './AdminApp'
 import { ChatTray } from './ChatTray'
 import { ClockTray } from './ClockTray'
+import { LiveSupportTray } from './LiveSupportTray'
 import { DesktopIconsLayer } from './DesktopIconsLayer'
 import { DesktopSurface } from './DesktopSurface'
 import { DesktopWidgetsLayer } from './widgets/DesktopWidgetsLayer'
@@ -18,6 +19,7 @@ import { NotifyTray } from './NotifyTray'
 import { useDesktop, type AppId } from './DesktopContext'
 import { APP_TILE, AppGlyph } from './glyphs'
 import MasterApp from './MasterApp'
+import PurchaseApp from './PurchaseApp'
 import SalesApp from './SalesApp'
 import SettingsApp from './SettingsApp'
 import { StartMenuPanel } from './StartMenuPanel'
@@ -118,6 +120,7 @@ export default function Desktop() {
               {win.id === 'pos' ? <Pos /> : null}
               {win.id === 'master' ? <MasterApp /> : null}
               {win.id === 'sales' ? <SalesApp /> : null}
+              {win.id === 'purchase' ? <PurchaseApp /> : null}
               {win.id === 'admin' ? <AdminApp /> : null}
               {win.id === 'settings' ? <SettingsApp /> : null}
             </ErrorBoundary>
@@ -247,6 +250,7 @@ export default function Desktop() {
             <PrefsBar compact />
           </div>
           <ChatTray />
+          <LiveSupportTray />
           <NotifyTray />
           <ClockTray />
         </footer>

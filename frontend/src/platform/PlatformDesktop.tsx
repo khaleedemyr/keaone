@@ -6,6 +6,7 @@ import { DesktopIconsLayer } from '../desktop/DesktopIconsLayer'
 import { DesktopSurface } from '../desktop/DesktopSurface'
 import { DesktopWidgetsLayer } from '../desktop/widgets/DesktopWidgetsLayer'
 import { NotifyTray } from '../desktop/NotifyTray'
+import { SupportTray } from './SupportTray'
 import { useDesktop, type AppId } from '../desktop/DesktopContext'
 import { APP_TILE, AppGlyph } from '../desktop/glyphs'
 import SettingsApp from '../desktop/SettingsApp'
@@ -135,6 +136,7 @@ export default function PlatformDesktop() {
             <PrefsBar compact />
           </div>
           <NotifyTray />
+          <SupportTray />
           <ClockTray />
         </footer>
       </div>

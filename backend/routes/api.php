@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\MarketingBlogController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\OutletController;
 use App\Http\Controllers\Api\V1\PlatformBlogController;
+use App\Http\Controllers\Api\V1\PlatformSupportController;
 use App\Http\Controllers\Api\V1\PlatformController;
 use App\Http\Controllers\Api\V1\PriceChannelController;
 use App\Http\Controllers\Api\V1\ProductController;
@@ -29,6 +30,9 @@ use App\Http\Controllers\Api\V1\PromotionController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SaleController;
+use App\Http\Controllers\Api\V1\GoodsReceiptController;
+use App\Http\Controllers\Api\V1\PurchaseOrderController;
+use App\Http\Controllers\Api\V1\PurchaseRequisitionController;
 use App\Http\Controllers\Api\V1\StockController;
 use App\Http\Controllers\Api\V1\SubCategoryController;
 use App\Http\Controllers\Api\V1\SupplierController;
@@ -87,6 +91,7 @@ Route::prefix('v1')->group(function () {
             Route::put('platform/blog-posts/{blogPost}', [PlatformBlogController::class, 'update']);
             Route::delete('platform/blog-posts/{blogPost}', [PlatformBlogController::class, 'destroy']);
             Route::post('platform/blog-posts/{blogPost}/cover', [PlatformBlogController::class, 'storeCover']);
+            Route::post('platform/blog-posts/{blogPost}/media', [PlatformBlogController::class, 'storeMedia']);
 
             Route::get('platform/invoices', [PlatformController::class, 'invoices']);
             Route::post('platform/invoices/{invoice}/pay', [PlatformController::class, 'payInvoice']);
@@ -101,6 +106,12 @@ Route::prefix('v1')->group(function () {
             Route::put('platform/users/{user}', [PlatformController::class, 'updateUser']);
             Route::delete('platform/users/{user}', [PlatformController::class, 'destroyUser']);
             Route::get('platform/activity-logs', [ActivityLogController::class, 'platformIndex']);
+
+            Route::get('platform/support/conversations', [PlatformSupportController::class, 'conversations']);
+            Route::post('platform/support/conversations/{conversation}/join', [PlatformSupportController::class, 'join']);
+            Route::get('platform/support/conversations/{conversation}/messages', [PlatformSupportController::class, 'messages']);
+            Route::post('platform/support/conversations/{conversation}/messages', [PlatformSupportController::class, 'storeMessage']);
+            Route::post('platform/support/conversations/{conversation}/read', [PlatformSupportController::class, 'markRead']);
         });
 
         Route::middleware('company')->group(function () {
@@ -126,6 +137,7 @@ Route::prefix('v1')->group(function () {
             Route::post('chat/presence', [ChatController::class, 'presence']);
             Route::get('chat/conversations', [ChatController::class, 'conversations']);
             Route::post('chat/conversations', [ChatController::class, 'storeConversation']);
+            Route::post('chat/support', [ChatController::class, 'openSupport']);
             Route::get('chat/conversations/{conversation}/messages', [ChatController::class, 'messages']);
             Route::post('chat/conversations/{conversation}/messages', [ChatController::class, 'storeMessage']);
             Route::post('chat/conversations/{conversation}/read', [ChatController::class, 'markRead']);
@@ -235,6 +247,30 @@ Route::prefix('v1')->group(function () {
 
             Route::get('stock', [StockController::class, 'index']);
             Route::get('stock/low', [StockController::class, 'low']);
+            Route::get('stock/movements', [StockController::class, 'movements']);
+
+            Route::get('purchase-requisitions', [PurchaseRequisitionController::class, 'index']);
+            Route::post('purchase-requisitions', [PurchaseRequisitionController::class, 'store']);
+            Route::get('purchase-requisitions/{purchaseRequisition}', [PurchaseRequisitionController::class, 'show']);
+            Route::put('purchase-requisitions/{purchaseRequisition}', [PurchaseRequisitionController::class, 'update']);
+            Route::post('purchase-requisitions/{purchaseRequisition}/submit', [PurchaseRequisitionController::class, 'submit']);
+            Route::post('purchase-requisitions/{purchaseRequisition}/approve', [PurchaseRequisitionController::class, 'approve']);
+            Route::post('purchase-requisitions/{purchaseRequisition}/reject', [PurchaseRequisitionController::class, 'reject']);
+            Route::post('purchase-requisitions/{purchaseRequisition}/cancel', [PurchaseRequisitionController::class, 'cancel']);
+
+            Route::get('purchase-orders', [PurchaseOrderController::class, 'index']);
+            Route::post('purchase-orders', [PurchaseOrderController::class, 'store']);
+            Route::get('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'show']);
+            Route::put('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'update']);
+            Route::post('purchase-orders/{purchaseOrder}/order', [PurchaseOrderController::class, 'markOrdered']);
+            Route::post('purchase-orders/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel']);
+
+            Route::get('goods-receipts', [GoodsReceiptController::class, 'index']);
+            Route::post('goods-receipts', [GoodsReceiptController::class, 'store']);
+            Route::get('goods-receipts/{goodsReceipt}', [GoodsReceiptController::class, 'show']);
+            Route::put('goods-receipts/{goodsReceipt}', [GoodsReceiptController::class, 'update']);
+            Route::post('goods-receipts/{goodsReceipt}/confirm', [GoodsReceiptController::class, 'confirm']);
+            Route::post('goods-receipts/{goodsReceipt}/cancel', [GoodsReceiptController::class, 'cancel']);
 
             Route::get('reports/today', [ReportController::class, 'today']);
             Route::get('reports/summary', [ReportController::class, 'summary']);

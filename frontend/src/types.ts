@@ -137,6 +137,8 @@ export type Settings = {
   receipt_width: number
   receipt_footer: string
   pos_mode?: PosMode
+  purchase_flow?: 'strict_pr_po_gr' | 'po_gr' | 'direct'
+  purchase_update_cost?: boolean
   receipt_layout?: import('./lib/receiptLayout').ReceiptLayout
 }
 
@@ -436,6 +438,16 @@ export type ProductOption = {
   is_active: boolean
 }
 
+export type ProductUnitLevel = 'small' | 'medium' | 'large'
+
+export type ProductUnitRow = {
+  level: ProductUnitLevel
+  unit_id: number
+  unit: { id: number; name: string; symbol: string | null } | null
+  label: string
+  factor_to_base: number
+}
+
 export type Product = {
   id: number
   category_id: number | null
@@ -452,6 +464,7 @@ export type Product = {
   unit: string
   unit_id: number | null
   unit_master: { id: number; name: string; symbol: string | null } | null
+  units?: ProductUnitRow[]
   sell_price: number
   default_sell_price: number
   outlet_prices: ProductOutletPrice[]

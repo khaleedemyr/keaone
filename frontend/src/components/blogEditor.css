@@ -1,0 +1,99 @@
+.blog-editor {
+  border: 1px solid var(--color-line, rgba(255, 255, 255, 0.1));
+  border-radius: 0.85rem;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-panel, #111) 90%, transparent);
+}
+
+.blog-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--color-line, rgba(255, 255, 255, 0.1));
+  background: color-mix(in srgb, var(--color-panel, #111) 70%, transparent);
+}
+
+.blog-editor-btn {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.blog-editor-btn:hover {
+  border-color: color-mix(in srgb, var(--color-mint, #3ee8c5) 35%, transparent);
+  background: color-mix(in srgb, var(--color-mint, #3ee8c5) 8%, transparent);
+}
+
+.blog-editor-btn.is-active {
+  border-color: color-mix(in srgb, var(--color-mint, #3ee8c5) 55%, transparent);
+  background: color-mix(in srgb, var(--color-mint, #3ee8c5) 14%, transparent);
+}
+
+.blog-editor-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.15rem 0.2rem;
+  background: var(--color-line, rgba(255, 255, 255, 0.12));
+}
+
+.blog-editor-content {
+  min-height: 16rem;
+  padding: 0.85rem 1rem 1.1rem;
+  outline: none;
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.blog-editor-content p.is-editor-empty:first-child::before {
+  color: var(--color-muted, #8b95a8);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.blog-editor-content h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 1rem 0 0.5rem;
+}
+
+.blog-editor-content h3 {
+  font-size: 1.12rem;
+  font-weight: 650;
+  margin: 0.85rem 0 0.4rem;
+}
+
+.blog-editor-content ul,
+.blog-editor-content ol {
+  padding-left: 1.35rem;
+  margin: 0.5rem 0;
+}
+
+.blog-editor-content blockquote {
+  margin: 0.75rem 0;
+  padding-left: 0.85rem;
+  border-left: 3px solid color-mix(in srgb, var(--color-mint, #3ee8c5) 55%, transparent);
+  color: var(--color-muted, #8b95a8);
+}
+
+.blog-editor-content img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.85rem 0;
+  border-radius: 0.65rem;
+}
+
+.blog-editor-content a {
+  color: var(--color-mint, #3ee8c5);
+  text-decoration: underline;
+}

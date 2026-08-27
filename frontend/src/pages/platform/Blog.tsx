@@ -15,6 +15,7 @@ import { MasterFilters, MasterPager, useListQuery } from '../../components/Maste
 import { LANGS } from '../../i18n/langs'
 import { useI18n } from '../../i18n'
 import { usePlatformAccess } from '../../platform/access'
+import { BlogRichEditor } from '../../components/BlogRichEditor'
 
 function emptyTranslation(locale: string): BlogTranslation {
   return { locale, title: '', slug: '', excerpt: '', body: '' }
@@ -209,11 +210,14 @@ export default function PlatformBlog() {
 
           <label className="block text-xs text-muted">
             {t('blogBody')}
-            <textarea
-              className="field min-h-40"
-              value={active.body ?? ''}
-              onChange={(e) => patchActive({ body: e.target.value })}
-            />
+            <div className="mt-1">
+              <BlogRichEditor
+                value={active.body ?? ''}
+                onChange={(html) => patchActive({ body: html })}
+                postId={editingId}
+                onNeedSave={() => feedback.error(t('blogEditorSaveFirstForImage'))}
+              />
+            </div>
           </label>
 
           <div className="flex flex-wrap items-center gap-3">

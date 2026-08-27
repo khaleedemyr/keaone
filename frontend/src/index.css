@@ -849,6 +849,64 @@ html.light .os-icon-label {
   flex: 1;
 }
 
+.os-support-flyout {
+  width: min(26rem, calc(100vw - 1.2rem));
+  height: min(32rem, calc(100vh - 5.8rem));
+}
+
+.os-support-flyout.is-wide {
+  width: min(48rem, calc(100vw - 1.2rem));
+  height: min(34rem, calc(100vh - 5.8rem));
+}
+
+.os-support-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.os-support-split {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(10rem, 0.9fr) minmax(0, 1.3fr);
+}
+
+.os-support-list {
+  min-height: 0;
+  overflow-y: auto;
+  border-inline-end: 1px solid var(--line);
+  padding: 0.45rem;
+}
+
+.os-support-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 0.85rem;
+  padding: 0.55rem 0.5rem;
+  text-align: left;
+  color: inherit;
+}
+
+.os-support-item:hover {
+  background: color-mix(in srgb, var(--fill, #1a2433) 80%, transparent);
+}
+
+.os-support-item.is-active {
+  background: color-mix(in srgb, var(--mint, #3ee8c5) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mint, #3ee8c5) 35%, transparent);
+}
+
+.os-support-thread {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+}
+
 .chat-avatar-wrap {
   position: relative;
   display: inline-flex;

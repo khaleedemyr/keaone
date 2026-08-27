@@ -9,7 +9,6 @@ use App\Models\Product;
 use App\Models\ProductBomItem;
 use App\Models\ProductImage;
 use App\Models\StockBalance;
-use App\Models\StockMovement;
 use App\Models\SubCategory;
 use App\Models\Unit;
 use App\Support\CurrentCompany;
@@ -70,15 +69,18 @@ class ProductController extends Controller
             $query->where('sell_price', '>', 0);
         }
 
-        $outletId = CurrentCompany::outlet()?->id;
+        $outlet = CurrentCompany::outlet();
         $products = $query->paginate($this->perPage($request, 50));
         $ids = $products->getCollection()->pluck('id');
-        $balances = $outletId && $ids->isNotEmpty()
-            ? StockBalance::query()
-                ->where('outlet_id', $outletId)
+        $balances = collect();
+        if ($outlet && $ids->isNotEmpty()) {
+            $warehouse = app(\App\Services\InventoryService::class)
+                ->resolveDefaultWarehouse((int) $outlet->company_id, (int) $outlet->id);
+            $balances = StockBalance::query()
+                ->where('warehouse_id', $warehouse->id)
                 ->whereIn('product_id', $ids)
-                ->pluck('qty', 'product_id')
-            : collect();
+                ->pluck('qty', 'product_id');
+        }
 
         $products->getCollection()->transform(
             fn (Product $product) => $this->serializeList($product, (int) ($balances[$product->id] ?? 0)),
@@ -117,15 +119,16 @@ class ProductController extends Controller
     {
         $this->ensureCan('products', 'create');
 
-        [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices] = $this->validated($request);
+        [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits] = $this->validated($request);
         $initialQty = (int) $request->integer('initial_qty', 0);
 
-        $product = DB::transaction(function () use ($data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $initialQty) {
+        $product = DB::transaction(function () use ($data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits, $initialQty) {
             $product = Product::query()->create($data);
             $this->syncOutletPrices($product, $outletPrices);
             $this->syncChannelPrices($product, $channelPrices);
             $this->syncChoices($product, $choiceIds);
             $this->syncBom($product, $bomItems);
+            app(\App\Services\ProductUnitService::class)->sync($product, $productUnits);
             $this->ensureBalance($product, $initialQty, 'opening');
 
             return $product;
@@ -138,14 +141,15 @@ class ProductController extends Controller
     {
         $this->ensureCan('products', 'edit');
 
-        [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices] = $this->validated($request, $product->id);
+        [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits] = $this->validated($request, $product->id);
 
-        $product = DB::transaction(function () use ($product, $data, $outletPrices, $choiceIds, $bomItems, $channelPrices) {
+        $product = DB::transaction(function () use ($product, $data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits) {
             $product->update($data);
             $this->syncOutletPrices($product, $outletPrices);
             $this->syncChannelPrices($product, $channelPrices);
             $this->syncChoices($product, $choiceIds);
             $this->syncBom($product, $bomItems);
+            app(\App\Services\ProductUnitService::class)->sync($product, $productUnits);
 
             return $product;
         });
@@ -277,11 +281,19 @@ class ProductController extends Controller
             'sku' => ['nullable', 'string', 'max:50', Rule::unique('products', 'sku')->where(fn ($q) => $q->where('company_id', $companyId))->ignore($id)],
             'barcode' => ['nullable', 'string', 'max:80'],
             'unit_id' => [
-                $id ? 'sometimes' : 'required',
+                $id ? 'sometimes' : 'required_without:units',
                 'nullable',
                 'integer',
                 Rule::exists('units', 'id')->where('company_id', $companyId),
             ],
+            'units' => ['nullable', 'array', 'max:3'],
+            'units.*.level' => ['required_with:units', Rule::in(['small', 'medium', 'large'])],
+            'units.*.unit_id' => [
+                'required_with:units',
+                'integer',
+                Rule::exists('units', 'id')->where('company_id', $companyId),
+            ],
+            'units.*.factor_to_base' => ['nullable', 'integer', 'min:1'],
             'sell_price' => [$id ? 'sometimes' : 'required', 'integer', 'min:0'],
             'outlet_prices' => ['nullable', 'array'],
             'outlet_prices.*.outlet_id' => [
@@ -350,13 +362,32 @@ class ProductController extends Controller
             $data['item_type_id'] = null;
         }
 
-        if (array_key_exists('unit_id', $data)) {
+        if (array_key_exists('unit_id', $data) && ! array_key_exists('units', $data)) {
             if ($data['unit_id']) {
                 $unit = Unit::query()->find($data['unit_id']);
                 $data['unit'] = $unit?->symbol ?: ($unit?->name ?: 'pcs');
             } else {
                 $data['unit_id'] = null;
             }
+        }
+
+        $productUnits = null;
+        if (array_key_exists('units', $data)) {
+            $productUnits = array_values($data['units'] ?? []);
+            unset($data['units']);
+
+            $small = collect($productUnits)->firstWhere('level', 'small');
+            if ($small && ! empty($small['unit_id'])) {
+                $unit = Unit::query()->find($small['unit_id']);
+                $data['unit_id'] = (int) $small['unit_id'];
+                $data['unit'] = $unit?->symbol ?: ($unit?->name ?: 'pcs');
+            }
+        } elseif (! $id && ! empty($data['unit_id'])) {
+            $productUnits = [[
+                'level' => 'small',
+                'unit_id' => (int) $data['unit_id'],
+                'factor_to_base' => 1,
+            ]];
         }
 
         $outletPrices = null;
@@ -411,7 +442,7 @@ class ProductController extends Controller
                 ->normalize('product', $data['custom_fields'] ?? []);
         }
 
-        return [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices];
+        return [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits];
     }
 
     /**
@@ -594,6 +625,8 @@ class ProductController extends Controller
             'channelPrices.priceChannel:id,name,code',
             'images' => fn ($q) => $q->where('is_primary', true),
             'choices.choiceType:id,name',
+            'productUnits.unitMaster:id,name,symbol',
+            'unitMaster:id,name,symbol',
         ];
     }
 
@@ -602,7 +635,7 @@ class ProductController extends Controller
      */
     private function relationList(): array
     {
-        return ['category', 'subCategory', 'itemType', 'unitMaster', 'images', 'outletPrices', 'channelPrices.priceChannel', 'choices.choiceType', 'bomItems.component', 'bomItems.unitMaster'];
+        return ['category', 'subCategory', 'itemType', 'unitMaster', 'productUnits.unitMaster', 'images', 'outletPrices', 'channelPrices.priceChannel', 'choices.choiceType', 'bomItems.component', 'bomItems.unitMaster'];
     }
 
     private function withRelations(Product $product): Product
@@ -621,47 +654,39 @@ class ProductController extends Controller
             return;
         }
 
-        $balance = StockBalance::query()->firstOrCreate(
-            [
-                'company_id' => $product->company_id,
-                'outlet_id' => $outlet->id,
-                'product_id' => $product->id,
-            ],
-            ['qty' => 0],
-        );
+        $inventory = app(\App\Services\InventoryService::class);
+        $warehouse = $inventory->resolveDefaultWarehouse((int) $product->company_id, (int) $outlet->id);
 
         if ($initialQty === 0) {
             return;
         }
 
-        $balance->qty = $initialQty;
-        $balance->save();
-
-        StockMovement::query()->create([
-            'company_id' => $product->company_id,
-            'outlet_id' => $outlet->id,
-            'product_id' => $product->id,
-            'type' => 'adjustment',
-            'qty_change' => $initialQty,
-            'qty_after' => $initialQty,
-            'ref_type' => 'product',
-            'ref_id' => $product->id,
-            'note' => $note,
-        ]);
+        $inventory->adjust(
+            (int) $product->company_id,
+            (int) $warehouse->id,
+            (int) $product->id,
+            $initialQty,
+            'adjustment',
+            'product',
+            (int) $product->id,
+            $note,
+            (int) $outlet->id,
+        );
     }
 
     private function qty(Product $product): int
     {
-        $outletId = CurrentCompany::outlet()?->id;
+        $outlet = CurrentCompany::outlet();
 
-        if (! $outletId || ! $product->track_stock) {
+        if (! $outlet || ! $product->track_stock) {
             return 0;
         }
 
-        return (int) StockBalance::query()
-            ->where('outlet_id', $outletId)
-            ->where('product_id', $product->id)
-            ->value('qty');
+        return app(\App\Services\InventoryService::class)->qtyAtOutletDefault(
+            (int) $product->company_id,
+            (int) $outlet->id,
+            (int) $product->id,
+        );
     }
 
     /**
@@ -682,6 +707,8 @@ class ProductController extends Controller
             'sku' => $product->sku,
             'barcode' => $product->barcode,
             'unit' => $product->unit,
+            'unit_id' => $product->unit_id,
+            'units' => app(\App\Services\ProductUnitService::class)->serialize($product),
             'sell_price' => $product->priceFor($outletId),
             'images' => $cover && $cover->url()
                 ? [[
@@ -767,6 +794,7 @@ class ProductController extends Controller
             'unit' => $product->unit,
             'unit_id' => $product->unit_id,
             'unit_master' => $product->unitMaster?->only(['id', 'name', 'symbol']),
+            'units' => app(\App\Services\ProductUnitService::class)->serialize($product),
             'sell_price' => $product->priceFor($outletId),
             'default_sell_price' => (int) $product->sell_price,
             'outlet_prices' => $product->outletPrices

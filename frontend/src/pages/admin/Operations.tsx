@@ -22,6 +22,8 @@ export default function AdminOperations() {
     receipt_width: 80,
     receipt_footer: '',
     receipt_layout: defaultReceiptLayout(),
+    purchase_flow: 'direct',
+    purchase_update_cost: true,
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -34,6 +36,8 @@ export default function AdminOperations() {
         setForm({
           ...settings,
           receipt_layout: normalizeReceiptLayout(settings.receipt_layout, settings),
+          purchase_flow: settings.purchase_flow ?? 'direct',
+          purchase_update_cost: settings.purchase_update_cost ?? true,
         })
       })
       .catch((err) => feedback.error(apiMessage(err, t('loadFailed'))))
@@ -53,6 +57,8 @@ export default function AdminOperations() {
           receipt_width: Number(form.receipt_layout?.width ?? form.receipt_width),
           receipt_footer: footer,
           receipt_layout: form.receipt_layout,
+          purchase_flow: form.purchase_flow ?? 'direct',
+          purchase_update_cost: Boolean(form.purchase_update_cost),
         },
       })
       await refresh()
@@ -91,6 +97,40 @@ export default function AdminOperations() {
               onChange={(e) => setForm({ ...form, allow_credit: e.target.checked })}
             />
             {t('allowCredit')}
+          </label>
+        </div>
+
+        <div className="glass max-w-xl space-y-3 rounded-3xl p-5">
+          <div>
+            <div className="font-display text-lg font-bold">{t('purchaseSettingsTitle')}</div>
+            <p className="mt-1 text-sm text-muted">{t('purchaseSettingsHint')}</p>
+          </div>
+          <label className="block text-sm text-muted">
+            {t('purchaseFlow')}
+            <select
+              className="field"
+              disabled={!canEdit}
+              value={form.purchase_flow ?? 'direct'}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  purchase_flow: e.target.value as Settings['purchase_flow'],
+                })
+              }
+            >
+              <option value="direct">{t('purchaseFlowDirect')}</option>
+              <option value="po_gr">{t('purchaseFlowPoGr')}</option>
+              <option value="strict_pr_po_gr">{t('purchaseFlowStrict')}</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              disabled={!canEdit}
+              checked={Boolean(form.purchase_update_cost)}
+              onChange={(e) => setForm({ ...form, purchase_update_cost: e.target.checked })}
+            />
+            {t('purchaseUpdateCost')}
           </label>
         </div>
 

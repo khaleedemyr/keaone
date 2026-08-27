@@ -65,3 +65,12 @@ export async function uploadBlogCover(id: number, file: File) {
   })
   return data.data
 }
+
+export async function uploadBlogMedia(id: number, file: File) {
+  const body = new FormData()
+  body.append('file', file)
+  const { data } = await api.post<Ok<{ url: string }>>(`/platform/blog-posts/${id}/media`, body, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data.data
+}

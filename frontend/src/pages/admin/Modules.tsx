@@ -48,24 +48,33 @@ export default function AdminModules() {
       <PageHeader eyebrow={t('appAdmin')} title={t('navModules')} subtitle={t('modulesSubtitle')} />
       <div className="max-w-xl space-y-2">
         {modules
-          ? MODULE_KEYS.map((id) => (
+          ? MODULE_KEYS.map((id) => {
+              const locked = Boolean(allowed && !allowed[id])
+              return (
               <button
                 key={id}
                 type="button"
-                disabled={saving || (allowed ? !allowed[id] : false)}
+                disabled={saving || locked}
                 onClick={() => void toggle(id)}
-                className="glass flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left"
+                className="glass flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left disabled:opacity-70"
+                title={locked ? t('moduleLocked') : undefined}
               >
-                <span className="text-sm font-medium">{t(MODULE_LABELS[id])}</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{t(MODULE_LABELS[id])}</span>
+                  {locked ? (
+                    <span className="mt-0.5 block text-[11px] text-muted">{t('moduleLocked')}</span>
+                  ) : null}
+                </span>
                 <span
-                  className={`rounded-full px-2.5 py-0.5 text-xs ${
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs ${
                     modules[id] ? 'bg-mint/15 text-mint' : 'bg-fill text-muted'
                   }`}
                 >
                   {modules[id] ? t('active') : t('inactive')}
                 </span>
               </button>
-            ))
+              )
+            })
           : null}
       </div>
     </div>

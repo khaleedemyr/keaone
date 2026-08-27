@@ -51,6 +51,11 @@ class OutletController extends Controller
                 $this->makeDefault($outlet);
             }
 
+            app(\App\Services\InventoryService::class)->ensureOutletDefaultWarehouse(
+                (int) $outlet->company_id,
+                (int) $outlet->id,
+            );
+
             return $outlet->fresh();
         });
 

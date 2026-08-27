@@ -1,0 +1,124 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Models\PurchaseRequisition;
+use App\Services\PurchaseService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class PurchaseRequisitionController extends Controller
+{
+    public function __construct(private PurchaseService $purchases) {}
+
+    public function index(Request $request): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaserequisitions', 'view');
+
+        $query = PurchaseRequisition::query()
+            ->with(['user:id,name', 'warehouse:id,name'])
+            ->orderByDesc('id');
+
+        if ($status = $request->string('status')->toString()) {
+            $query->where('status', $status);
+        }
+        if ($search = $request->string('search')->toString()) {
+            $query->where('number', 'like', "%{$search}%");
+        }
+
+        $page = $query->paginate($this->perPage($request, 20));
+
+        return $this->ok(
+            $page->getCollection()->map(fn (PurchaseRequisition $pr) => $this->purchases->serializePr($pr))->values(),
+            $this->pageMeta($page),
+        );
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaserequisitions', 'create');
+        $this->ensureBilling();
+
+        $data = $request->validate([
+            'client_uuid' => ['required', 'uuid'],
+            'warehouse_id' => ['nullable', 'integer'],
+            'needed_at' => ['nullable', 'date'],
+            'note' => ['nullable', 'string'],
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.product_id' => ['required', 'integer'],
+            'items.*.qty' => ['required', 'integer', 'min:1'],
+            'items.*.unit' => ['nullable', 'string', 'max:40'],
+            'items.*.unit_level' => ['nullable', 'string', 'in:small,medium,large'],
+            'items.*.note' => ['nullable', 'string'],
+        ]);
+
+        $pr = $this->purchases->createRequisition($data, $request->user());
+
+        return $this->ok($this->purchases->serializePr($pr), [], 201);
+    }
+
+    public function show(PurchaseRequisition $purchaseRequisition): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaserequisitions', 'view');
+
+        return $this->ok($this->purchases->serializePr($purchaseRequisition));
+    }
+
+    public function update(Request $request, PurchaseRequisition $purchaseRequisition): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaserequisitions', 'edit');
+
+        $data = $request->validate([
+            'warehouse_id' => ['nullable', 'integer'],
+            'needed_at' => ['nullable', 'date'],
+            'note' => ['nullable', 'string'],
+            'items' => ['sometimes', 'array', 'min:1'],
+            'items.*.product_id' => ['required_with:items', 'integer'],
+            'items.*.qty' => ['required_with:items', 'integer', 'min:1'],
+            'items.*.unit' => ['nullable', 'string', 'max:40'],
+            'items.*.unit_level' => ['nullable', 'string', 'in:small,medium,large'],
+            'items.*.note' => ['nullable', 'string'],
+        ]);
+
+        $pr = $this->purchases->updateRequisition($purchaseRequisition, $data);
+
+        return $this->ok($this->purchases->serializePr($pr));
+    }
+
+    public function submit(PurchaseRequisition $purchaseRequisition): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaserequisitions', 'edit');
+
+        return $this->ok($this->purchases->serializePr($this->purchases->submitRequisition($purchaseRequisition)));
+    }
+
+    public function approve(Request $request, PurchaseRequisition $purchaseRequisition): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaserequisitions', 'edit');
+
+        return $this->ok($this->purchases->serializePr($this->purchases->approveRequisition($purchaseRequisition, $request->user())));
+    }
+
+    public function reject(Request $request, PurchaseRequisition $purchaseRequisition): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaserequisitions', 'edit');
+
+        return $this->ok($this->purchases->serializePr($this->purchases->rejectRequisition($purchaseRequisition, $request->user())));
+    }
+
+    public function cancel(PurchaseRequisition $purchaseRequisition): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCanAny([['purchaserequisitions', 'edit'], ['purchaserequisitions', 'delete']]);
+
+        return $this->ok($this->purchases->serializePr($this->purchases->cancelRequisition($purchaseRequisition)));
+    }
+}

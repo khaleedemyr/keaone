@@ -30,6 +30,17 @@ const emptyForm = {
   track_stock: true,
 }
 
+type UnitLevelDraft = {
+  unit_id: string
+  factor_to_base: string
+}
+
+const emptyUnitLevels = (): { small: UnitLevelDraft; medium: UnitLevelDraft; large: UnitLevelDraft } => ({
+  small: { unit_id: '', factor_to_base: '1' },
+  medium: { unit_id: '', factor_to_base: '' },
+  large: { unit_id: '', factor_to_base: '' },
+})
+
 type DraftImage = {
   key: string
   file: File
@@ -64,6 +75,7 @@ export default function Products() {
   const [categories, setCategories] = useState<Category[]>([])
   const [subCategories, setSubCategories] = useState<SubCategory[]>([])
   const [units, setUnits] = useState<Unit[]>([])
+  const [unitLevels, setUnitLevels] = useState(emptyUnitLevels)
   const [itemTypes, setItemTypes] = useState<ItemType[]>([])
   const [choiceTypes, setChoiceTypes] = useState<ChoiceType[]>([])
   const [productOptions, setProductOptions] = useState<ProductOption[]>([])
@@ -252,6 +264,7 @@ export default function Products() {
   function openCreate() {
     setEditing(null)
     setForm(emptyForm)
+    setUnitLevels(emptyUnitLevels())
     setCustomFields({})
     setOutletPrices(priceMapFor(null))
     setChannelPrices({})
@@ -276,6 +289,20 @@ export default function Products() {
 
   function applyEdit(product: Product) {
     setEditing(product)
+    const nextLevels = emptyUnitLevels()
+    for (const row of product.units ?? []) {
+      const level = row.level
+      if (level === 'small' || level === 'medium' || level === 'large') {
+        nextLevels[level] = {
+          unit_id: String(row.unit_id),
+          factor_to_base: String(row.factor_to_base || (level === 'small' ? 1 : '')),
+        }
+      }
+    }
+    if (!nextLevels.small.unit_id && product.unit_id) {
+      nextLevels.small.unit_id = String(product.unit_id)
+    }
+    setUnitLevels(nextLevels)
     setForm({
       name: product.name,
       description: product.description ?? '',
@@ -283,7 +310,7 @@ export default function Products() {
       barcode: product.barcode ?? '',
       category_id: product.category_id ? String(product.category_id) : '',
       sub_category_id: product.sub_category_id ? String(product.sub_category_id) : '',
-      unit_id: product.unit_id ? String(product.unit_id) : '',
+      unit_id: nextLevels.small.unit_id || (product.unit_id ? String(product.unit_id) : ''),
       item_type_id: product.item_type_id ? String(product.item_type_id) : '',
       min_stock: String(product.min_stock),
       initial_qty: '0',
@@ -385,6 +412,32 @@ export default function Products() {
       ? Number(outletPrices[defaultOutlet.id] || prices[0]?.sell_price || 0)
       : Number(prices[0]?.sell_price || 0)
 
+    const unitsPayload = (['small', 'medium', 'large'] as const)
+      .filter((level) => unitLevels[level].unit_id)
+      .map((level) => ({
+        level,
+        unit_id: Number(unitLevels[level].unit_id),
+        factor_to_base: level === 'small' ? 1 : Number(unitLevels[level].factor_to_base || 0),
+      }))
+
+    if (!unitLevels.small.unit_id) {
+      setFormError(t('productUnitSmallRequired'))
+      setSaving(false)
+      return
+    }
+    if (unitLevels.medium.unit_id && Number(unitLevels.medium.factor_to_base || 0) < 2) {
+      setFormError(t('productUnitFactorInvalid'))
+      setSaving(false)
+      return
+    }
+    if (unitLevels.large.unit_id) {
+      if (!unitLevels.medium.unit_id || Number(unitLevels.large.factor_to_base || 0) <= Number(unitLevels.medium.factor_to_base || 0)) {
+        setFormError(t('productUnitLargeInvalid'))
+        setSaving(false)
+        return
+      }
+    }
+
     const payload = {
       name: form.name,
       description: form.description.trim() === '' ? null : form.description.trim(),
@@ -392,7 +445,8 @@ export default function Products() {
       barcode: form.barcode.trim() === '' ? null : form.barcode.trim(),
       category_id: form.category_id ? Number(form.category_id) : null,
       sub_category_id: form.sub_category_id ? Number(form.sub_category_id) : null,
-      unit_id: form.unit_id ? Number(form.unit_id) : null,
+      unit_id: Number(unitLevels.small.unit_id),
+      units: unitsPayload,
       item_type_id: form.item_type_id ? Number(form.item_type_id) : null,
       sell_price: sellPrice,
       outlet_prices: prices,
@@ -481,7 +535,11 @@ export default function Products() {
   }
 
   const formCategories = categories.filter((c) => c.is_active || String(c.id) === form.category_id)
-  const formUnits = units.filter((u) => u.is_active || String(u.id) === form.unit_id)
+  const formUnits = units.filter(
+    (u) =>
+      u.is_active ||
+      [unitLevels.small.unit_id, unitLevels.medium.unit_id, unitLevels.large.unit_id, form.unit_id].includes(String(u.id)),
+  )
   const formItemTypes = itemTypes.filter((item) => item.is_active || String(item.id) === form.item_type_id)
   const formSubCategories = subCategories.filter(
     (item) =>
@@ -819,27 +877,75 @@ export default function Products() {
               ))}
             </select>
           </label>
-          <label className="text-sm text-muted">
-            {t('unit')}
-            <select
-              required
-              className="field"
-              value={form.unit_id}
-              onChange={(e) => setForm({ ...form, unit_id: e.target.value })}
-            >
-              <option value="">{t('selectUnit')}</option>
-              {formUnits.map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.is_active
-                    ? unit.symbol
-                      ? `${unit.name} (${unit.symbol})`
-                      : unit.name
-                    : `${unit.name} (${t('inactive')})`}
-                </option>
-              ))}
-            </select>
-            {formUnits.length === 0 ? <div className="mt-1 text-xs">{t('noUnits')}</div> : null}
-          </label>
+          <div className="col-span-full space-y-3 rounded-2xl border border-line bg-fill/40 p-3">
+            <div>
+              <div className="text-sm font-medium text-fg">{t('productUnitsTitle')}</div>
+              <div className="mt-0.5 text-xs text-muted">{t('productUnitsHint')}</div>
+            </div>
+            {(
+              [
+                { level: 'small' as const, label: t('productUnitSmall'), required: true },
+                { level: 'medium' as const, label: t('productUnitMedium'), required: false },
+                { level: 'large' as const, label: t('productUnitLarge'), required: false },
+              ] as const
+            ).map(({ level, label, required }) => (
+              <div key={level} className="grid gap-2 sm:grid-cols-[120px_1fr_140px] sm:items-end">
+                <div className="text-sm font-medium text-fg">
+                  {label}
+                  {required ? ' *' : ''}
+                </div>
+                <label className="text-sm text-muted">
+                  {t('unit')}
+                  <select
+                    required={required}
+                    className="field"
+                    value={unitLevels[level].unit_id}
+                    onChange={(e) => {
+                      const unit_id = e.target.value
+                      setUnitLevels((current) => ({
+                        ...current,
+                        [level]: { ...current[level], unit_id },
+                      }))
+                      if (level === 'small') setForm((current) => ({ ...current, unit_id }))
+                    }}
+                  >
+                    <option value="">{required ? t('selectUnit') : '—'}</option>
+                    {formUnits.map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.is_active
+                          ? unit.symbol
+                            ? `${unit.name} (${unit.symbol})`
+                            : unit.name
+                          : `${unit.name} (${t('inactive')})`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {level === 'small' ? (
+                  <div className="text-xs text-muted sm:pb-3">{t('productUnitBaseNote')}</div>
+                ) : (
+                  <label className="text-sm text-muted">
+                    {t('productUnitFactor')}
+                    <input
+                      type="number"
+                      min={2}
+                      className="field"
+                      disabled={!unitLevels[level].unit_id}
+                      value={unitLevels[level].factor_to_base}
+                      onChange={(e) =>
+                        setUnitLevels((current) => ({
+                          ...current,
+                          [level]: { ...current[level], factor_to_base: e.target.value },
+                        }))
+                      }
+                      placeholder={t('productUnitFactorPlaceholder')}
+                    />
+                  </label>
+                )}
+              </div>
+            ))}
+            {formUnits.length === 0 ? <div className="text-xs text-muted">{t('noUnits')}</div> : null}
+          </div>
           <label className="text-sm text-muted">
             {t('itemType')}
             <select

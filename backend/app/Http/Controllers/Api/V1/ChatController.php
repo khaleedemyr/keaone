@@ -87,6 +87,7 @@ class ChatController extends Controller
         );
 
         $rows = Conversation::query()
+            ->where('type', 'direct')
             ->whereHas('participants', fn ($q) => $q->where('user_id', $meId))
             ->with([
                 'latestMessage.user:id,name,avatar',
@@ -243,6 +244,70 @@ class ChatController extends Controller
         return $this->ok(['ok' => true]);
     }
 
+    public function openSupport(Request $request): JsonResponse
+    {
+        $this->ensureCan('chat', 'create');
+
+        $companyId = CurrentCompany::id();
+        $meId = (int) $request->user()->id;
+        $company = CurrentCompany::company();
+        $key = 'support:'.$meId;
+        $created = false;
+
+        $conversation = DB::transaction(function () use ($companyId, $meId, $company, $key, &$created) {
+            $existing = Conversation::query()
+                ->where('type', 'support')
+                ->where('direct_key', $key)
+                ->first();
+
+            if ($existing) {
+                ConversationParticipant::query()->firstOrCreate(
+                    ['conversation_id' => $existing->id, 'user_id' => $meId],
+                );
+
+                return $existing;
+            }
+
+            $conversation = Conversation::query()->create([
+                'company_id' => $companyId,
+                'type' => 'support',
+                'title' => $company?->name ? ('Support · '.$company->name) : 'Live Support',
+                'direct_key' => $key,
+            ]);
+
+            ConversationParticipant::query()->create([
+                'conversation_id' => $conversation->id,
+                'user_id' => $meId,
+            ]);
+
+            $agentIds = User::query()
+                ->where('is_platform', true)
+                ->where('is_active', true)
+                ->pluck('id');
+
+            foreach ($agentIds as $agentId) {
+                if ((int) $agentId === $meId) {
+                    continue;
+                }
+                ConversationParticipant::query()->create([
+                    'conversation_id' => $conversation->id,
+                    'user_id' => (int) $agentId,
+                ]);
+            }
+
+            $created = true;
+
+            return $conversation;
+        });
+
+        $conversation->load([
+            'latestMessage.user:id,name,avatar,is_platform',
+            'participants.user:id,name,email,username,avatar,is_active,is_platform',
+        ]);
+
+        return $this->ok($this->serializeConversation($conversation, $meId), [], $created ? 201 : 200);
+    }
+
     private function ensureParticipant(Conversation $conversation, int $userId): void
     {
         $ok = ConversationParticipant::query()
@@ -259,9 +324,17 @@ class ChatController extends Controller
      */
     private function serializeConversation(Conversation $conversation, int $meId, array $presence = []): array
     {
-        $peer = $conversation->participants
-            ->first(fn (ConversationParticipant $p) => (int) $p->user_id !== $meId)
-            ?->user;
+        $isSupport = $conversation->type === 'support';
+
+        if ($isSupport) {
+            $peer = $conversation->participants
+                ->first(fn (ConversationParticipant $p) => (int) $p->user_id !== $meId && $p->user?->is_platform)
+                ?->user;
+        } else {
+            $peer = $conversation->participants
+                ->first(fn (ConversationParticipant $p) => (int) $p->user_id !== $meId)
+                ?->user;
+        }
 
         $mine = $conversation->participants
             ->first(fn (ConversationParticipant $p) => (int) $p->user_id === $meId);
@@ -279,12 +352,28 @@ class ChatController extends Controller
         }
 
         $peerPresence = $peer ? ($presence[(int) $peer->id] ?? null) : null;
+        $peerPayload = null;
+        if ($isSupport && ! $peer) {
+            $peerPayload = [
+                'id' => 0,
+                'name' => 'KEA Support',
+                'email' => null,
+                'username' => null,
+                'avatar' => null,
+                'is_online' => true,
+                'last_seen_at' => null,
+                'is_platform' => true,
+            ];
+        } elseif ($peer) {
+            $peerPayload = $this->serializeUser($peer, $peerPresence);
+            $peerPayload['is_platform'] = (bool) $peer->is_platform;
+        }
 
         return [
             'id' => $conversation->id,
             'type' => $conversation->type,
             'title' => $conversation->title,
-            'peer' => $peer ? $this->serializeUser($peer, $peerPresence) : null,
+            'peer' => $peerPayload,
             'last_message' => $last ? $this->serializeMessage($last) : null,
             'last_message_at' => optional($conversation->last_message_at)?->toIso8601String(),
             'unread_count' => $unread,
@@ -310,7 +399,7 @@ class ChatController extends Controller
 
     /**
      * @param  array{is_online: bool, last_seen_at: ?string}|null  $presence
-     * @return array{id: int, name: string, email: ?string, username: ?string, avatar: ?string, is_online: bool, last_seen_at: ?string}
+     * @return array{id: int, name: string, email: ?string, username: ?string, avatar: ?string, is_online: bool, last_seen_at: ?string, is_platform?: bool}
      */
     private function serializeUser(User $user, ?array $presence = null): array
     {
@@ -322,6 +411,7 @@ class ChatController extends Controller
             'avatar' => $user->avatarUrl(),
             'is_online' => (bool) ($presence['is_online'] ?? false),
             'last_seen_at' => $presence['last_seen_at'] ?? null,
+            'is_platform' => (bool) $user->is_platform,
         ];
     }
 

@@ -13,6 +13,7 @@ class StockBalance extends Model
     protected $fillable = [
         'company_id',
         'outlet_id',
+        'warehouse_id',
         'product_id',
         'qty',
     ];
@@ -32,5 +33,10 @@ class StockBalance extends Model
     public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
     }
 }

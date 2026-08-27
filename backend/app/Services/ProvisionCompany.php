@@ -33,6 +33,8 @@ class ProvisionCompany
         $outlet->is_default = true;
         $outlet->save();
 
+        app(InventoryService::class)->ensureOutletDefaultWarehouse((int) $company->id, (int) $outlet->id);
+
         CompanyUser::query()->create([
             'company_id' => $company->id,
             'user_id' => $user->id,

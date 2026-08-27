@@ -44,7 +44,7 @@ class CatalogSeeder extends Seeder
                     'pos' => true,
                     'stock' => true,
                     'invoice' => true,
-                    'purchase' => false,
+                    'purchase' => true,
                     'work_order' => false,
                     'promotions' => true,
                     'choices' => true,

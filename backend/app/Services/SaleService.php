@@ -8,8 +8,6 @@ use App\Models\Product;
 use App\Models\Promotion;
 use App\Models\Sale;
 use App\Models\SaleItem;
-use App\Models\StockBalance;
-use App\Models\StockMovement;
 use App\Models\User;
 use App\Support\CurrentCompany;
 use App\Support\ReceiptLayout;
@@ -896,42 +894,19 @@ class SaleService
 
     private function adjustStock(Sale $sale, Product $product, int $qtyChange, string $type, string $note): void
     {
-        $balance = StockBalance::query()->firstOrCreate(
-            [
-                'company_id' => $sale->company_id,
-                'outlet_id' => $sale->outlet_id,
-                'product_id' => $product->id,
-            ],
-            ['qty' => 0],
+        $inventory = app(InventoryService::class);
+        $warehouse = $inventory->resolveDefaultWarehouse((int) $sale->company_id, (int) $sale->outlet_id);
+        $inventory->adjust(
+            (int) $sale->company_id,
+            (int) $warehouse->id,
+            (int) $product->id,
+            $qtyChange,
+            $type,
+            'sale',
+            (int) $sale->id,
+            $note,
+            (int) $sale->outlet_id,
         );
-
-        $balance = StockBalance::query()
-            ->whereKey($balance->id)
-            ->lockForUpdate()
-            ->firstOrFail();
-
-        $nextQty = $balance->qty + $qtyChange;
-
-        if ($qtyChange < 0 && $nextQty < 0) {
-            throw ValidationException::withMessages([
-                'items' => ["Stok {$product->name} tidak cukup (tersedia {$balance->qty})."],
-            ]);
-        }
-
-        $balance->qty = $nextQty;
-        $balance->save();
-
-        StockMovement::query()->create([
-            'company_id' => $sale->company_id,
-            'outlet_id' => $sale->outlet_id,
-            'product_id' => $product->id,
-            'type' => $type,
-            'qty_change' => $qtyChange,
-            'qty_after' => $nextQty,
-            'ref_type' => 'sale',
-            'ref_id' => $sale->id,
-            'note' => $note,
-        ]);
     }
 
     private function recalculatePayments(Sale $sale): void

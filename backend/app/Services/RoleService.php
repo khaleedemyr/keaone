@@ -290,6 +290,10 @@ class RoleService
         $viewer['salesreportchannels'] = $this->flags(true, false, false, false);
         $viewer['salesreportdaily'] = $this->flags(true, false, false, false);
         $viewer['stock'] = $this->flags(true, false, false, false);
+        $viewer['stockcard'] = $this->flags(true, false, false, false);
+        $viewer['purchaserequisitions'] = $this->flags(true, false, false, false);
+        $viewer['purchaseorders'] = $this->flags(true, false, false, false);
+        $viewer['goodsreceipts'] = $this->flags(true, false, false, false);
         $viewer['customers'] = $this->flags(true, false, false, false);
         $viewer['suppliers'] = $this->flags(true, false, false, false);
         $viewer['settings'] = $this->flags(true, false, true, false);
@@ -313,6 +317,7 @@ class RoleService
         $support['overview'] = $this->flags(true, false, false, false);
         $support['tenants'] = $this->flags(true, false, false, false);
         $support['billing'] = $this->flags(true, false, false, false);
+        $support['livesupport'] = $this->flags(true, true, false, false);
         $support['settings'] = $this->flags(true, false, true, false);
 
         return [

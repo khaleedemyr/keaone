@@ -34,16 +34,22 @@ export function useTenantApps() {
           'warehouses',
           'suppliers',
           'customers',
+          'stock',
+          'stockcard',
         ],
         'view',
       )
         ? (['master'] as TenantAppId[])
         : []),
       ...(can('sales') || canAny([...SALES_REPORT_MENUS], 'view') ? (['sales'] as TenantAppId[]) : []),
+      ...(me?.modules?.purchase &&
+      canAny(['purchaserequisitions', 'purchaseorders', 'goodsreceipts'], 'view')
+        ? (['purchase'] as TenantAppId[])
+        : []),
       ...(canAdmin ? (['admin'] as TenantAppId[]) : []),
       ...(canAny(['settings', 'possettings', 'cafetables']) ? (['settings'] as TenantAppId[]) : []),
     ],
-    [can, canAny, canAdmin, me?.modules?.pos],
+    [can, canAny, canAdmin, me?.modules?.pos, me?.modules?.purchase],
   )
 
   const titles = useMemo<Partial<Record<AppId, string>>>(
@@ -52,6 +58,7 @@ export function useTenantApps() {
       pos: t('appPos'),
       master: t('appMaster'),
       sales: t('appSales'),
+      purchase: t('appPurchase'),
       admin: t('appAdmin'),
       settings: t('appSettings'),
     }),

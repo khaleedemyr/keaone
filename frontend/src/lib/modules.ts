@@ -37,6 +37,13 @@ export const DEFAULT_MODULES: Modules = {
 export function moduleForMenu(menu: string): ModuleKey | null {
   if (menu === 'promotions') return 'promotions'
   if (menu === 'choicetypes' || menu === 'choices') return 'choices'
-  if (menu === 'warehouses') return 'stock'
+  if (menu === 'warehouses' || menu === 'stock' || menu === 'stockcard') return 'stock'
+  if (
+    menu === 'purchaserequisitions' ||
+    menu === 'purchaseorders' ||
+    menu === 'goodsreceipts'
+  ) {
+    return 'purchase'
+  }
   return null
 }

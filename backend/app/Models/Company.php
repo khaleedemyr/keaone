@@ -77,6 +77,8 @@ class Company extends Model
             'receipt_width' => 80,
             'receipt_footer' => 'Terima kasih',
             'pos_mode' => 'retail',
+            'purchase_flow' => 'direct',
+            'purchase_update_cost' => true,
         ];
     }
 

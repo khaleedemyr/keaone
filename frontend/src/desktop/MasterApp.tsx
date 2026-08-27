@@ -20,6 +20,8 @@ type Section =
   | 'warehouses'
   | 'suppliers'
   | 'customers'
+  | 'stock'
+  | 'stockcard'
 
 const Products = lazy(() => import('../pages/Products'))
 const Categories = lazy(() => import('../pages/Categories'))
@@ -34,6 +36,8 @@ const ChoiceTypes = lazy(() => import('../pages/ChoiceTypes'))
 const Choices = lazy(() => import('../pages/Choices'))
 const Warehouses = lazy(() => import('../pages/Warehouses'))
 const Parties = lazy(() => import('../pages/Parties'))
+const StockPage = lazy(() => import('../pages/Stock'))
+const StockCardPage = lazy(() => import('../pages/StockCard'))
 
 const NAV_GROUPS: { id: string; label: MsgKey; items: { id: Section; label: MsgKey }[] }[] = [
   {
@@ -66,10 +70,18 @@ const NAV_GROUPS: { id: string; label: MsgKey; items: { id: Section; label: MsgK
     ],
   },
   {
+    id: 'inventory',
+    label: 'masterGroupInventory',
+    items: [
+      { id: 'stock', label: 'navStock' },
+      { id: 'stockcard', label: 'navStockCard' },
+      { id: 'warehouses', label: 'navWarehouses' },
+    ],
+  },
+  {
     id: 'partners',
     label: 'masterGroupPartners',
     items: [
-      { id: 'warehouses', label: 'navWarehouses' },
       { id: 'suppliers', label: 'navSuppliers' },
       { id: 'customers', label: 'navCustomers' },
     ],
@@ -79,6 +91,7 @@ const NAV_GROUPS: { id: string; label: MsgKey; items: { id: Section; label: MsgK
 export default function MasterApp() {
   const { t } = useI18n()
   const { can, hasModule } = useAccess()
+  const [cardFocus, setCardFocus] = useState<{ productId: number; warehouseId: number } | null>(null)
   const groups = useMemo<AppNavGroup<Section>[]>(
     () =>
       NAV_GROUPS.map((group) => ({
@@ -104,6 +117,7 @@ export default function MasterApp() {
       current={current}
       onSelect={(id) => {
         setSection(id)
+        if (id !== 'stockcard') setCardFocus(null)
         logActivity('open_section', id)
       }}
     >
@@ -119,6 +133,20 @@ export default function MasterApp() {
       {current === 'choicetypes' ? <ChoiceTypes /> : null}
       {current === 'choices' ? <Choices /> : null}
       {current === 'warehouses' ? <Warehouses /> : null}
+      {current === 'stock' ? (
+        <StockPage
+          onOpenCard={(productId, warehouseId) => {
+            setCardFocus({ productId, warehouseId })
+            setSection('stockcard')
+          }}
+        />
+      ) : null}
+      {current === 'stockcard' ? (
+        <StockCardPage
+          initialProductId={cardFocus?.productId}
+          initialWarehouseId={cardFocus?.warehouseId}
+        />
+      ) : null}
       {current === 'suppliers' ? (
         <Parties
           menu="suppliers"

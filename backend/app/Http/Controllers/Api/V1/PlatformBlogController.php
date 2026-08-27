@@ -154,6 +154,40 @@ class PlatformBlogController extends Controller
         return $this->ok($this->serializeAdmin($blogPost->fresh(['translations', 'author:id,name,email'])));
     }
 
+    public function storeMedia(Request $request, BlogPost $blogPost): JsonResponse
+    {
+        $this->ensurePlatformCan('blog', 'edit');
+
+        $request->validate([
+            'file' => ['required', 'file', 'image', 'max:8192'],
+        ]);
+
+        $uploaded = $request->file('file');
+        abort_unless($uploaded && $uploaded->isValid(), 422, 'Unggahan gambar gagal.');
+
+        $info = @getimagesize($uploaded->getRealPath() ?: $uploaded->getPathname());
+        abort_unless($info !== false, 422, 'File bukan gambar yang valid.');
+
+        $ext = match ($info[2] ?? 0) {
+            IMAGETYPE_JPEG => 'jpg',
+            IMAGETYPE_PNG => 'png',
+            IMAGETYPE_WEBP => 'webp',
+            default => null,
+        };
+        abort_unless($ext, 422, 'Format gambar tidak didukung. Pakai JPG, PNG, atau WebP.');
+
+        $dir = storage_path('app/public/blog');
+        if (! is_dir($dir) && ! mkdir($dir, 0775, true) && ! is_dir($dir)) {
+            abort(500, 'Tidak bisa membuat folder blog.');
+        }
+
+        $name = $blogPost->id.'_media_'.Str::uuid().'.'.$ext;
+        $uploaded->move($dir, $name);
+        abort_unless(is_file($dir.DIRECTORY_SEPARATOR.$name), 422, 'Tidak bisa menyimpan gambar.');
+
+        return $this->ok(['url' => '/media/blog/'.$name]);
+    }
+
     /**
      * @return array<string, mixed>
      */

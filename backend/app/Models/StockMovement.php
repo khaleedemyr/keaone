@@ -13,10 +13,15 @@ class StockMovement extends Model
     protected $fillable = [
         'company_id',
         'outlet_id',
+        'warehouse_id',
         'product_id',
         'type',
         'qty_change',
         'qty_after',
+        'qty_input',
+        'unit_level',
+        'unit',
+        'factor_to_base',
         'ref_type',
         'ref_id',
         'note',
@@ -27,11 +32,23 @@ class StockMovement extends Model
         return [
             'qty_change' => 'integer',
             'qty_after' => 'integer',
+            'qty_input' => 'integer',
+            'factor_to_base' => 'integer',
         ];
     }
 
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
+
+    public function outlet(): BelongsTo
+    {
+        return $this->belongsTo(Outlet::class);
     }
 }

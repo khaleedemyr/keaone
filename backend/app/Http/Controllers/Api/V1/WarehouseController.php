@@ -51,7 +51,7 @@ class WarehouseController extends Controller
             $warehouse = Warehouse::query()->create($this->validated($request));
 
             if ($warehouse->is_default) {
-                $this->makeDefault($warehouse);
+                app(\App\Services\InventoryService::class)->makeOutletDefault($warehouse);
             }
 
             return $warehouse->fresh()->load('outlet:id,name');
@@ -66,19 +66,26 @@ class WarehouseController extends Controller
         $this->ensureCan('warehouses', 'edit');
 
         $data = $this->validated($request, true);
+        $inventory = app(\App\Services\InventoryService::class);
 
-        DB::transaction(function () use ($warehouse, $data) {
+        DB::transaction(function () use ($warehouse, $data, $inventory) {
             $warehouse->update($data);
 
             if ($warehouse->is_default && $warehouse->is_active) {
-                $this->makeDefault($warehouse);
+                $inventory->makeOutletDefault($warehouse);
             }
 
             if (! $warehouse->is_active && $warehouse->is_default) {
                 $warehouse->update(['is_default' => false]);
-                $next = Warehouse::query()->where('is_active', true)->orderBy('id')->first();
+                $nextQuery = Warehouse::query()->where('is_active', true)->orderBy('id');
+                if ($warehouse->outlet_id) {
+                    $nextQuery->where('outlet_id', $warehouse->outlet_id);
+                } else {
+                    $nextQuery->whereNull('outlet_id');
+                }
+                $next = $nextQuery->first();
                 if ($next) {
-                    $this->makeDefault($next);
+                    $inventory->makeOutletDefault($next);
                 }
             }
         });
@@ -91,13 +98,21 @@ class WarehouseController extends Controller
         $this->ensureModule('stock');
         $this->ensureCanAny([['warehouses', 'delete'], ['warehouses', 'edit']]);
 
+        $inventory = app(\App\Services\InventoryService::class);
         $wasDefault = $warehouse->is_default;
+        $outletId = $warehouse->outlet_id;
         $warehouse->update(['is_active' => false, 'is_default' => false]);
 
         if ($wasDefault) {
-            $next = Warehouse::query()->where('is_active', true)->orderBy('id')->first();
+            $nextQuery = Warehouse::query()->where('is_active', true)->orderBy('id');
+            if ($outletId) {
+                $nextQuery->where('outlet_id', $outletId);
+            } else {
+                $nextQuery->whereNull('outlet_id');
+            }
+            $next = $nextQuery->first();
             if ($next) {
-                $this->makeDefault($next);
+                $inventory->makeOutletDefault($next);
             }
         }
 
@@ -117,11 +132,5 @@ class WarehouseController extends Controller
             'is_default' => ['sometimes', 'boolean'],
             'is_active' => ['sometimes', 'boolean'],
         ]);
-    }
-
-    private function makeDefault(Warehouse $warehouse): void
-    {
-        Warehouse::query()->whereKeyNot($warehouse->id)->update(['is_default' => false]);
-        $warehouse->update(['is_default' => true, 'is_active' => true]);
     }
 }

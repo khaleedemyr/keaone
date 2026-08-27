@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { Logo } from '../components/Logo'
-import { PrefsBar } from '../components/PrefsBar'
 import { useAuth } from '../auth'
 import { useI18n } from '../i18n'
+import { MktPrefs } from './MktPrefs'
 import './marketing.css'
 
 export function MarketingShell({ children }: { children: ReactNode }) {
@@ -29,12 +29,12 @@ export function MarketingShell({ children }: { children: ReactNode }) {
           </Link>
           <nav className="mkt-nav-links" aria-label="Primary">
             <a href="/#product">{t('mktNavProduct')}</a>
+            <a href="/#pricing">{t('mktNavPricing')}</a>
+            <a href="/#contact">{t('mktNavContact')}</a>
             <NavLink to="/blog">{t('mktNavBlog')}</NavLink>
           </nav>
           <div className="mkt-nav-actions">
-            <div className="mkt-prefs">
-              <PrefsBar compact />
-            </div>
+            <MktPrefs />
             {me ? (
               <Link to="/app" className="mkt-btn mkt-btn-primary">
                 {t('mktNavOpenApp')}
@@ -62,6 +62,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
             <p className="mkt-footer-tag">{t('mktFooterTag')}</p>
           </div>
           <div className="mkt-footer-links">
+            <a href="/#pricing">{t('mktNavPricing')}</a>
+            <a href="/#contact">{t('mktNavContact')}</a>
             <Link to="/blog">{t('mktNavBlog')}</Link>
             {me ? (
               <Link to="/app">{t('mktNavOpenApp')}</Link>

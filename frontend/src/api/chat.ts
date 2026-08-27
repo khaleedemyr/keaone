@@ -8,6 +8,7 @@ export type ChatUser = {
   avatar?: string | null
   is_online?: boolean
   last_seen_at?: string | null
+  is_platform?: boolean
 }
 
 export type ChatMessage = {
@@ -27,6 +28,7 @@ export type ChatConversation = {
   last_message: ChatMessage | null
   last_message_at: string | null
   unread_count: number
+  company?: { id: number; name: string } | null
 }
 
 type Ok<T> = { data: T }
@@ -53,6 +55,11 @@ export async function openDirect(userId: number) {
   return data.data
 }
 
+export async function openLiveSupport() {
+  const { data } = await api.post<Ok<ChatConversation>>('/chat/support')
+  return data.data
+}
+
 export async function listMessages(conversationId: number, opts?: { afterId?: number; beforeId?: number; limit?: number }) {
   const { data } = await api.get<Ok<ChatMessage[]>>(`/chat/conversations/${conversationId}/messages`, {
     params: {
@@ -72,4 +79,40 @@ export async function sendMessage(conversationId: number, body: string) {
 
 export async function markRead(conversationId: number) {
   await api.post(`/chat/conversations/${conversationId}/read`, {}, { silent: true })
+}
+
+export async function listPlatformSupportConversations() {
+  const { data } = await api.get<Ok<ChatConversation[]>>('/platform/support/conversations', { silent: true })
+  return Array.isArray(data.data) ? data.data : []
+}
+
+export async function joinPlatformSupport(conversationId: number) {
+  const { data } = await api.post<Ok<ChatConversation>>(`/platform/support/conversations/${conversationId}/join`)
+  return data.data
+}
+
+export async function listPlatformSupportMessages(
+  conversationId: number,
+  opts?: { afterId?: number; beforeId?: number; limit?: number },
+) {
+  const { data } = await api.get<Ok<ChatMessage[]>>(`/platform/support/conversations/${conversationId}/messages`, {
+    params: {
+      after_id: opts?.afterId || undefined,
+      before_id: opts?.beforeId || undefined,
+      limit: opts?.limit || 50,
+    },
+    silent: true,
+  })
+  return Array.isArray(data.data) ? data.data : []
+}
+
+export async function sendPlatformSupportMessage(conversationId: number, body: string) {
+  const { data } = await api.post<Ok<ChatMessage>>(`/platform/support/conversations/${conversationId}/messages`, {
+    body,
+  })
+  return data.data
+}
+
+export async function markPlatformSupportRead(conversationId: number) {
+  await api.post(`/platform/support/conversations/${conversationId}/read`, {}, { silent: true })
 }
