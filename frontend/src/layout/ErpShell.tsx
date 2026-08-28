@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { BrandLockup, Logo } from '../components/Logo'
 import { PrefsBar } from '../components/PrefsBar'
 import { AppGlyph, APP_TILE } from '../desktop/glyphs'
@@ -29,7 +29,7 @@ function ErpSidebarNav<T extends string>({
   apps: T[]
   titles: Partial<Record<T, string>>
   active: T | null
-  onSelectApp: (id: T) => void
+  onSelectApp: (id: T, opts?: { keepSidebarOpen?: boolean }) => void
   onCloseSidebar: () => void
 }) {
   const { registration } = useErpSubNavContext() ?? { registration: null }
@@ -84,12 +84,14 @@ function ErpSidebarNav<T extends string>({
             <button
               type="button"
               onClick={() => {
-                if (selected && showSubNav) {
-                  setExpandedApps((prev) => ({ ...prev, [id as string]: !expanded }))
+                if (selected) {
+                  if (showSubNav) {
+                    setExpandedApps((prev) => ({ ...prev, [id as string]: !expanded }))
+                  }
                   return
                 }
-                onSelectApp(id)
-                setExpandedApps((prev) => ({ ...prev, [id as string]: true }))
+                onSelectApp(id, { keepSidebarOpen: true })
+                setExpandedApps({ [id as string]: true })
               }}
               className={`erp-nav-item ${selected ? 'is-active' : ''}`}
             >
@@ -154,6 +156,27 @@ function ErpSidebarNav<T extends string>({
   )
 }
 
+function ErpSidebarAutoClose({
+  active,
+  onClose,
+}: {
+  active: string | null
+  onClose: () => void
+}) {
+  const { registration } = useErpSubNavContext() ?? { registration: null }
+
+  useEffect(() => {
+    if (!active) return
+    const hasSubNav =
+      registration != null && (registration.groups.length > 0 || registration.items.length > 0)
+    if (!hasSubNav) {
+      onClose()
+    }
+  }, [active, registration, onClose])
+
+  return null
+}
+
 export function ErpShell<T extends string>({
   apps,
   titles,
@@ -177,9 +200,11 @@ export function ErpShell<T extends string>({
     setActive((current) => (current && apps.includes(current) ? current : apps[0]))
   }, [apps])
 
-  const selectApp = useCallback((id: T) => {
+  const selectApp = useCallback((id: T, opts?: { keepSidebarOpen?: boolean }) => {
     setActive(id)
-    setSidebarOpen(false)
+    if (!opts?.keepSidebarOpen) {
+      setSidebarOpen(false)
+    }
   }, [])
 
   const openErpApp = useCallback(
@@ -195,6 +220,7 @@ export function ErpShell<T extends string>({
     <ErpNavProvider openApp={openErpApp}>
       <ErpSubNavProvider>
         <ErpFlyoutProvider mount={flyoutMount}>
+          <ErpSidebarAutoClose active={active} onClose={() => setSidebarOpen(false)} />
           <div className="erp-shell min-h-svh bg-page text-fg">
             <div ref={setFlyoutMount} className="erp-flyout-mount" />
             {sidebarOpen ? (

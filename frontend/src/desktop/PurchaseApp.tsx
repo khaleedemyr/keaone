@@ -38,7 +38,7 @@ export default function PurchaseApp() {
 
   const items = nav.map((item) => ({ id: item.id, label: t(item.label) }))
   const [section, setSection] = useState<Section | null>(null)
-  const current = section && items.some((item) => item.id === section) ? section : items[0]?.id ?? null
+  const current = section && items.some((item) => item.id === section) ? section : null
 
   if (items.length === 0) return null
 

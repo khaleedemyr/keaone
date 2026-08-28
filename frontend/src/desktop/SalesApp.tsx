@@ -27,7 +27,7 @@ export default function SalesApp() {
   const visibleNav = useMemo(() => NAV.filter((item) => can(item.menu, 'view')), [can])
   const items = visibleNav.map((item) => ({ id: item.id, label: t(item.label) }))
   const [section, setSection] = useState<Section | null>(null)
-  const current = section && items.some((item) => item.id === section) ? section : items[0]?.id ?? null
+  const current = section && items.some((item) => item.id === section) ? section : null
 
   if (items.length === 0) return null
 

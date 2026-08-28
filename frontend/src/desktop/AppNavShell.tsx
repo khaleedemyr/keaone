@@ -132,11 +132,6 @@ export function AppNavShell<T extends string>({
   useErpSubNavEffect(erpRegistration)
 
   useEffect(() => {
-    if (!erpMode || current || flatItems.length === 0) return
-    selectItem(flatItems[0].id)
-  }, [erpMode, current, flatItems, selectItem])
-
-  useEffect(() => {
     if (visibleGroups.length === 0) return
     setOpenGroups((prev) => {
       const next = { ...prev }
@@ -167,9 +162,42 @@ export function AppNavShell<T extends string>({
   }
 
   if (erpMode) {
-    return current ? (
-      <Suspense fallback={<div className="p-6 text-sm text-muted">{t('loadingWork')}</div>}>{children}</Suspense>
-    ) : null
+    if (current) {
+      return (
+        <Suspense fallback={<div className="p-6 text-sm text-muted">{t('loadingWork')}</div>}>{children}</Suspense>
+      )
+    }
+
+    return (
+      <div className="px-1 py-2">
+        <h2 className="font-display text-xl font-bold">{t('pickMenu')}</h2>
+        <p className="mt-1 max-w-lg text-sm text-muted">{t('pickMenuHint')}</p>
+        {grouped ? (
+          <div className="mt-4 space-y-5">
+            {visibleGroups.map((group) => (
+              <div key={group.id}>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{group.label}</h3>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {group.items.map((item) => (
+                    <button key={item.id} type="button" className="os-app-pick" onClick={() => selectItem(item.id)}>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {flatItems.map((item) => (
+              <button key={item.id} type="button" className="os-app-pick" onClick={() => selectItem(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
