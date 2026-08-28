@@ -14,6 +14,7 @@ import Register from './pages/Register'
 import PublicPoPage from './pages/PublicPoPage'
 import PublicPrPage from './pages/PublicPrPage'
 import { useUiSkin } from './uiSkin'
+import { MasterTableLabels } from './components/MasterTableLabels'
 
 function AppHome() {
   const { me } = useAuth()
@@ -42,6 +43,7 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <MasterTableLabels />
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/blog" element={<BlogIndex />} />

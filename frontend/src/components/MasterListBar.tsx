@@ -80,7 +80,7 @@ export function MasterFilters({
   ]
 
   return (
-    <div className="mb-4 flex flex-wrap items-end gap-2">
+    <div className="master-filters mb-4 flex flex-wrap items-end gap-2">
       <input
         className="field !mt-0 max-w-xs"
         placeholder={searchPlaceholder}
@@ -125,7 +125,7 @@ export function MasterPager({
   const { t } = useI18n()
 
   return (
-    <div className="mt-3 flex items-center justify-between gap-3 text-sm text-muted">
+    <div className="master-pager mt-3 flex items-center justify-between gap-3 text-sm text-muted">
       <span>{t('pagerInfo', { page: String(page), last: String(lastPage), total: String(total) })}</span>
       <div className="flex gap-2">
         <button type="button" className="btn-ghost" disabled={page <= 1} onClick={() => onPage(Math.max(1, page - 1))}>

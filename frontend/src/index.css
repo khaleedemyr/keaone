@@ -3712,18 +3712,178 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
   }
 }
 
-/* Master list tables — scroll horizontally on narrow screens */
-.glass.overflow-hidden.rounded-3xl:has(> table),
-.glass.overflow-hidden.rounded-2xl:has(> table) {
-  overflow-x: auto;
-  overflow-y: visible;
+/* Master list tables */
+.master-table-wrap {
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
 }
 
-.glass.overflow-hidden.rounded-3xl:has(> table) > table,
-.glass.overflow-hidden.rounded-2xl:has(> table) > table {
-  min-width: 36rem;
+@media (min-width: 768px) {
+  .master-table-wrap {
+    overflow-x: auto;
+  }
+
+  .master-table-wrap > table {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .master-table-wrap > table th,
+  .master-table-wrap > table td {
+    vertical-align: top;
+  }
+
+  .master-table-wrap > table td.master-actions {
+    white-space: nowrap;
+    min-width: 7.5rem;
+  }
+
+  .master-table-wrap > table td.master-actions button {
+    margin-right: 0.75rem;
+  }
+
+  .master-table-wrap > table td.master-actions button:last-child {
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .master-table-wrap {
+    overflow: visible;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .master-table-wrap > table {
+    width: 100%;
+    min-width: 0 !important;
+  }
+
+  .master-table-wrap > table thead {
+    display: none;
+  }
+
+  .master-table-wrap > table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .master-table-wrap > table tbody tr {
+    display: block;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: var(--card);
+    padding: 0.85rem 1rem;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .master-table-wrap > table tbody tr:hover {
+    background: var(--card);
+  }
+
+  .master-table-wrap > table tbody td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.45rem 0;
+    border: none;
+    white-space: normal;
+    text-align: right;
+  }
+
+  .master-table-wrap > table tbody td::before {
+    content: attr(data-label);
+    flex: 0 0 42%;
+    max-width: 46%;
+    font-size: 0.68rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+    line-height: 1.35;
+    padding-top: 0.15rem;
+  }
+
+  .master-table-wrap > table tbody td.master-primary {
+    display: block;
+    padding-bottom: 0.55rem;
+    margin-bottom: 0.15rem;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+  }
+
+  .master-table-wrap > table tbody td.master-primary::before {
+    display: none;
+  }
+
+  .master-table-wrap > table tbody td.master-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.85rem;
+    margin-top: 0.35rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--line);
+    text-align: right;
+  }
+
+  .master-table-wrap > table tbody td.master-actions::before {
+    display: none;
+  }
+
+  .master-table-wrap > table tbody td.master-actions button {
+    margin: 0 !important;
+    white-space: nowrap;
+  }
+
+  .master-table-wrap > table tbody td.master-empty {
+    display: block;
+    padding: 1.5rem 0.5rem;
+    text-align: center;
+  }
+
+  .master-table-wrap > table tbody td.master-empty::before {
+    display: none;
+  }
+
+  .master-table-wrap > table tbody tr:has(> td.master-empty) {
+    padding: 0;
+    border: 1px dashed var(--line);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  /* Filters + pager on mobile */
+  .master-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .master-filters .field,
+  .master-filters input.field,
+  .master-filters select.field {
+    max-width: none !important;
+    width: 100%;
+  }
+
+  .master-filters label.flex.items-center.gap-2 {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .master-pager {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+  }
+
+  .master-pager > div.flex.gap-2 {
+    justify-content: flex-end;
+  }
 }
 
 .erp-nav-item {
