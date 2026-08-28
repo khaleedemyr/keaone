@@ -221,6 +221,8 @@ export const ru: Record<MsgKey, string> = {
   berandaShortcuts: 'Приложения',
   berandaTodaySnapshot: 'Итоги дня',
   berandaUpcomingReminders: 'Предстоящие напоминания',
+  berandaRemindersEmpty: 'Напоминаний пока нет. Добавьте ниже или через календарь в панели.',
+  berandaReminderDate: 'Дата напоминания',
   appChat: 'Чат',
   appPos: 'Касса',
   appMaster: 'Справочники',

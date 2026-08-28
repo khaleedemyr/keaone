@@ -221,6 +221,8 @@ export const es: Record<MsgKey, string> = {
   berandaShortcuts: 'Aplicaciones',
   berandaTodaySnapshot: 'Resumen de hoy',
   berandaUpcomingReminders: 'Recordatorios próximos',
+  berandaRemindersEmpty: 'Aún no hay recordatorios. Agrega abajo o usa el calendario en la barra.',
+  berandaReminderDate: 'Fecha del recordatorio',
   appChat: 'Mensajes',
   appPos: 'TPV',
   appMaster: 'Datos maestros',

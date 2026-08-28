@@ -219,6 +219,8 @@ export const id = {
     berandaShortcuts: 'Aplikasi',
     berandaTodaySnapshot: 'Ringkasan hari ini',
     berandaUpcomingReminders: 'Pengingat mendatang',
+    berandaRemindersEmpty: 'Belum ada pengingat. Tambah di bawah atau lewat kalender di navbar.',
+    berandaReminderDate: 'Tanggal pengingat',
     appChat: 'Obrolan',
     appPos: 'Kasir',
     appMaster: 'Data Master',

@@ -221,6 +221,8 @@ export const en: Record<MsgKey, string> = {
   berandaShortcuts: 'Apps',
   berandaTodaySnapshot: "Today's snapshot",
   berandaUpcomingReminders: 'Upcoming reminders',
+  berandaRemindersEmpty: 'No reminders yet. Add below or use the calendar in the navbar.',
+  berandaReminderDate: 'Reminder date',
   appChat: 'Chat',
   appPos: 'POS',
   appMaster: 'Master Data',

@@ -14,7 +14,7 @@ import { useI18n } from '../i18n'
 import { useErpNavOptional } from '../layout/ErpNavContext'
 import { formatRupiah } from '../lib/money'
 import type { ApiOk, TodayReport } from '../types'
-import { BerandaCalendarPanel } from './BerandaCalendarPanel'
+import { BerandaRemindersPanel } from './BerandaRemindersPanel'
 
 export default function Beranda() {
   const { t, locale } = useI18n()
@@ -117,7 +117,7 @@ export default function Beranda() {
               <div className="beranda-card-head">
                 <h2 className="beranda-section-title !mb-0">{t('calReminder')}</h2>
               </div>
-              <BerandaCalendarPanel />
+              <BerandaRemindersPanel />
             </section>
           </div>
         </div>

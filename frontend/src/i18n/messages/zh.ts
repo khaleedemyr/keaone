@@ -221,6 +221,8 @@ export const zh: Record<MsgKey, string> = {
   berandaShortcuts: '应用',
   berandaTodaySnapshot: '今日概览',
   berandaUpcomingReminders: '即将到来的提醒',
+  berandaRemindersEmpty: '暂无提醒。可在下方添加，或使用导航栏日历。',
+  berandaReminderDate: '提醒日期',
   appChat: '聊天',
   appPos: '收银',
   appMaster: '主数据',

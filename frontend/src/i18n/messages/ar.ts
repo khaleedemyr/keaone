@@ -221,6 +221,8 @@ export const ar: Record<MsgKey, string> = {
   berandaShortcuts: 'التطبيقات',
   berandaTodaySnapshot: 'ملخص اليوم',
   berandaUpcomingReminders: 'التذكيرات القادمة',
+  berandaRemindersEmpty: 'لا توجد تذكيرات بعد. أضف من الأسفل أو من التقويم في شريط التنقل.',
+  berandaReminderDate: 'تاريخ التذكير',
   appChat: 'المحادثة',
   appPos: 'نقطة البيع',
   appMaster: 'البيانات الأساسية',

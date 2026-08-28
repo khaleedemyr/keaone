@@ -4778,3 +4778,41 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
 .beranda-calendar .os-cal-detail {
   margin-top: 0.75rem;
 }
+
+.beranda-reminders {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.beranda-reminders-empty {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.beranda-reminder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.15rem;
+}
+
+.beranda-reminder-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.beranda-reminder-form-row .os-cal-input {
+  min-width: 0;
+  flex: 1 1 7rem;
+}
+
+.beranda-reminder-form-row .os-cal-time {
+  flex: 0 1 6.5rem;
+}
+
+.beranda-reminder-form-row .os-cal-add {
+  flex: 0 0 auto;
+}

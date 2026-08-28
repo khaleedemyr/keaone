@@ -221,6 +221,8 @@ export const ja: Record<MsgKey, string> = {
   berandaShortcuts: 'アプリ',
   berandaTodaySnapshot: '本日の概要',
   berandaUpcomingReminders: '今後のリマインダー',
+  berandaRemindersEmpty: 'リマインダーはまだありません。下から追加するか、ナビのカレンダーを使ってください。',
+  berandaReminderDate: 'リマインダーの日付',
   appChat: 'チャット',
   appPos: 'レジ',
   appMaster: 'マスタデータ',
