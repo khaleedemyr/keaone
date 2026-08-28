@@ -736,7 +736,7 @@ export default function Products() {
                       </button>
                     ) : (
                       <div className="bg-fill text-muted flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xs">
-                        â€”
+                        —
                       </div>
                     )}
                     <div>

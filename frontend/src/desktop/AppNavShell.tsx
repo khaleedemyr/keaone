@@ -167,13 +167,9 @@ export function AppNavShell<T extends string>({
   }
 
   if (erpMode) {
-    return (
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        {current ? (
-          <Suspense fallback={<div className="p-6 text-sm text-muted">{t('loadingWork')}</div>}>{children}</Suspense>
-        ) : null}
-      </div>
-    )
+    return current ? (
+      <Suspense fallback={<div className="p-6 text-sm text-muted">{t('loadingWork')}</div>}>{children}</Suspense>
+    ) : null
   }
 
   return (

@@ -3597,7 +3597,9 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
 /* ERP shell (sidebar + navbar layout) */
 .erp-shell {
   display: flex;
+  height: 100svh;
   min-height: 100svh;
+  overflow: hidden;
 }
 
 .erp-sidebar-backdrop {
@@ -3649,8 +3651,10 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
 .erp-main {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex: 1;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .erp-navbar {
@@ -3695,7 +3699,10 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
 .erp-content {
   min-height: 0;
   flex: 1;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 1rem;
 }
 
@@ -3703,6 +3710,20 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
   .erp-content {
     padding: 1.25rem 1.5rem 1.5rem;
   }
+}
+
+/* Master list tables — scroll horizontally on narrow screens */
+.glass.overflow-hidden.rounded-3xl:has(> table),
+.glass.overflow-hidden.rounded-2xl:has(> table) {
+  overflow-x: auto;
+  overflow-y: visible;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.glass.overflow-hidden.rounded-3xl:has(> table) > table,
+.glass.overflow-hidden.rounded-2xl:has(> table) > table {
+  min-width: 36rem;
 }
 
 .erp-nav-item {
