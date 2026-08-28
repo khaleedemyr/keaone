@@ -156,27 +156,6 @@ function ErpSidebarNav<T extends string>({
   )
 }
 
-function ErpSidebarAutoClose({
-  active,
-  onClose,
-}: {
-  active: string | null
-  onClose: () => void
-}) {
-  const { registration } = useErpSubNavContext() ?? { registration: null }
-
-  useEffect(() => {
-    if (!active) return
-    const hasSubNav =
-      registration != null && (registration.groups.length > 0 || registration.items.length > 0)
-    if (!hasSubNav) {
-      onClose()
-    }
-  }, [active, registration, onClose])
-
-  return null
-}
-
 export function ErpShell<T extends string>({
   apps,
   titles,
@@ -220,7 +199,6 @@ export function ErpShell<T extends string>({
     <ErpNavProvider openApp={openErpApp}>
       <ErpSubNavProvider>
         <ErpFlyoutProvider mount={flyoutMount}>
-          <ErpSidebarAutoClose active={active} onClose={() => setSidebarOpen(false)} />
           <div className="erp-shell min-h-svh bg-page text-fg">
             <div ref={setFlyoutMount} className="erp-flyout-mount" />
             {sidebarOpen ? (
