@@ -78,6 +78,23 @@ export function BerandaCalendarPanel() {
   const selectedHolidays = holidayMap.get(selected) ?? []
   const selectedReminders = reminderMap.get(selected) ?? []
 
+  const upcomingReminders = useMemo(() => {
+    return reminders
+      .filter((item) => item.remind_on >= today)
+      .sort((a, b) => {
+        const byDate = a.remind_on.localeCompare(b.remind_on)
+        if (byDate !== 0) return byDate
+        return (a.remind_at ?? '00:00').localeCompare(b.remind_at ?? '00:00')
+      })
+      .slice(0, 6)
+  }, [reminders, today])
+
+  function openDate(dateKey: string) {
+    setSelected(dateKey)
+    const [y, m] = dateKey.split('-').map(Number)
+    if (y && m) setCursor(new Date(y, m - 1, 1))
+  }
+
   async function addReminder() {
     if (!title.trim()) return
     setSaving(true)
@@ -114,6 +131,30 @@ export function BerandaCalendarPanel() {
 
   return (
     <div className="beranda-calendar os-calendar">
+      {upcomingReminders.length > 0 ? (
+        <div className="beranda-upcoming">
+          <div className="beranda-section-title !mb-0">{t('berandaUpcomingReminders')}</div>
+          {upcomingReminders.map((item) => (
+            <div key={item.id} className="beranda-upcoming-item">
+              <button type="button" className="beranda-upcoming-meta text-left" onClick={() => openDate(item.remind_on)}>
+                <div className="beranda-upcoming-date">
+                  {new Date(`${item.remind_on}T00:00:00`).toLocaleDateString(locale, {
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                  {item.remind_at ? ` · ${item.remind_at.slice(0, 5)}` : ''}
+                </div>
+                <div className="beranda-upcoming-title">{item.title}</div>
+              </button>
+              <button type="button" onClick={() => void removeReminder(item.id)}>
+                {t('delete')}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between gap-2">
         <button type="button" className="os-cal-nav" onClick={() => setCursor(new Date(year, month - 1, 1))} aria-label={t('calPrev')}>
           ‹

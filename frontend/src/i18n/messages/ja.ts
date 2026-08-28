@@ -220,6 +220,7 @@ export const ja: Record<MsgKey, string> = {
   berandaWelcome: 'おかえりなさい',
   berandaShortcuts: 'アプリ',
   berandaTodaySnapshot: '本日の概要',
+  berandaUpcomingReminders: '今後のリマインダー',
   appChat: 'チャット',
   appPos: 'レジ',
   appMaster: 'マスタデータ',

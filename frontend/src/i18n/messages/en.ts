@@ -220,6 +220,7 @@ export const en: Record<MsgKey, string> = {
   berandaWelcome: 'Welcome back',
   berandaShortcuts: 'Apps',
   berandaTodaySnapshot: "Today's snapshot",
+  berandaUpcomingReminders: 'Upcoming reminders',
   appChat: 'Chat',
   appPos: 'POS',
   appMaster: 'Master Data',

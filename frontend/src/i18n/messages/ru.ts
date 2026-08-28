@@ -220,6 +220,7 @@ export const ru: Record<MsgKey, string> = {
   berandaWelcome: 'С возвращением',
   berandaShortcuts: 'Приложения',
   berandaTodaySnapshot: 'Итоги дня',
+  berandaUpcomingReminders: 'Предстоящие напоминания',
   appChat: 'Чат',
   appPos: 'Касса',
   appMaster: 'Справочники',

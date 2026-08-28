@@ -220,6 +220,7 @@ export const ar: Record<MsgKey, string> = {
   berandaWelcome: 'مرحباً بعودتك',
   berandaShortcuts: 'التطبيقات',
   berandaTodaySnapshot: 'ملخص اليوم',
+  berandaUpcomingReminders: 'التذكيرات القادمة',
   appChat: 'المحادثة',
   appPos: 'نقطة البيع',
   appMaster: 'البيانات الأساسية',

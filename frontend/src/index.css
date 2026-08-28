@@ -4502,7 +4502,69 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
 }
 
 .beranda-calendar.os-calendar {
+  position: static;
+  inset: auto;
+  bottom: auto;
+  z-index: auto;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   padding: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.beranda-upcoming {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+}
+
+.beranda-upcoming-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  border-radius: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  background: color-mix(in srgb, var(--mint, #3ee8c5) 10%, var(--page));
+  border: 1px solid color-mix(in srgb, var(--mint, #3ee8c5) 22%, var(--line));
+  font-size: 0.78rem;
+}
+
+.beranda-upcoming-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.beranda-upcoming-date {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.beranda-upcoming-title {
+  margin-top: 0.1rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.beranda-upcoming-item button {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.beranda-upcoming-item button:hover {
+  color: var(--fg);
 }
 
 .beranda-calendar .os-cal-detail {

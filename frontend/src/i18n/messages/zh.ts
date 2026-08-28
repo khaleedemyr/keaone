@@ -220,6 +220,7 @@ export const zh: Record<MsgKey, string> = {
   berandaWelcome: '欢迎回来',
   berandaShortcuts: '应用',
   berandaTodaySnapshot: '今日概览',
+  berandaUpcomingReminders: '即将到来的提醒',
   appChat: '聊天',
   appPos: '收银',
   appMaster: '主数据',

@@ -218,6 +218,7 @@ export const id = {
     berandaWelcome: 'Selamat datang kembali',
     berandaShortcuts: 'Aplikasi',
     berandaTodaySnapshot: 'Ringkasan hari ini',
+    berandaUpcomingReminders: 'Pengingat mendatang',
     appChat: 'Obrolan',
     appPos: 'Kasir',
     appMaster: 'Data Master',
