@@ -757,37 +757,23 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
         {...list.filters}
         searchPlaceholder={t('purchaseSearch')}
         statusOptions={statusOptions}
-        extra={
-          kind === 'pr' || kind === 'po' ? (
-            <>
-              <label className="text-sm text-muted">
-                {t('stockFrom')}
-                <input
-                  type="date"
-                  className="field !mt-1"
-                  value={dateFrom}
-                  max={dateTo || undefined}
-                  onChange={(e) => {
-                    list.setPage(1)
-                    setDateFrom(e.target.value)
-                  }}
-                />
-              </label>
-              <label className="text-sm text-muted">
-                {t('stockTo')}
-                <input
-                  type="date"
-                  className="field !mt-1"
-                  value={dateTo}
-                  min={dateFrom || undefined}
-                  onChange={(e) => {
-                    list.setPage(1)
-                    setDateTo(e.target.value)
-                  }}
-                />
-              </label>
-            </>
-          ) : undefined
+        dateFrom={kind === 'pr' || kind === 'po' ? dateFrom : undefined}
+        dateTo={kind === 'pr' || kind === 'po' ? dateTo : undefined}
+        onDateFrom={
+          kind === 'pr' || kind === 'po'
+            ? (value) => {
+                list.setPage(1)
+                setDateFrom(value)
+              }
+            : undefined
+        }
+        onDateTo={
+          kind === 'pr' || kind === 'po'
+            ? (value) => {
+                list.setPage(1)
+                setDateTo(value)
+              }
+            : undefined
         }
       />
 

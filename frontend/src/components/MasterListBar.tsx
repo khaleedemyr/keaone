@@ -58,6 +58,10 @@ export function MasterFilters({
   statusOptions,
   hideStatus,
   extra,
+  dateFrom,
+  dateTo,
+  onDateFrom,
+  onDateTo,
   perPage,
   onPerPage,
 }: {
@@ -69,6 +73,10 @@ export function MasterFilters({
   statusOptions?: StatusOption[]
   hideStatus?: boolean
   extra?: ReactNode
+  dateFrom?: string
+  dateTo?: string
+  onDateFrom?: (value: string) => void
+  onDateTo?: (value: string) => void
   perPage: number
   onPerPage: (value: number) => void
 }) {
@@ -97,6 +105,34 @@ export function MasterFilters({
         </select>
       )}
       {extra}
+      {onDateFrom || onDateTo ? (
+        <div className="master-filters-dates">
+          {onDateFrom ? (
+            <label className="master-filter-field text-sm text-muted">
+              {t('stockFrom')}
+              <input
+                type="date"
+                className="field !mt-1"
+                value={dateFrom ?? ''}
+                max={dateTo || undefined}
+                onChange={(e) => onDateFrom(e.target.value)}
+              />
+            </label>
+          ) : null}
+          {onDateTo ? (
+            <label className="master-filter-field text-sm text-muted">
+              {t('stockTo')}
+              <input
+                type="date"
+                className="field !mt-1"
+                value={dateTo ?? ''}
+                min={dateFrom || undefined}
+                onChange={(e) => onDateTo(e.target.value)}
+              />
+            </label>
+          ) : null}
+        </div>
+      ) : null}
       <label className="flex items-center gap-2 text-sm text-muted">
         {t('perPage')}
         <select className="field !mt-0 w-20" value={perPage} onChange={(e) => onPerPage(Number(e.target.value))}>

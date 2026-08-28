@@ -3718,6 +3718,18 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
   -webkit-overflow-scrolling: touch;
 }
 
+.master-filters-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.master-filter-field {
+  display: block;
+  min-width: 10.5rem;
+}
+
 @media (min-width: 768px) {
   .master-table-wrap {
     overflow-x: auto;
@@ -3868,6 +3880,30 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
   .master-filters select.field {
     max-width: none !important;
     width: 100%;
+  }
+
+  .master-filters > input.field,
+  .master-filters > select.field {
+    width: 100%;
+  }
+
+  .master-filters-dates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.65rem;
+    width: 100%;
+  }
+
+  .master-filter-field {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .master-filter-field input[type='date'] {
+    display: block;
+    min-height: 2.75rem;
+    color-scheme: dark;
   }
 
   .master-filters label.flex.items-center.gap-2 {
