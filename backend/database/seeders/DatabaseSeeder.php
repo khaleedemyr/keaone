@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             CatalogSeeder::class,
             DemoSeeder::class,
             ApprovalDemoSeeder::class,
+            HrDemoSeeder::class,
             PurchaseDemoSeeder::class,
             PromotionSeeder::class,
             BlogSeeder::class,
