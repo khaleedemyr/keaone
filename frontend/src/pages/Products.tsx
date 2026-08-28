@@ -1188,9 +1188,9 @@ export default function Products() {
         ) : null}
 
         <div className={tab === 'price' ? 'grid gap-3' : 'hidden'} data-product-tab="price">
-          <div className="text-sm text-muted">
-            {activeOutlets.length > 1 ? t('outletPrices') : t('sellPrice')}
-          </div>
+          {activeOutlets.length > 1 ? (
+            <div className="text-sm text-muted">{t('outletPrices')}</div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             {(activeOutlets.length > 0 ? activeOutlets : [{ id: 0, name: t('sellPrice') }]).map((outlet) => (
               <label key={outlet.id} className="text-sm text-muted">
