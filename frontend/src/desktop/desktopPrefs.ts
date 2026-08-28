@@ -60,6 +60,8 @@ export type DesktopPreferences = {
 export const DESKTOP_ICON_SLOT_H = 120
 export const DESKTOP_ICON_STEP_Y = DESKTOP_ICON_SLOT_H
 export const DESKTOP_ICON_SLOT_W = 88
+export const DESKTOP_ICON_COL_GAP = 12
+export const DESKTOP_TASKBAR_H = 56
 export const DESKTOP_ICON_DEFAULT_X = 16
 export const DESKTOP_ICON_DEFAULT_Y = 16
 
@@ -91,10 +93,23 @@ export const DEFAULT_DESKTOP_PREFS: DesktopPreferences = {
 
 const STORAGE_KEY = 'kea_desktop'
 
-export function defaultIconPosition(index: number): DesktopIconPosition {
+export function desktopIconGridMetrics(viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800) {
+  const usableH = Math.max(
+    DESKTOP_ICON_SLOT_H,
+    viewportHeight - DESKTOP_TASKBAR_H - DESKTOP_ICON_DEFAULT_Y - 8,
+  )
+  const rowsPerCol = Math.max(1, Math.floor(usableH / DESKTOP_ICON_STEP_Y))
+  const colStride = DESKTOP_ICON_SLOT_W + DESKTOP_ICON_COL_GAP
+  return { rowsPerCol, colStride }
+}
+
+export function defaultIconPosition(index: number, viewportHeight?: number): DesktopIconPosition {
+  const { rowsPerCol, colStride } = desktopIconGridMetrics(viewportHeight)
+  const col = Math.floor(index / rowsPerCol)
+  const row = index % rowsPerCol
   return {
-    x: DESKTOP_ICON_DEFAULT_X,
-    y: DESKTOP_ICON_DEFAULT_Y + index * DESKTOP_ICON_STEP_Y,
+    x: DESKTOP_ICON_DEFAULT_X + col * colStride,
+    y: DESKTOP_ICON_DEFAULT_Y + row * DESKTOP_ICON_STEP_Y,
   }
 }
 
@@ -224,24 +239,34 @@ function positionsOverlap(a: DesktopIconPosition, b: DesktopIconPosition) {
   )
 }
 
-function nextFreeIconPosition(index: number, placed: DesktopIconPosition[]) {
-  for (let slot = index; slot < index + 64; slot += 1) {
-    const candidate = defaultIconPosition(slot)
+function isPositionVisible(pos: DesktopIconPosition, viewportHeight?: number) {
+  const vh = viewportHeight ?? (typeof window !== 'undefined' ? window.innerHeight : 800)
+  const maxY = vh - DESKTOP_TASKBAR_H - DESKTOP_ICON_SLOT_H - 8
+  return pos.y >= 8 && pos.y <= maxY
+}
+
+function nextFreeIconPosition(startIndex: number, placed: DesktopIconPosition[], viewportHeight?: number) {
+  for (let slot = startIndex; slot < startIndex + 128; slot += 1) {
+    const candidate = defaultIconPosition(slot, viewportHeight)
     if (!placed.some((pos) => positionsOverlap(pos, candidate))) return candidate
   }
-  return defaultIconPosition(index)
+  return defaultIconPosition(startIndex, viewportHeight)
 }
 
 /** Resolve non-overlapping positions for all visible desktop icons. */
-export function layoutDesktopIcons(appIds: string[], prefs: DesktopPreferences): Record<string, DesktopIconPosition> {
+export function layoutDesktopIcons(
+  appIds: string[],
+  prefs: DesktopPreferences,
+  viewportHeight?: number,
+): Record<string, DesktopIconPosition> {
   const placed: DesktopIconPosition[] = []
   const result: Record<string, DesktopIconPosition> = {}
 
   appIds.forEach((appId, index) => {
     const saved = prefs.iconPositions[appId]
-    let pos = saved ?? defaultIconPosition(index)
-    if (placed.some((item) => positionsOverlap(item, pos))) {
-      pos = nextFreeIconPosition(index, placed)
+    let pos = saved ?? defaultIconPosition(index, viewportHeight)
+    if (!isPositionVisible(pos, viewportHeight) || placed.some((item) => positionsOverlap(item, pos))) {
+      pos = nextFreeIconPosition(index, placed, viewportHeight)
     }
     result[appId] = pos
     placed.push(pos)
@@ -255,11 +280,12 @@ export function resolveIconPosition(
   index: number,
   prefs: DesktopPreferences,
   appIds: string[] = [],
+  viewportHeight?: number,
 ): DesktopIconPosition {
   if (appIds.length > 0) {
-    return layoutDesktopIcons(appIds, prefs)[appId] ?? defaultIconPosition(index)
+    return layoutDesktopIcons(appIds, prefs, viewportHeight)[appId] ?? defaultIconPosition(index, viewportHeight)
   }
-  return prefs.iconPositions[appId] ?? defaultIconPosition(index)
+  return prefs.iconPositions[appId] ?? defaultIconPosition(index, viewportHeight)
 }
 
 export function resolveWidgetPosition(id: string, prefs: DesktopPreferences): DesktopIconPosition {

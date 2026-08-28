@@ -34,7 +34,19 @@ export function DesktopIconsLayer({ apps, titles, onOpenApp }: DesktopIconsLayer
   const livePosRef = useRef<{ x: number; y: number } | null>(null)
 
   const visibleApps = apps.filter((id) => isDesktopIconVisible(id, desktop))
-  const iconPositions = layoutDesktopIcons(visibleApps, desktop)
+  const [viewportH, setViewportH] = useState(() =>
+    typeof window === 'undefined' ? 800 : window.innerHeight,
+  )
+
+  useEffect(() => {
+    function onResize() {
+      setViewportH(window.innerHeight)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const iconPositions = layoutDesktopIcons(visibleApps, desktop, viewportH)
 
   const clampPosition = useCallback((x: number, y: number) => {
     const maxX = Math.max(8, window.innerWidth - ICON_W - 8)
