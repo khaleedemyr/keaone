@@ -96,6 +96,17 @@ export function DesktopProvider({ children }: { children: ReactNode }) {
     const remote = me?.preferences?.wallpaper
     if (!remote) return
     const next = normalizeWallpaper(remote)
+    const local = readWallpaper()
+    if (
+      next.kind === 'image' &&
+      !next.src &&
+      local.kind === 'image' &&
+      local.src &&
+      !local.src.startsWith('blob:')
+    ) {
+      setWallpaperState(local)
+      return
+    }
     setWallpaperState(next)
     saveWallpaper(next)
   }, [me?.user.id])

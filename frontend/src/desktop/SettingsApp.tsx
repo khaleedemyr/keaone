@@ -9,7 +9,7 @@ import { useAuth } from '../auth'
 import { logActivity } from '../api/activity'
 import type { ApiOk, PosMode, UserPreferences } from '../types'
 import { useDesktop } from './DesktopContext'
-import { assertWallpaperFile, WALLPAPER_PRESETS } from './wallpaper'
+import { assertWallpaperFile, wallpaperCss, WALLPAPER_PRESETS } from './wallpaper'
 import { AppNavShell } from './AppNavShell'
 import { SettingsDesktop } from './SettingsDesktop'
 import { usePlatformApps } from './usePlatformApps'
@@ -48,12 +48,12 @@ function SettingsAccount() {
       const data = await apiUpload<ApiOk<{ wallpaper: UserPreferences['wallpaper'] }>>('/me/wallpaper', body, 60000)
       const stored = data.data.wallpaper.src
       if (stored) {
-        const preview = localUrl
-        setWallpaper({ kind: 'image', id: data.data.wallpaper.id, src: `${stored.split('?')[0]}?t=${Date.now()}` }, false)
-        if (preview) window.setTimeout(() => URL.revokeObjectURL(preview), 4000)
+        setWallpaper({ kind: 'image', id: data.data.wallpaper.id, src: `${stored.split('?')[0]}?t=${Date.now()}` }, true)
       }
+      if (localUrl) URL.revokeObjectURL(localUrl)
       feedback.success(t('wallpaperApplied'))
     } catch (err) {
+      if (localUrl) URL.revokeObjectURL(localUrl)
       const key = err instanceof Error ? err.message : ''
       if (key === 'too-large') feedback.error(t('wallpaperTooLarge'))
       else if (key === 'not-image') feedback.error(t('wallpaperFailed'))
@@ -119,9 +119,11 @@ function SettingsAccount() {
             onChange={(event) => void onUpload(event.target.files?.[0])}
           />
           {wallpaper.kind === 'image' && wallpaper.src ? (
-            <div className="mb-3 overflow-hidden rounded-2xl border border-mint/40">
-              <img src={wallpaper.src} alt="" className="h-28 w-full object-cover" />
-            </div>
+            <div
+              className="mb-3 h-28 w-full rounded-2xl border border-mint/40 bg-cover bg-center bg-no-repeat"
+              style={{ backgroundImage: wallpaperCss(wallpaper) }}
+              aria-hidden
+            />
           ) : null}
           <button type="button" className="btn-ghost" onClick={() => fileRef.current?.click()}>
             {t('wallpaperCustom')}

@@ -56,7 +56,10 @@ export type DesktopPreferences = {
   widgets: DesktopWidgetsPrefs
 }
 
-export const DESKTOP_ICON_STEP_Y = 96
+/** Vertical slot for tile + two-line label + gap between icons. */
+export const DESKTOP_ICON_SLOT_H = 120
+export const DESKTOP_ICON_STEP_Y = DESKTOP_ICON_SLOT_H
+export const DESKTOP_ICON_SLOT_W = 88
 export const DESKTOP_ICON_DEFAULT_X = 16
 export const DESKTOP_ICON_DEFAULT_Y = 16
 
@@ -214,11 +217,48 @@ export function saveDesktopPrefs(prefs: DesktopPreferences) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeDesktopPrefs(prefs)))
 }
 
+function positionsOverlap(a: DesktopIconPosition, b: DesktopIconPosition) {
+  return (
+    Math.abs(a.x - b.x) < DESKTOP_ICON_SLOT_W - 4 &&
+    Math.abs(a.y - b.y) < DESKTOP_ICON_SLOT_H - 4
+  )
+}
+
+function nextFreeIconPosition(index: number, placed: DesktopIconPosition[]) {
+  for (let slot = index; slot < index + 64; slot += 1) {
+    const candidate = defaultIconPosition(slot)
+    if (!placed.some((pos) => positionsOverlap(pos, candidate))) return candidate
+  }
+  return defaultIconPosition(index)
+}
+
+/** Resolve non-overlapping positions for all visible desktop icons. */
+export function layoutDesktopIcons(appIds: string[], prefs: DesktopPreferences): Record<string, DesktopIconPosition> {
+  const placed: DesktopIconPosition[] = []
+  const result: Record<string, DesktopIconPosition> = {}
+
+  appIds.forEach((appId, index) => {
+    const saved = prefs.iconPositions[appId]
+    let pos = saved ?? defaultIconPosition(index)
+    if (placed.some((item) => positionsOverlap(item, pos))) {
+      pos = nextFreeIconPosition(index, placed)
+    }
+    result[appId] = pos
+    placed.push(pos)
+  })
+
+  return result
+}
+
 export function resolveIconPosition(
   appId: string,
   index: number,
   prefs: DesktopPreferences,
+  appIds: string[] = [],
 ): DesktopIconPosition {
+  if (appIds.length > 0) {
+    return layoutDesktopIcons(appIds, prefs)[appId] ?? defaultIconPosition(index)
+  }
   return prefs.iconPositions[appId] ?? defaultIconPosition(index)
 }
 

@@ -64,9 +64,18 @@ export const DEFAULT_WALLPAPER: Wallpaper = { kind: 'preset', id: 'aurora' }
 const DEFAULT_WALLPAPER_STYLE =
   'radial-gradient(1200px 600px at 10% -10%, rgba(62,232,197,.28), transparent 55%), #05070c'
 
+function resolveWallpaperSrc(src?: string): string | undefined {
+  if (!src) return undefined
+  if (src.startsWith('blob:') || src.startsWith('data:')) return src
+  if (src.startsWith('http://') || src.startsWith('https://')) return src
+  if (src.startsWith('/')) return src
+  return src
+}
+
 export function wallpaperCss(wallpaper: Wallpaper): string {
-  if (wallpaper.kind === 'image' && wallpaper.src) {
-    return `center / cover no-repeat url("${wallpaper.src}")`
+  if (wallpaper.kind === 'image') {
+    const src = resolveWallpaperSrc(wallpaper.src)
+    if (src) return `center / cover no-repeat url("${src}")`
   }
   const presets = WALLPAPER_PRESETS ?? []
   const preset = presets.find((item) => item.id === wallpaper.id) ?? presets[0]
@@ -87,7 +96,10 @@ export function normalizeWallpaper(value: unknown): Wallpaper {
   if (!value || typeof value !== 'object') return DEFAULT_WALLPAPER
   const parsed = value as Wallpaper
   if (parsed.kind === 'image' && typeof parsed.src === 'string' && parsed.src.length > 0) {
-    if (isWallpaperSrc(parsed.src) && !parsed.src.startsWith('data:')) {
+    if (parsed.src.startsWith('blob:') || parsed.src.startsWith('data:')) {
+      return DEFAULT_WALLPAPER
+    }
+    if (isWallpaperSrc(parsed.src)) {
       return { kind: 'image', id: parsed.id || 'custom', src: parsed.src }
     }
   }

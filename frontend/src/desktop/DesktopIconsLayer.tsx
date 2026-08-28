@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n'
 import type { AppId } from './DesktopContext'
 import { TASKBAR_H, useDesktop } from './DesktopContext'
-import { isDesktopIconVisible, resolveIconPosition } from './desktopPrefs'
+import { DESKTOP_ICON_SLOT_H, DESKTOP_ICON_SLOT_W, isDesktopIconVisible, layoutDesktopIcons } from './desktopPrefs'
 import { APP_TILE, AppGlyph } from './glyphs'
 
-const ICON_W = 88
-const ICON_H = 92
+const ICON_W = DESKTOP_ICON_SLOT_W
+const ICON_H = DESKTOP_ICON_SLOT_H
 const DRAG_THRESHOLD = 5
 
 type IconMenu = { x: number; y: number; appId: AppId } | null
@@ -34,6 +34,7 @@ export function DesktopIconsLayer({ apps, titles, onOpenApp }: DesktopIconsLayer
   const livePosRef = useRef<{ x: number; y: number } | null>(null)
 
   const visibleApps = apps.filter((id) => isDesktopIconVisible(id, desktop))
+  const iconPositions = layoutDesktopIcons(visibleApps, desktop)
 
   const clampPosition = useCallback((x: number, y: number) => {
     const maxX = Math.max(8, window.innerWidth - ICON_W - 8)
@@ -103,9 +104,8 @@ export function DesktopIconsLayer({ apps, titles, onOpenApp }: DesktopIconsLayer
   return (
     <>
       <div className="os-icons-layer">
-        {visibleApps.map((id, index) => {
-          const saved = resolveIconPosition(id, index, desktop)
-          const pos = dragPositions[id] ?? saved
+        {visibleApps.map((id) => {
+          const pos = dragPositions[id] ?? iconPositions[id]
           return (
             <button
               key={id}
