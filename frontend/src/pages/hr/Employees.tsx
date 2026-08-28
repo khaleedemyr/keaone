@@ -191,8 +191,6 @@ export default function Employees() {
     }
   }
 
-  const roleName = (roleId: number | null | undefined, slug: string) =>
-    roles.find((item) => item.id === roleId)?.name ?? slug
   const formOutlets = outlets.filter((item) => item.is_active !== false || String(item.id) === form.outlet_id)
   const managerChoices = managerOptions.filter(
     (item) => item.membership_id !== editing?.membership_id,
