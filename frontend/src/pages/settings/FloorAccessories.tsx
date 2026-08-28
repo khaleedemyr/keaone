@@ -43,7 +43,7 @@ function CounterTop({ w, h, label }: { w: number; h: number; label?: string | nu
       <circle cx="36" cy="48" r="5" fill="#ead2a8" opacity="0.85" />
       <circle cx="56" cy="48" r="5" fill="#ead2a8" opacity="0.7" />
       <circle cx="172" cy="48" r="5" fill="#d7e8ef" opacity="0.8" />
-      <text x="104" y="66" textAnchor="middle" fill="#3b2412" fontSize="11" fontWeight="700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+      <text x="104" y="66" textAnchor="middle" fill="#3b2412" fontSize="11" fontWeight="700" style={{ fontFamily: 'Inter, sans-serif' }}>
         {label || 'Bar'}
       </text>
     </svg>
@@ -91,7 +91,7 @@ function CashierTop({ w, h, label }: { w: number; h: number; label?: string | nu
       <circle cx="58" cy="25" r="1.6" fill="#8b97ad" />
       <circle cx="64" cy="25" r="1.6" fill="#8b97ad" />
       <circle cx="70" cy="25" r="1.6" fill="#8b97ad" />
-      <text x="52" y="54" textAnchor="middle" fill="#3b2412" fontSize="11" fontWeight="700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+      <text x="52" y="54" textAnchor="middle" fill="#3b2412" fontSize="11" fontWeight="700" style={{ fontFamily: 'Inter, sans-serif' }}>
         {label || 'Kasir'}
       </text>
       <rect x="34" y="78" width="36" height="12" rx="5" fill="#3f4a58" stroke="#1c242e" strokeWidth="1.2" />

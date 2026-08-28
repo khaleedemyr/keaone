@@ -106,7 +106,7 @@ export function TableTop({
         fill="#3b2412"
         fontSize={Math.max(9, Math.min(12, Math.min(w, h) / 7.5))}
         fontWeight="700"
-        style={{ fontFamily: 'Outfit, sans-serif' }}
+        style={{ fontFamily: 'Inter, sans-serif' }}
       >
         {name}
       </text>
