@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Suspense } from 'react'
 import { useI18n } from '../i18n'
+import { useErpSubNavContext, useErpSubNavEffect, type ErpSubNavRegistration } from '../layout/ErpSubNavContext'
 
 export type AppNavItem<T extends string> = { id: T; label: string }
 
@@ -98,6 +99,8 @@ export function AppNavShell<T extends string>({
   children: ReactNode
 }) {
   const { t } = useI18n()
+  const erpCtx = useErpSubNavContext()
+  const erpMode = Boolean(erpCtx)
   const visibleGroups = useMemo(
     () => (groups ?? []).filter((group) => group.items.length > 0),
     [groups],
@@ -107,9 +110,31 @@ export function AppNavShell<T extends string>({
     [visibleGroups, items],
   )
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const grouped = visibleGroups.length > 0
-  const currentLabel = flatItems.find((item) => item.id === current)?.label ?? t('pickMenu')
+
+  const selectItem = useCallback(
+    (id: T) => {
+      onSelect(id)
+    },
+    [onSelect],
+  )
+
+  const erpRegistration = useMemo<ErpSubNavRegistration | null>(() => {
+    if (!erpMode) return null
+    return {
+      groups: visibleGroups as AppNavGroup<string>[],
+      items: grouped ? [] : (flatItems as AppNavItem<string>[]),
+      current,
+      onSelect: (id) => selectItem(id as T),
+    }
+  }, [erpMode, visibleGroups, grouped, flatItems, current, selectItem])
+
+  useErpSubNavEffect(erpRegistration)
+
+  useEffect(() => {
+    if (!erpMode || current || flatItems.length === 0) return
+    selectItem(flatItems[0].id)
+  }, [erpMode, current, flatItems, selectItem])
 
   useEffect(() => {
     if (visibleGroups.length === 0) return
@@ -133,15 +158,6 @@ export function AppNavShell<T extends string>({
     setOpenGroups((prev) => (prev[activeGroup.id] ? prev : { ...prev, [activeGroup.id]: true }))
   }, [current, visibleGroups])
 
-  useEffect(() => {
-    if (!mobileNavOpen) return
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setMobileNavOpen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [mobileNavOpen])
-
   if (flatItems.length === 0) {
     return <div className="p-6 text-sm text-muted">{t('emptyMaster')}</div>
   }
@@ -150,9 +166,14 @@ export function AppNavShell<T extends string>({
     setOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }))
   }
 
-  function selectItem(id: T) {
-    onSelect(id)
-    setMobileNavOpen(false)
+  if (erpMode) {
+    return (
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        {current ? (
+          <Suspense fallback={<div className="p-6 text-sm text-muted">{t('loadingWork')}</div>}>{children}</Suspense>
+        ) : null}
+      </div>
+    )
   }
 
   return (
@@ -171,56 +192,10 @@ export function AppNavShell<T extends string>({
         )}
       </aside>
 
-      {mobileNavOpen ? (
-        <>
-          <button
-            type="button"
-            className="os-app-nav-mobile-backdrop md:hidden"
-            aria-label={t('close')}
-            onClick={() => setMobileNavOpen(false)}
-          />
-          <div className="os-app-nav-mobile-sheet md:hidden" role="dialog" aria-label={t('pickMenu')}>
-            <div className="os-app-nav-mobile-sheet-head">
-              <div className="text-sm font-semibold text-fg">{t('pickMenu')}</div>
-              <button type="button" className="os-notify-clear" onClick={() => setMobileNavOpen(false)}>
-                {t('close')}
-              </button>
-            </div>
-            <div className={`os-app-nav os-app-nav-mobile-list ${grouped ? 'os-app-nav--grouped' : ''}`}>
-              {grouped ? (
-                <NavGroups
-                  groups={visibleGroups}
-                  current={current}
-                  openGroups={openGroups}
-                  onToggleGroup={toggleGroup}
-                  onSelect={selectItem}
-                />
-              ) : (
-                <NavFlat items={flatItems} current={current} onSelect={selectItem} />
-              )}
-            </div>
-          </div>
-        </>
-      ) : null}
-
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {current ? (
-          <div className="os-app-nav-mobile-bar md:hidden">
-            <button type="button" className="os-app-nav-mobile-trigger" onClick={() => setMobileNavOpen(true)}>
-              <span className="os-app-nav-mobile-kicker">{t('pickMenu')}</span>
-              <span className="os-app-nav-mobile-label">{currentLabel}</span>
-              <svg viewBox="0 0 24 24" className="os-app-nav-mobile-chevron" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-          </div>
-        ) : null}
-
         <div className="min-h-0 flex-1 overflow-auto p-4">
           {current ? (
-            <Suspense fallback={<div className="p-6 text-sm text-muted">{t('loadingWork')}</div>}>
-              {children}
-            </Suspense>
+            <Suspense fallback={<div className="p-6 text-sm text-muted">{t('loadingWork')}</div>}>{children}</Suspense>
           ) : (
             <div className="px-1 py-2">
               <h2 className="font-display text-xl font-bold">{t('pickMenu')}</h2>

@@ -83,6 +83,15 @@ export default function TenantErpShell() {
       eyebrow={t('osLine')}
       renderApp={(id) => <TenantAppView appId={id} />}
       banners={banners}
+      sidebarTools={
+        <>
+          <NotesTray />
+          <ClockTray navCompact />
+          <ChatTray />
+          <LiveSupportTray />
+          <NotifyTray />
+        </>
+      }
       navbarExtras={
         <>
           <NotesTray />

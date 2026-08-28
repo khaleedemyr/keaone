@@ -31,6 +31,14 @@ export default function PlatformErpShell() {
       titles={titles}
       eyebrow={t('platformEyebrow')}
       renderApp={(id) => <PlatformAppView appId={id} />}
+      sidebarTools={
+        <>
+          <NotesTray />
+          <ClockTray navCompact />
+          <NotifyTray />
+          <SupportTray />
+        </>
+      }
       navbarExtras={
         <>
           <NotesTray />
