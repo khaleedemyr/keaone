@@ -137,15 +137,10 @@ export function BerandaCalendarPanel() {
           {upcomingReminders.map((item) => (
             <div key={item.id} className="beranda-upcoming-item">
               <button type="button" className="beranda-upcoming-meta text-left" onClick={() => openDate(item.remind_on)}>
-                <div className="beranda-upcoming-date">
-                  {new Date(`${item.remind_on}T00:00:00`).toLocaleDateString(locale, {
-                    weekday: 'short',
-                    day: 'numeric',
-                    month: 'short',
-                  })}
-                  {item.remind_at ? ` · ${item.remind_at.slice(0, 5)}` : ''}
+                <div className="beranda-upcoming-title">
+                  {item.remind_at ? `${item.remind_at.slice(0, 5)} · ` : ''}
+                  {item.title}
                 </div>
-                <div className="beranda-upcoming-title">{item.title}</div>
               </button>
               <button type="button" onClick={() => void removeReminder(item.id)}>
                 {t('delete')}

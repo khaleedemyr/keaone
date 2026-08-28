@@ -11,6 +11,23 @@ import { ErpSubNavProvider, useErpSubNavContext } from './ErpSubNavContext'
 import type { ErpSearchEntry } from './erpNavSearch'
 
 const SIDEBAR_COLLAPSED_KEY = 'kea_erp_sidebar_collapsed'
+const DESKTOP_SIDEBAR_MQ = '(min-width: 768px)'
+
+function useDesktopViewport() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(DESKTOP_SIDEBAR_MQ).matches,
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_SIDEBAR_MQ)
+    const sync = () => setIsDesktop(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
+  return isDesktop
+}
 
 type ErpShellProps<T extends string> = {
   apps: T[]
@@ -188,6 +205,8 @@ export function ErpShell<T extends string>({
   const [active, setActive] = useState<T | null>(() => apps[0] ?? null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
+  const isDesktop = useDesktopViewport()
+  const collapsed = sidebarCollapsed && isDesktop
   const [flyoutMount, setFlyoutMount] = useState<HTMLDivElement | null>(null)
   const [pendingSection, setPendingSection] = useState<{ appId: AppId; sectionId: string } | null>(null)
 
@@ -256,7 +275,7 @@ export function ErpShell<T extends string>({
     >
       <ErpSubNavProvider>
         <ErpFlyoutProvider mount={flyoutMount}>
-          <div className={`erp-shell min-h-svh bg-page text-fg ${sidebarCollapsed ? 'is-sidebar-collapsed' : ''}`}>
+          <div className={`erp-shell min-h-svh bg-page text-fg ${collapsed ? 'is-sidebar-collapsed' : ''}`}>
             <div ref={setFlyoutMount} className="erp-flyout-mount" />
             {sidebarOpen ? (
               <button
@@ -267,10 +286,10 @@ export function ErpShell<T extends string>({
               />
             ) : null}
 
-            <aside className={`erp-sidebar ${sidebarOpen ? 'is-open' : ''} ${sidebarCollapsed ? 'is-collapsed' : ''}`}>
+            <aside className={`erp-sidebar ${sidebarOpen ? 'is-open' : ''} ${collapsed ? 'is-collapsed' : ''}`}>
               <div className="erp-sidebar-inner">
                 <div className="erp-sidebar-brand">
-                  {sidebarCollapsed ? (
+                  {collapsed ? (
                     <Logo className="mx-auto h-9 w-9 shrink-0" />
                   ) : (
                     <div className="mb-1 px-1">
@@ -282,7 +301,7 @@ export function ErpShell<T extends string>({
                 {searchEntries.length > 0 ? (
                   <ErpSidebarSearch
                     entries={searchEntries}
-                    collapsed={sidebarCollapsed}
+                    collapsed={collapsed}
                     onSelect={handleSearchSelect}
                   />
                 ) : null}
@@ -291,7 +310,7 @@ export function ErpShell<T extends string>({
                   apps={apps}
                   titles={titles}
                   active={active}
-                  collapsed={sidebarCollapsed}
+                  collapsed={collapsed}
                   onSelectApp={selectApp}
                   onCloseSidebar={() => setSidebarOpen(false)}
                 />
