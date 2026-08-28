@@ -12,7 +12,7 @@ export function useTenantApps() {
 
   const canAdmin =
     me?.user.is_platform ||
-    canAny(['users', 'roles', 'company', 'outlets', 'modules', 'ops', 'billing', 'logs'])
+    canAny(['roles', 'company', 'outlets', 'modules', 'ops', 'billing', 'logs'])
 
   const apps: TenantAppId[] = useMemo(
     () => [
@@ -47,6 +47,7 @@ export function useTenantApps() {
       canAny(['purchaserequisitions', 'purchaseorders', 'goodsreceipts', 'purchasesettings'], 'view')
         ? (['purchase'] as TenantAppId[])
         : []),
+      ...(canAny(['departments', 'positions', 'joblevels', 'users'], 'view') ? (['hr'] as TenantAppId[]) : []),
       ...(can('approvals', 'view') ? (['approvals'] as TenantAppId[]) : []),
       ...(canAdmin ? (['admin'] as TenantAppId[]) : []),
       ...(canAny(['settings', 'possettings', 'cafetables']) ? (['settings'] as TenantAppId[]) : []),
@@ -62,6 +63,7 @@ export function useTenantApps() {
       master: t('appMaster'),
       sales: t('appSales'),
       purchase: t('appPurchase'),
+      hr: t('appHr'),
       approvals: t('appApprovals'),
       admin: t('appAdmin'),
       settings: t('appSettings'),

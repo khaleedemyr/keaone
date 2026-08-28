@@ -1,5 +1,6 @@
 import type { AppId } from '../desktop/DesktopContext'
 import { MASTER_NAV_GROUPS } from '../desktop/MasterApp'
+import { HR_NAV_ITEMS } from '../desktop/HrApp'
 import { SALES_NAV_ITEMS } from '../desktop/SalesApp'
 import { getPurchaseNavDefs } from '../desktop/PurchaseApp'
 import type { MsgKey } from '../i18n'
@@ -20,7 +21,6 @@ type CanFn = (menu: string, action?: 'view' | 'create' | 'edit' | 'delete') => b
 type HasModuleFn = (module: string) => boolean
 
 const ADMIN_SECTIONS: { id: string; label: MsgKey }[] = [
-  { id: 'users', label: 'navUsers' },
   { id: 'roles', label: 'navRoles' },
   { id: 'company', label: 'navCompany' },
   { id: 'outlets', label: 'navOutlets' },
@@ -96,6 +96,14 @@ export function buildErpSearchEntries(
     if (appId === 'purchase') {
       const flow = (settings?.purchase_flow ?? 'direct') as 'strict_pr_po_gr' | 'po_gr' | 'direct'
       for (const item of getPurchaseNavDefs(flow)) {
+        if (!can(item.menu, 'view')) continue
+        pushEntry(entries, appId, appLabel, item.id, t(item.label))
+      }
+      continue
+    }
+
+    if (appId === 'hr') {
+      for (const item of HR_NAV_ITEMS) {
         if (!can(item.menu, 'view')) continue
         pushEntry(entries, appId, appLabel, item.id, t(item.label))
       }

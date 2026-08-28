@@ -4,7 +4,7 @@ import { useI18n } from '../i18n'
 import { logActivity } from '../api/activity'
 import { AppNavShell } from './AppNavShell'
 
-type Section = 'users' | 'roles' | 'company' | 'outlets' | 'modules' | 'ops' | 'billing' | 'logs'
+type Section = 'roles' | 'company' | 'outlets' | 'modules' | 'ops' | 'billing' | 'logs'
 
 const AdminBilling = lazy(() => import('../pages/admin/Billing'))
 const AdminCompany = lazy(() => import('../pages/admin/Company'))
@@ -13,7 +13,6 @@ const AdminModules = lazy(() => import('../pages/admin/Modules'))
 const AdminOperations = lazy(() => import('../pages/admin/Operations'))
 const AdminOutlets = lazy(() => import('../pages/admin/Outlets'))
 const AdminRoles = lazy(() => import('../pages/admin/Roles'))
-const AdminUsers = lazy(() => import('../pages/admin/Users'))
 
 export default function AdminApp() {
   const { t } = useI18n()
@@ -21,7 +20,6 @@ export default function AdminApp() {
   const [section, setSection] = useState<Section | null>(null)
 
   const allItems: { id: Section; label: string }[] = [
-    { id: 'users', label: t('navUsers') },
     { id: 'roles', label: t('navRoles') },
     { id: 'company', label: t('navCompany') },
     { id: 'outlets', label: t('navOutlets') },
@@ -43,7 +41,6 @@ export default function AdminApp() {
         logActivity('open_section', id)
       }}
     >
-      {current === 'users' ? <AdminUsers /> : null}
       {current === 'roles' ? <AdminRoles /> : null}
       {current === 'company' ? <AdminCompany /> : null}
       {current === 'outlets' ? <AdminOutlets /> : null}

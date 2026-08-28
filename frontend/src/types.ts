@@ -107,6 +107,7 @@ export type Outlet = {
 
 export type Member = {
   id: number
+  membership_id?: number
   name: string
   email: string
   username: string | null
@@ -114,7 +115,14 @@ export type Member = {
   role: string
   role_id?: number | null
   is_active: boolean
+  employee_code?: string | null
+  hired_at?: string | null
+  employment_status?: 'active' | 'resigned'
   outlet: { id: number; name: string } | null
+  department?: { id: number; name: string } | null
+  position?: { id: number; name: string } | null
+  job_level?: { id: number; name: string } | null
+  manager?: { membership_id: number; name: string | null | undefined } | null
 }
 
 export type RoleDef = RoleRecord
@@ -214,6 +222,34 @@ export type Unit = {
   id: number
   name: string
   symbol: string | null
+  sort_order: number
+  is_active: boolean
+}
+
+export type Department = {
+  id: number
+  name: string
+  code: string | null
+  parent_id: number | null
+  parent_name?: string | null
+  sort_order: number
+  is_active: boolean
+}
+
+export type Position = {
+  id: number
+  name: string
+  code: string | null
+  rank: number
+  sort_order: number
+  is_active: boolean
+}
+
+export type JobLevel = {
+  id: number
+  name: string
+  code: string | null
+  rank: number
   sort_order: number
   is_active: boolean
 }

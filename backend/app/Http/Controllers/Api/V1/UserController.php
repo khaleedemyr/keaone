@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\CompanyUser;
+use App\Models\Department;
+use App\Models\JobLevel;
 use App\Models\Outlet;
+use App\Models\Position;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\RoleService;
@@ -36,14 +39,24 @@ class UserController extends Controller
 
         $query = CompanyUser::query()
             ->where('company_id', CurrentCompany::id())
-            ->with(['user', 'outlet'])
+            ->with([
+                'user',
+                'outlet',
+                'department',
+                'position',
+                'jobLevel',
+                'manager.user',
+            ])
             ->orderBy('id');
 
         if ($search = $request->string('search')->toString()) {
-            $query->whereHas('user', function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%")
-                    ->orWhere('username', 'like', "%{$search}%");
+            $query->where(function ($q) use ($search) {
+                $q->where('employee_code', 'like', "%{$search}%")
+                    ->orWhereHas('user', function ($inner) use ($search) {
+                        $inner->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%")
+                            ->orWhere('username', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -56,43 +69,69 @@ class UserController extends Controller
     {
         $this->ensureCan('users', 'create');
 
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
-            'email' => ['required', 'email', 'max:150'],
-            'username' => ['nullable', 'string', 'max:60'],
-            'phone' => ['nullable', 'string', 'max:30'],
-            'password' => PasswordRules::required(),
-            'role_id' => ['nullable', 'integer'],
-            'role' => ['nullable', 'string', 'max:80'],
-            'outlet_id' => ['nullable', 'integer'],
-            'is_active' => ['sometimes', 'boolean'],
-        ]);
+        $existingUser = User::query()->where('email', $request->input('email'))->first();
+
+        $data = $request->validate($this->storeRules($existingUser));
 
         $role = $this->roles->resolveTenantRole(CurrentCompany::id(), $data['role_id'] ?? null, $data['role'] ?? null);
         $this->assertCanAssignRole($role);
         $this->ensurePlanLimit('users');
         $outletId = $this->validOutletId($data['outlet_id'] ?? null);
+        $hr = $this->validatedHrFields($data);
 
-        if (User::query()->where('email', $data['email'])->exists()) {
-            throw ValidationException::withMessages([
-                'email' => ['Email sudah terpakai.'],
-            ]);
+        if ($existingUser) {
+            $alreadyMember = CompanyUser::query()
+                ->where('company_id', CurrentCompany::id())
+                ->where('user_id', $existingUser->id)
+                ->exists();
+
+            if ($alreadyMember) {
+                throw ValidationException::withMessages([
+                    'email' => ['Email sudah terdaftar sebagai karyawan di perusahaan ini.'],
+                ]);
+            }
+
+            if (! empty($data['username']) && User::query()->where('username', $data['username'])->whereKeyNot($existingUser->id)->exists()) {
+                throw ValidationException::withMessages([
+                    'username' => ['Username sudah terpakai.'],
+                ]);
+            }
+        } else {
+            if (! empty($data['username']) && User::query()->where('username', $data['username'])->exists()) {
+                throw ValidationException::withMessages([
+                    'username' => ['Username sudah terpakai.'],
+                ]);
+            }
         }
 
-        if (! empty($data['username']) && User::query()->where('username', $data['username'])->exists()) {
-            throw ValidationException::withMessages([
-                'username' => ['Username sudah terpakai.'],
-            ]);
-        }
+        $member = DB::transaction(function () use ($data, $outletId, $role, $hr, $existingUser) {
+            if ($existingUser) {
+                $existingUser->fill(array_filter([
+                    'name' => $data['name'],
+                    'phone' => $data['phone'] ?? null,
+                ], fn ($value) => $value !== null));
 
-        $member = DB::transaction(function () use ($data, $outletId, $role) {
-            $user = User::query()->create([
-                'name' => $data['name'],
-                'email' => $data['email'],
-                'username' => $data['username'] ?? null,
-                'phone' => $data['phone'] ?? null,
-                'password' => $data['password'],
-            ]);
+                if (array_key_exists('username', $data)) {
+                    $existingUser->username = $data['username'];
+                }
+                if (! empty($data['password'])) {
+                    $existingUser->password = $data['password'];
+                    $existingUser->tokens()->delete();
+                }
+                $existingUser->save();
+                $user = $existingUser;
+            } else {
+                $user = User::query()->create([
+                    'name' => $data['name'],
+                    'email' => $data['email'],
+                    'username' => $data['username'] ?? null,
+                    'phone' => $data['phone'] ?? null,
+                    'password' => $data['password'],
+                ]);
+            }
+
+            $managerId = $hr['manager_id'] ?? null;
+            unset($hr['manager_id']);
 
             $row = CompanyUser::query()->create([
                 'company_id' => CurrentCompany::id(),
@@ -101,9 +140,22 @@ class UserController extends Controller
                 'role' => $role->slug,
                 'role_id' => $role->id,
                 'is_active' => $data['is_active'] ?? true,
+                ...$hr,
             ]);
 
-            return $row->load(['user', 'outlet']);
+            if ($managerId) {
+                $this->assertValidManager($row, $managerId);
+                $row->update(['manager_id' => $managerId]);
+            }
+
+            return $row->load([
+                'user',
+                'outlet',
+                'department',
+                'position',
+                'jobLevel',
+                'manager.user',
+            ]);
         });
 
         return $this->ok($this->serialize($member), [], 201);
@@ -115,17 +167,7 @@ class UserController extends Controller
 
         $member = $this->membershipOf($user);
 
-        $data = $request->validate([
-            'name' => ['sometimes', 'string', 'max:120'],
-            'email' => ['sometimes', 'email', 'max:150', Rule::unique('users', 'email')->ignore($user->id)],
-            'username' => ['nullable', 'string', 'max:60', Rule::unique('users', 'username')->ignore($user->id)],
-            'phone' => ['nullable', 'string', 'max:30'],
-            'password' => PasswordRules::optional(),
-            'role_id' => ['nullable', 'integer'],
-            'role' => ['nullable', 'string', 'max:80'],
-            'outlet_id' => ['nullable', 'integer'],
-            'is_active' => ['sometimes', 'boolean'],
-        ]);
+        $data = $request->validate($this->updateRules($user, $member));
 
         $nextRole = null;
         if (isset($data['role_id']) || isset($data['role'])) {
@@ -143,12 +185,15 @@ class UserController extends Controller
             $data['outlet_id'] = $this->validOutletId($data['outlet_id'], $member->outlet_id);
         }
 
-        DB::transaction(function () use ($user, $member, $data, $nextRole) {
+        $hr = $this->validatedHrFields($data, $member);
+        if (array_key_exists('manager_id', $hr)) {
+            $this->assertValidManager($member, $hr['manager_id']);
+        }
+
+        DB::transaction(function () use ($user, $member, $data, $nextRole, $hr) {
             $user->fill(array_filter([
                 'name' => $data['name'] ?? null,
                 'email' => $data['email'] ?? null,
-                'username' => array_key_exists('username', $data) ? $data['username'] : null,
-                'phone' => array_key_exists('phone', $data) ? $data['phone'] : null,
             ], fn ($value) => $value !== null));
 
             if (array_key_exists('username', $data)) {
@@ -166,7 +211,7 @@ class UserController extends Controller
                 $user->tokens()->delete();
             }
 
-            $pivot = [];
+            $pivot = $hr;
             if ($nextRole) {
                 $pivot['role'] = $nextRole->slug;
                 $pivot['role_id'] = $nextRole->id;
@@ -182,7 +227,14 @@ class UserController extends Controller
             }
         });
 
-        return $this->ok($this->serialize($member->fresh(['user', 'outlet'])));
+        return $this->ok($this->serialize($member->fresh([
+            'user',
+            'outlet',
+            'department',
+            'position',
+            'jobLevel',
+            'manager.user',
+        ])));
     }
 
     public function destroy(User $user): JsonResponse
@@ -203,7 +255,169 @@ class UserController extends Controller
             $user->tokens()->delete();
         }
 
-        return $this->ok($this->serialize($member->fresh(['user', 'outlet'])));
+        return $this->ok($this->serialize($member->fresh([
+            'user',
+            'outlet',
+            'department',
+            'position',
+            'jobLevel',
+            'manager.user',
+        ])));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function storeRules(?User $existingUser): array
+    {
+        return [
+            'name' => ['required', 'string', 'max:120'],
+            'email' => ['required', 'email', 'max:150'],
+            'username' => ['nullable', 'string', 'max:60'],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'password' => $existingUser ? PasswordRules::optional() : PasswordRules::required(),
+            'role_id' => ['nullable', 'integer'],
+            'role' => ['nullable', 'string', 'max:80'],
+            'outlet_id' => ['nullable', 'integer'],
+            'is_active' => ['sometimes', 'boolean'],
+            'employee_code' => [
+                'nullable',
+                'string',
+                'max:40',
+                Rule::unique('company_user', 'employee_code')->where('company_id', CurrentCompany::id()),
+            ],
+            'department_id' => ['nullable', 'integer', Rule::exists('departments', 'id')],
+            'position_id' => ['nullable', 'integer', Rule::exists('positions', 'id')],
+            'job_level_id' => ['nullable', 'integer', Rule::exists('job_levels', 'id')],
+            'manager_id' => ['nullable', 'integer', Rule::exists('company_user', 'id')],
+            'hired_at' => ['nullable', 'date'],
+            'employment_status' => ['nullable', 'string', Rule::in(['active', 'resigned'])],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function updateRules(User $user, CompanyUser $member): array
+    {
+        return [
+            'name' => ['sometimes', 'string', 'max:120'],
+            'email' => ['sometimes', 'email', 'max:150', Rule::unique('users', 'email')->ignore($user->id)],
+            'username' => ['nullable', 'string', 'max:60', Rule::unique('users', 'username')->ignore($user->id)],
+            'phone' => ['nullable', 'string', 'max:30'],
+            'password' => PasswordRules::optional(),
+            'role_id' => ['nullable', 'integer'],
+            'role' => ['nullable', 'string', 'max:80'],
+            'outlet_id' => ['nullable', 'integer'],
+            'is_active' => ['sometimes', 'boolean'],
+            'employee_code' => [
+                'nullable',
+                'string',
+                'max:40',
+                Rule::unique('company_user', 'employee_code')
+                    ->where('company_id', CurrentCompany::id())
+                    ->ignore($member->id),
+            ],
+            'department_id' => ['nullable', 'integer', Rule::exists('departments', 'id')],
+            'position_id' => ['nullable', 'integer', Rule::exists('positions', 'id')],
+            'job_level_id' => ['nullable', 'integer', Rule::exists('job_levels', 'id')],
+            'manager_id' => ['nullable', 'integer', Rule::exists('company_user', 'id')],
+            'hired_at' => ['nullable', 'date'],
+            'employment_status' => ['nullable', 'string', Rule::in(['active', 'resigned'])],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function validatedHrFields(array $data, ?CompanyUser $member = null): array
+    {
+        $fields = [];
+
+        foreach (['employee_code', 'department_id', 'position_id', 'job_level_id', 'manager_id', 'hired_at', 'employment_status'] as $key) {
+            if (! array_key_exists($key, $data)) {
+                continue;
+            }
+
+            $value = $data[$key];
+            if ($key === 'employee_code') {
+                $fields[$key] = $value !== null && $value !== '' ? $value : null;
+                continue;
+            }
+            if (in_array($key, ['department_id', 'position_id', 'job_level_id', 'manager_id'], true)) {
+                $fields[$key] = $value ? (int) $value : null;
+                if ($fields[$key]) {
+                    $this->assertHrBelongsToCompany($key, $fields[$key]);
+                }
+                continue;
+            }
+            $fields[$key] = $value;
+        }
+
+        if (array_key_exists('employment_status', $fields) && ! $fields['employment_status']) {
+            $fields['employment_status'] = 'active';
+        }
+
+        return $fields;
+    }
+
+    private function assertHrBelongsToCompany(string $field, int $id): void
+    {
+        $map = [
+            'department_id' => Department::class,
+            'position_id' => Position::class,
+            'job_level_id' => JobLevel::class,
+        ];
+
+        if ($field === 'manager_id') {
+            abort_unless(
+                CompanyUser::query()->where('company_id', CurrentCompany::id())->whereKey($id)->exists(),
+                422,
+                'Atasan tidak valid.',
+            );
+
+            return;
+        }
+
+        $model = $map[$field] ?? null;
+        abort_unless($model && $model::query()->whereKey($id)->exists(), 422, 'Data HR tidak valid.');
+    }
+
+    private function assertValidManager(CompanyUser $member, ?int $managerId): void
+    {
+        if (! $managerId) {
+            return;
+        }
+
+        if ($managerId === $member->id) {
+            throw ValidationException::withMessages([
+                'manager_id' => ['Karyawan tidak bisa menjadi atasan dirinya sendiri.'],
+            ]);
+        }
+
+        $manager = CompanyUser::query()
+            ->where('company_id', CurrentCompany::id())
+            ->whereKey($managerId)
+            ->first();
+
+        if (! $manager) {
+            throw ValidationException::withMessages([
+                'manager_id' => ['Atasan tidak ditemukan.'],
+            ]);
+        }
+
+        $cursor = $manager;
+        while ($cursor) {
+            if ($cursor->id === $member->id) {
+                throw ValidationException::withMessages([
+                    'manager_id' => ['Atasan tidak valid (membentuk lingkaran).'],
+                ]);
+            }
+            $cursor = $cursor->manager_id
+                ? CompanyUser::query()->whereKey($cursor->manager_id)->first()
+                : null;
+        }
     }
 
     private function membershipOf(User $user): CompanyUser
@@ -211,10 +425,17 @@ class UserController extends Controller
         $member = CompanyUser::query()
             ->where('company_id', CurrentCompany::id())
             ->where('user_id', $user->id)
-            ->with(['user', 'outlet'])
+            ->with([
+                'user',
+                'outlet',
+                'department',
+                'position',
+                'jobLevel',
+                'manager.user',
+            ])
             ->first();
 
-        abort_unless($member, 404, 'Pengguna tidak ditemukan di perusahaan ini.');
+        abort_unless($member, 404, 'Karyawan tidak ditemukan di perusahaan ini.');
 
         return $member;
     }
@@ -282,6 +503,7 @@ class UserController extends Controller
 
         return [
             'id' => $user?->id,
+            'membership_id' => $row->id,
             'name' => $user?->name,
             'email' => $user?->email,
             'username' => $user?->username,
@@ -289,9 +511,28 @@ class UserController extends Controller
             'role' => $row->role,
             'role_id' => $row->role_id,
             'is_active' => $row->is_active,
+            'employee_code' => $row->employee_code,
+            'hired_at' => $row->hired_at?->toDateString(),
+            'employment_status' => $row->employment_status ?? 'active',
             'outlet' => $row->outlet ? [
                 'id' => $row->outlet->id,
                 'name' => $row->outlet->name,
+            ] : null,
+            'department' => $row->department ? [
+                'id' => $row->department->id,
+                'name' => $row->department->name,
+            ] : null,
+            'position' => $row->position ? [
+                'id' => $row->position->id,
+                'name' => $row->position->name,
+            ] : null,
+            'job_level' => $row->jobLevel ? [
+                'id' => $row->jobLevel->id,
+                'name' => $row->jobLevel->name,
+            ] : null,
+            'manager' => $row->manager ? [
+                'membership_id' => $row->manager->id,
+                'name' => $row->manager->user?->name,
             ] : null,
         ];
     }

@@ -14,10 +14,12 @@ use App\Http\Controllers\Api\V1\CompanyController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\CustomFieldDefinitionController;
 use App\Http\Controllers\Api\V1\CustomerController;
+use App\Http\Controllers\Api\V1\DepartmentController;
 use App\Http\Controllers\Api\V1\DiscountController;
 use App\Http\Controllers\Api\V1\DiningLayoutController;
 use App\Http\Controllers\Api\V1\DiningTableController;
 use App\Http\Controllers\Api\V1\ItemTypeController;
+use App\Http\Controllers\Api\V1\JobLevelController;
 use App\Http\Controllers\Api\V1\MarketingBlogController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -28,6 +30,7 @@ use App\Http\Controllers\Api\V1\PlatformController;
 use App\Http\Controllers\Api\V1\PriceChannelController;
 use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\PlatformRoleController;
+use App\Http\Controllers\Api\V1\PositionController;
 use App\Http\Controllers\Api\V1\PromotionController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoleController;
@@ -138,6 +141,21 @@ Route::prefix('v1')->group(function () {
             Route::post('users', [UserController::class, 'store']);
             Route::put('users/{user}', [UserController::class, 'update']);
             Route::delete('users/{user}', [UserController::class, 'destroy']);
+
+            Route::get('departments', [DepartmentController::class, 'index']);
+            Route::post('departments', [DepartmentController::class, 'store']);
+            Route::put('departments/{department}', [DepartmentController::class, 'update']);
+            Route::delete('departments/{department}', [DepartmentController::class, 'destroy']);
+
+            Route::get('positions', [PositionController::class, 'index']);
+            Route::post('positions', [PositionController::class, 'store']);
+            Route::put('positions/{position}', [PositionController::class, 'update']);
+            Route::delete('positions/{position}', [PositionController::class, 'destroy']);
+
+            Route::get('job-levels', [JobLevelController::class, 'index']);
+            Route::post('job-levels', [JobLevelController::class, 'store']);
+            Route::put('job-levels/{jobLevel}', [JobLevelController::class, 'update']);
+            Route::delete('job-levels/{jobLevel}', [JobLevelController::class, 'destroy']);
 
             Route::get('chat/peers', [ChatController::class, 'peers']);
             Route::post('chat/presence', [ChatController::class, 'presence']);

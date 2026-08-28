@@ -1,0 +1,279 @@
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
+import { api, apiMessage } from '../../api/client'
+import { logMasterForm } from '../../api/activity'
+import type { ApiOk, Department } from '../../types'
+import { useFeedback } from '../../components/feedback'
+import { PageHeader } from '../../components/ui'
+import { MasterFilters, MasterPager, useListQuery } from '../../components/MasterListBar'
+import { MasterModal, MasterViewModal, MasterNameButton, ViewField } from '../../components/MasterModal'
+import { useI18n } from '../../i18n'
+import { useAccess } from '../../access'
+
+export default function Departments() {
+  const { t } = useI18n()
+  const { can } = useAccess()
+  const feedback = useFeedback()
+  const list = useListQuery()
+  const [items, setItems] = useState<Department[]>([])
+  const [parents, setParents] = useState<Department[]>([])
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const [parentId, setParentId] = useState('')
+  const [sortOrder, setSortOrder] = useState('0')
+  const [editing, setEditing] = useState<Department | null>(null)
+  const [viewing, setViewing] = useState<Department | null>(null)
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function loadParents(excludeId?: number) {
+    try {
+      const { data } = await api.get<ApiOk<Department[]>>('/departments', {
+        params: { for_select: 1, status: 'active' },
+      })
+      setParents(data.data.filter((row) => row.id !== excludeId))
+    } catch {
+      setParents([])
+    }
+  }
+
+  async function load() {
+    try {
+      const { data } = await api.get<ApiOk<Department[]>>('/departments', {
+        params: {
+          search: list.search || undefined,
+          status: list.status,
+          page: list.page,
+          per_page: list.perPage,
+        },
+      })
+      setItems(data.data)
+      list.applyMeta(data.meta, data.data.length)
+    } catch (err) {
+      feedback.error(apiMessage(err, t('loadFailed')))
+    }
+  }
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void load()
+    }, 200)
+    return () => window.clearTimeout(handle)
+  }, [list.search, list.status, list.page, list.perPage])
+
+  function openCreate() {
+    setEditing(null)
+    setName('')
+    setCode('')
+    setParentId('')
+    setSortOrder('0')
+    setError('')
+    setOpen(true)
+    void loadParents()
+    logMasterForm('department', 'create')
+  }
+
+  function openEdit(item: Department) {
+    setEditing(item)
+    setName(item.name)
+    setCode(item.code ?? '')
+    setParentId(item.parent_id ? String(item.parent_id) : '')
+    setSortOrder(String(item.sort_order ?? 0))
+    setError('')
+    setOpen(true)
+    void loadParents(item.id)
+    logMasterForm('department', 'edit', item.name)
+  }
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      const payload = {
+        name,
+        code: code || null,
+        parent_id: parentId ? Number(parentId) : null,
+        sort_order: Number(sortOrder) || 0,
+      }
+      if (editing) await api.put(`/departments/${editing.id}`, payload)
+      else await api.post('/departments', payload)
+      setOpen(false)
+      await load()
+      feedback.success(t('saved'))
+    } catch (err) {
+      setError(apiMessage(err, t('saveFailed')))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function remove(item: Department) {
+    const ok = await feedback.confirm({
+      title: t('deleteDepartmentTitle'),
+      message: t('deleteConfirm', { name: item.name }),
+      confirmLabel: t('delete'),
+      tone: 'danger',
+    })
+    if (!ok) return
+    try {
+      await api.delete(`/departments/${item.id}`)
+      await load()
+      feedback.success(t('deleted'))
+    } catch (err) {
+      feedback.error(apiMessage(err, t('deleteFailed')))
+    }
+  }
+
+  async function activate(item: Department) {
+    try {
+      await api.put(`/departments/${item.id}`, { is_active: true })
+      await load()
+      feedback.success(t('saved'))
+    } catch (err) {
+      feedback.error(apiMessage(err, t('saveFailed')))
+    }
+  }
+
+  const canEdit = can('departments', 'edit')
+  const canDelete = can('departments', 'delete')
+  const showActions = canEdit || canDelete
+
+  return (
+    <div>
+      <PageHeader
+        eyebrow={t('appHr')}
+        title={t('navDepartments')}
+        subtitle={t('departmentsSubtitle')}
+        action={
+          can('departments', 'create') ? (
+            <button type="button" onClick={openCreate} className="btn-primary">
+              {t('addDepartment')}
+            </button>
+          ) : undefined
+        }
+      />
+
+      <MasterFilters {...list.filters} searchPlaceholder={t('searchDepartment')} />
+
+      <div className="glass overflow-hidden rounded-3xl">
+        <table className="w-full text-left text-sm">
+          <thead className="text-muted">
+            <tr>
+              <th className="px-4 py-3 font-medium">{t('name')}</th>
+              <th className="px-4 py-3 font-medium">{t('code')}</th>
+              <th className="px-4 py-3 font-medium">{t('parentDepartment')}</th>
+              <th className="px-4 py-3 font-medium">{t('status')}</th>
+              {showActions ? <th className="px-4 py-3 font-medium"></th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id} className="border-t border-line hover:bg-fill">
+                <td className="px-4 py-3">
+                  <MasterNameButton onClick={() => setViewing(item)}>{item.name}</MasterNameButton>
+                </td>
+                <td className="px-4 py-3 text-muted">{item.code ?? '-'}</td>
+                <td className="px-4 py-3 text-muted">{item.parent_name ?? '-'}</td>
+                <td className="px-4 py-3">
+                  <span className={item.is_active ? 'text-mint' : 'text-rose-300'}>
+                    {item.is_active ? t('active') : t('inactive')}
+                  </span>
+                </td>
+                {showActions ? (
+                  <td className="px-4 py-3 text-right">
+                    {canEdit ? (
+                      <button type="button" className="mr-3 text-mint" onClick={() => openEdit(item)}>
+                        {t('edit')}
+                      </button>
+                    ) : null}
+                    {item.is_active && canDelete ? (
+                      <button type="button" className="text-rose-300" onClick={() => void remove(item)}>
+                        {t('delete')}
+                      </button>
+                    ) : null}
+                    {!item.is_active && canEdit ? (
+                      <button type="button" className="text-mint" onClick={() => void activate(item)}>
+                        {t('activate')}
+                      </button>
+                    ) : null}
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+            {items.length === 0 ? (
+              <tr>
+                <td className="px-4 py-8 text-center text-muted" colSpan={showActions ? 5 : 4}>
+                  {t('emptyMaster')}
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+
+      <MasterPager page={list.page} lastPage={list.lastPage} total={list.total} onPage={list.setPage} />
+
+      <MasterModal
+        open={open}
+        title={editing ? t('editDepartment') : t('newDepartment')}
+        error={error}
+        saving={saving}
+        onClose={() => setOpen(false)}
+        onSubmit={onSubmit}
+      >
+        <label className="text-sm text-muted">
+          {t('name')}
+          <input required className="field" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="text-sm text-muted">
+          {t('code')}
+          <input className="field" value={code} onChange={(e) => setCode(e.target.value)} />
+        </label>
+        <label className="text-sm text-muted">
+          {t('parentDepartment')}
+          <select className="field" value={parentId} onChange={(e) => setParentId(e.target.value)}>
+            <option value="">{t('noParent')}</option>
+            {parents.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm text-muted">
+          {t('sortOrder')}
+          <input
+            type="number"
+            min={0}
+            className="field"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value)}
+          />
+        </label>
+      </MasterModal>
+
+      <MasterViewModal
+        open={Boolean(viewing)}
+        title={t('viewRecord')}
+        onClose={() => setViewing(null)}
+        onEdit={
+          viewing && canEdit
+            ? () => {
+                const item = viewing
+                setViewing(null)
+                openEdit(item)
+              }
+            : undefined
+        }
+      >
+        <ViewField label={t('name')} value={viewing?.name} />
+        <ViewField label={t('code')} value={viewing?.code} />
+        <ViewField label={t('parentDepartment')} value={viewing?.parent_name} />
+        <ViewField label={t('sortOrder')} value={viewing?.sort_order} />
+        <ViewField label={t('status')} value={viewing?.is_active ? t('active') : t('inactive')} />
+      </MasterViewModal>
+    </div>
+  )
+}
