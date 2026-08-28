@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Avatar } from '../components/Avatar'
 import { useI18n } from '../i18n'
+import { ErpFlyoutPanel } from './ErpFlyoutPanel'
 
 type ErpAccountMenuProps = {
   name: string
@@ -11,27 +12,10 @@ type ErpAccountMenuProps = {
 
 export function ErpAccountMenu({ name, avatar, subtitle, children }: ErpAccountMenuProps) {
   const { t } = useI18n()
-  const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
 
-  useEffect(() => {
-    if (!open) return
-    function onDoc(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
   return (
-    <div ref={rootRef} className="erp-account-menu">
+    <div className="erp-account-menu">
       <button
         type="button"
         className={`erp-account-trigger ${open ? 'is-active' : ''}`}
@@ -50,14 +34,15 @@ export function ErpAccountMenu({ name, avatar, subtitle, children }: ErpAccountM
         </svg>
       </button>
 
-      {open ? (
-        <>
-          <button type="button" className="erp-account-backdrop md:hidden" aria-label={t('close')} onClick={() => setOpen(false)} />
-          <div className="erp-account-dropdown" role="menu">
-            {children}
-          </div>
-        </>
-      ) : null}
+      <ErpFlyoutPanel
+        open={open}
+        onClose={() => setOpen(false)}
+        className="erp-account-dropdown"
+        role="menu"
+        ariaLabel={name}
+      >
+        {children}
+      </ErpFlyoutPanel>
     </div>
   )
 }

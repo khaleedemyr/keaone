@@ -14,6 +14,8 @@ import { useFeedback } from '../components/feedback'
 import { useAccess } from '../access'
 import { useI18n } from '../i18n'
 import { onOsFlyout, openOsFlyout } from './osFlyout'
+import { ErpFlyoutPanel, useFlyoutDismiss } from '../layout/ErpFlyoutPanel'
+import { useErpFlyoutMount } from '../layout/ErpFlyoutContext'
 
 function IconLifeSupport({ className = 'h-4 w-4' }: { className?: string }) {
   return (
@@ -38,6 +40,7 @@ export function LiveSupportTray() {
   const { me } = useAuth()
   const feedback = useFeedback()
   const rootRef = useRef<HTMLDivElement>(null)
+  const erpMount = useErpFlyoutMount()
   const bottomRef = useRef<HTMLDivElement>(null)
   const lastIdRef = useRef(0)
   const [open, setOpen] = useState(false)
@@ -139,21 +142,7 @@ export function LiveSupportTray() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length, open])
 
-  useEffect(() => {
-    if (!open) return
-    function onDoc(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  useFlyoutDismiss(rootRef, open, () => setOpen(false), Boolean(erpMount))
 
   async function onSend(e: FormEvent) {
     e.preventDefault()
@@ -194,8 +183,13 @@ export function LiveSupportTray() {
         {unread > 0 ? <span className="os-notify-badge os-chat-badge">{badge}</span> : null}
       </button>
 
-      {open ? (
-        <div className="os-chat-flyout os-support-flyout" role="dialog" aria-label={t('liveSupportTitle')}>
+      <ErpFlyoutPanel
+        open={open}
+        onClose={() => setOpen(false)}
+        className="os-chat-flyout os-support-flyout"
+        role="dialog"
+        ariaLabel={t('liveSupportTitle')}
+      >
           <div className="os-chat-flyout-head">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-fg">{t('liveSupportTitle')}</div>
@@ -255,8 +249,7 @@ export function LiveSupportTray() {
               </button>
             </form>
           </div>
-        </div>
-      ) : null}
+      </ErpFlyoutPanel>
     </div>
   )
 }

@@ -7,6 +7,17 @@ import { useI18n } from '../i18n'
 import type { ApiOk, CalendarHoliday, CalendarPayload, Reminder } from '../types'
 import { Clock } from './Clock'
 import { onOsFlyout, openOsFlyout } from './osFlyout'
+import { ErpFlyoutPanel, useFlyoutDismiss } from '../layout/ErpFlyoutPanel'
+import { useErpFlyoutMount } from '../layout/ErpFlyoutContext'
+
+function IconCalendar({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+      <path d="M7 4V2M17 4V2M4 9h16M6 5h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" />
+      <path d="M8 13h2v2H8z" />
+    </svg>
+  )
+}
 
 function ymd(date: Date) {
   const y = date.getFullYear()
@@ -48,12 +59,13 @@ function markNotified(key: string) {
   sessionStorage.setItem(NOTIFIED_KEY, JSON.stringify([...notified]))
 }
 
-export function ClockTray() {
+export function ClockTray({ navCompact = false }: { navCompact?: boolean }) {
   const { t, locale, lang } = useI18n()
   const { me } = useAuth()
   const feedback = useFeedback()
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const erpMount = useErpFlyoutMount()
   const today = ymd(new Date())
   const [cursor, setCursor] = useState(() => new Date())
   const [selected, setSelected] = useState(today)
@@ -107,21 +119,7 @@ export function ClockTray() {
 
   useEffect(() => onOsFlyout('clock', () => setOpen(false)), [])
 
-  useEffect(() => {
-    if (!open) return
-    function onDoc(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  useFlyoutDismiss(rootRef, open, () => setOpen(false), Boolean(erpMount))
 
   useEffect(() => {
     const tick = () => {
@@ -191,9 +189,10 @@ export function ClockTray() {
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        className={`os-clock ${open ? 'is-active' : ''}`}
+        className={`${navCompact ? 'os-notify-btn' : 'os-clock'} ${open ? 'is-active' : ''}`}
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-label={t('calReminder')}
         onClick={() => {
           setOpen((value) => {
             if (!value) logActivity('open_calendar', 'calendar')
@@ -201,11 +200,16 @@ export function ClockTray() {
           })
         }}
       >
-        <Clock />
+        {navCompact ? <IconCalendar className="h-[1.05rem] w-[1.05rem]" /> : <Clock />}
       </button>
 
-      {open ? (
-        <div className="os-calendar" role="dialog" aria-label={t('calReminder')}>
+      <ErpFlyoutPanel
+        open={open}
+        onClose={() => setOpen(false)}
+        className="os-calendar"
+        role="dialog"
+        ariaLabel={t('calReminder')}
+      >
           <div className="flex items-center justify-between gap-2">
             <button type="button" className="os-cal-nav" onClick={() => setCursor(new Date(year, month - 1, 1))} aria-label={t('calPrev')}>
               ‹
@@ -319,8 +323,7 @@ export function ClockTray() {
               </div>
             </form>
           </div>
-        </div>
-      ) : null}
+      </ErpFlyoutPanel>
     </div>
   )
 }

@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { PrefsBar } from '../components/PrefsBar'
+import { ClockTray } from '../desktop/ClockTray'
+import { NotesTray } from '../desktop/NotesTray'
 import { NotifyTray } from '../desktop/NotifyTray'
 import { usePlatformApps } from '../desktop/usePlatformApps'
 import { useI18n } from '../i18n'
@@ -31,6 +33,8 @@ export default function PlatformErpShell() {
       renderApp={(id) => <PlatformAppView appId={id} />}
       navbarExtras={
         <>
+          <NotesTray />
+          <ClockTray navCompact />
           <NotifyTray />
           <SupportTray />
         </>

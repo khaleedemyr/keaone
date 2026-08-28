@@ -11,6 +11,8 @@ import {
 import { onOsFlyout, openOsFlyout } from './osFlyout'
 import { useDesktop } from './DesktopContext'
 import { useErpNavOptional } from '../layout/ErpNavContext'
+import { ErpFlyoutPanel, useFlyoutDismiss } from '../layout/ErpFlyoutPanel'
+import { useErpFlyoutMount } from '../layout/ErpFlyoutContext'
 import {
   clearAllNotifications,
   dismissServerNotification,
@@ -55,6 +57,7 @@ export function NotifyTray() {
   const erpNav = useErpNavOptional()
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const erpMount = useErpFlyoutMount()
   useServerNotifications(true)
   const items = useSyncExternalStore(subscribeNotifications, getNotifications, getNotifications)
   const unread = items.filter((item) => !item.read).length
@@ -67,21 +70,7 @@ export function NotifyTray() {
 
   useEffect(() => onOsFlyout('notify', () => setOpen(false)), [])
 
-  useEffect(() => {
-    if (!open) return
-    function onDoc(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  useFlyoutDismiss(rootRef, open, () => setOpen(false), Boolean(erpMount))
 
   const badge = unread > 9 ? '9+' : String(unread)
 
@@ -117,43 +106,47 @@ export function NotifyTray() {
         {unread > 0 ? <span className="os-notify-badge">{badge}</span> : null}
       </button>
 
-      {open ? (
-        <div className="os-notify" role="dialog" aria-label={t('notifTitle')}>
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-sm font-semibold text-fg">{t('notifTitle')}</div>
-            {items.length > 0 ? (
-              <button type="button" className="os-notify-clear" onClick={() => void clearAllNotifications()}>
-                {t('notifClear')}
-              </button>
-            ) : null}
-          </div>
-
-          {items.length === 0 ? (
-            <p className="os-notify-empty">{t('notifEmpty')}</p>
-          ) : (
-            <div className="os-notify-list">
-              {items.map((item) => {
-                const text = resolveText(item)
-                return (
-                  <NotifyCard
-                    key={item.id}
-                    item={item}
-                    title={text.title}
-                    body={text.body}
-                    when={formatWhen(item.at, locale, t('notifJustNow'))}
-                    closeLabel={t('close')}
-                    onOpen={() => onOpenItem(item)}
-                    onDismiss={() => {
-                      dismissNotification(item.id)
-                      if (item.serverId) void dismissServerNotification(item.serverId)
-                    }}
-                  />
-                )
-              })}
-            </div>
-          )}
+      <ErpFlyoutPanel
+        open={open}
+        onClose={() => setOpen(false)}
+        className="os-notify"
+        role="dialog"
+        ariaLabel={t('notifTitle')}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-semibold text-fg">{t('notifTitle')}</div>
+          {items.length > 0 ? (
+            <button type="button" className="os-notify-clear" onClick={() => void clearAllNotifications()}>
+              {t('notifClear')}
+            </button>
+          ) : null}
         </div>
-      ) : null}
+
+        {items.length === 0 ? (
+          <p className="os-notify-empty">{t('notifEmpty')}</p>
+        ) : (
+          <div className="os-notify-list">
+            {items.map((item) => {
+              const text = resolveText(item)
+              return (
+                <NotifyCard
+                  key={item.id}
+                  item={item}
+                  title={text.title}
+                  body={text.body}
+                  when={formatWhen(item.at, locale, t('notifJustNow'))}
+                  closeLabel={t('close')}
+                  onOpen={() => onOpenItem(item)}
+                  onDismiss={() => {
+                    dismissNotification(item.id)
+                    if (item.serverId) void dismissServerNotification(item.serverId)
+                  }}
+                />
+              )
+            })}
+          </div>
+        )}
+      </ErpFlyoutPanel>
     </div>
   )
 }

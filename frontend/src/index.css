@@ -3582,9 +3582,37 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
   justify-content: space-between;
   gap: 0.75rem;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--page) 92%, transparent);
+  background: var(--page);
   padding: 0.75rem 1rem;
-  backdrop-filter: blur(12px);
+}
+
+.erp-navbar-actions {
+  display: flex;
+  max-width: min(68vw, 24rem);
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.15rem;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.erp-navbar-actions::-webkit-scrollbar {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .erp-navbar {
+    background: color-mix(in srgb, var(--page) 92%, transparent);
+    backdrop-filter: blur(12px);
+  }
+
+  .erp-navbar-actions {
+    max-width: none;
+    gap: 0.35rem;
+    overflow: visible;
+  }
 }
 
 .erp-menu-btn {
@@ -3745,29 +3773,13 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
 }
 
 .erp-account-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 58;
-  border: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(2px);
+  display: none;
 }
 
 .erp-account-dropdown {
-  position: absolute;
-  top: calc(100% + 0.55rem);
-  inset-inline-end: 0;
-  z-index: 60;
-  width: min(18rem, calc(100vw - 1.5rem));
-  max-height: min(70svh, 32rem);
   overflow: auto;
-  overscroll-contain: contain;
-  border: 1px solid var(--line);
-  border-radius: 1.25rem;
-  background: linear-gradient(180deg, var(--glass-a), var(--glass-b));
+  overscroll-behavior: contain;
   padding: 0.85rem;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(22px);
 }
 
 .erp-account-head {
@@ -3776,12 +3788,50 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
   gap: 0.65rem;
 }
 
+/* ERP flyout portal — panels render outside navbar to avoid mobile clipping */
+.erp-flyout-mount {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+}
+
+.erp-flyout-mount > * {
+  pointer-events: auto;
+}
+
+.erp-flyout-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.erp-flyout-sheet {
+  position: fixed;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: linear-gradient(180deg, var(--glass-a), var(--glass-b));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(22px);
+}
+
 @media (max-width: 767px) {
-  .erp-account-dropdown {
-    position: fixed;
-    top: auto;
-    inset-inline: 0;
-    bottom: 0;
+  .erp-flyout-sheet:not(.erp-account-dropdown) {
+    inset: 4.25rem 0.5rem 0.5rem;
+    width: auto;
+    height: auto;
+    max-height: none;
+  }
+
+  .erp-flyout-sheet.erp-account-dropdown {
+    inset: auto 0 0 0;
     width: 100%;
     max-height: min(85svh, 36rem);
     border-radius: 1.35rem 1.35rem 0 0;
@@ -3789,31 +3839,96 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
   }
 }
 
-/* ERP navbar trays open downward (taskbar flyouts open upward) */
-.erp-shell .os-chat-flyout,
-.erp-shell .os-notify,
-.erp-shell .os-support-flyout,
-.erp-shell .os-calendar {
-  bottom: auto;
-  top: calc(100% + 0.55rem);
+@media (min-width: 768px) {
+  .erp-flyout-sheet {
+    top: 4rem;
+    right: 1rem;
+    bottom: auto;
+    left: auto;
+    width: min(22rem, calc(100vw - 2rem));
+    max-height: min(85vh, 36rem);
+  }
+
+  .erp-flyout-sheet.os-chat-flyout,
+  .erp-flyout-sheet.os-support-flyout.is-wide {
+    width: min(44rem, calc(100vw - 2rem));
+    height: min(34rem, calc(100vh - 5rem));
+  }
+
+  .erp-flyout-sheet.os-support-flyout:not(.is-wide) {
+    width: min(26rem, calc(100vw - 2rem));
+    height: min(32rem, calc(100vh - 5rem));
+  }
+
+  .erp-flyout-sheet.erp-account-dropdown {
+    top: 4rem;
+    right: 1rem;
+    width: min(18rem, calc(100vw - 2rem));
+    max-height: min(70svh, 32rem);
+  }
 }
 
-@media (max-width: 767px) {
-  .erp-shell .os-chat-flyout,
-  .erp-shell .os-notify,
-  .erp-shell .os-support-flyout {
-    position: fixed;
-    inset-inline: 0.5rem;
-    top: 4.25rem;
-    bottom: 0.5rem;
-    width: auto;
-    height: auto;
-    max-height: none;
-    border-radius: 1.25rem;
-  }
+.erp-flyout-sheet.os-notify {
+  padding: 0.9rem 0.75rem 0.75rem;
+}
 
-  .erp-shell .os-notify {
-    padding: 0.9rem 0.75rem 0.75rem;
-  }
+.erp-flyout-sheet.os-calendar {
+  overflow: auto;
+  padding: 0.9rem;
+}
+
+.erp-flyout-sheet.os-notes-flyout {
+  max-height: min(34rem, calc(100vh - 5rem));
+}
+
+.os-notes-flyout-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 0.65rem 0.75rem 0.75rem;
+}
+
+.erp-notes-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.erp-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.erp-note-card {
+  border-radius: 1rem;
+  padding: 0.65rem 0.65rem 0.55rem;
+}
+
+.erp-note-card .os-notes-input {
+  min-height: 5.5rem;
+}
+
+.erp-note-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
+.erp-note-remove {
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.erp-note-remove:hover {
+  color: var(--fg);
 }
 

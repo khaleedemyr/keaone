@@ -4,7 +4,9 @@ import { useAuth } from '../auth'
 import { BusinessTypeField } from '../components/BusinessTypeField'
 import { PrefsBar } from '../components/PrefsBar'
 import { ChatTray } from '../desktop/ChatTray'
+import { ClockTray } from '../desktop/ClockTray'
 import { LiveSupportTray } from '../desktop/LiveSupportTray'
+import { NotesTray } from '../desktop/NotesTray'
 import { NotifyTray } from '../desktop/NotifyTray'
 import { useTenantApps } from '../desktop/useTenantApps'
 import { useI18n } from '../i18n'
@@ -83,6 +85,8 @@ export default function TenantErpShell() {
       banners={banners}
       navbarExtras={
         <>
+          <NotesTray />
+          <ClockTray navCompact />
           <ChatTray />
           <LiveSupportTray />
           <NotifyTray />

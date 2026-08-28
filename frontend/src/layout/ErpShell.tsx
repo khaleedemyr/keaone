@@ -4,6 +4,7 @@ import { PrefsBar } from '../components/PrefsBar'
 import { AppGlyph, APP_TILE } from '../desktop/glyphs'
 import type { AppId } from '../desktop/DesktopContext'
 import { useI18n } from '../i18n'
+import { ErpFlyoutProvider } from './ErpFlyoutContext'
 import { ErpNavProvider } from './ErpNavContext'
 
 type ErpShellProps<T extends string> = {
@@ -28,6 +29,7 @@ export function ErpShell<T extends string>({
   const { t } = useI18n()
   const [active, setActive] = useState<T | null>(() => apps[0] ?? null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [flyoutMount, setFlyoutMount] = useState<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (apps.length === 0) {
@@ -53,7 +55,9 @@ export function ErpShell<T extends string>({
 
   return (
     <ErpNavProvider openApp={openErpApp}>
+    <ErpFlyoutProvider mount={flyoutMount}>
     <div className="erp-shell min-h-svh bg-page text-fg">
+      <div ref={setFlyoutMount} className="erp-flyout-mount" />
       {sidebarOpen ? (
         <button
           type="button"
@@ -111,7 +115,7 @@ export function ErpShell<T extends string>({
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <div className="erp-navbar-actions">
             <div className="hidden sm:block">
               <PrefsBar compact />
             </div>
@@ -131,6 +135,7 @@ export function ErpShell<T extends string>({
         </main>
       </div>
     </div>
+    </ErpFlyoutProvider>
     </ErpNavProvider>
   )
 }

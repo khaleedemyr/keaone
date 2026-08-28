@@ -1,14 +1,13 @@
-import { useEffect, useState } from 'react'
 import { useI18n } from '../../i18n'
 import { useDesktop } from '../DesktopContext'
 import {
   MAX_STICKY_NOTES,
-  STICKY_NOTE_COLORS,
   createStickyNote,
   notePositionKey,
   type StickyNote,
   type StickyNoteColor,
 } from '../desktopPrefs'
+import { StickyNoteEditor } from './StickyNoteEditor'
 import { WidgetFrame } from './WidgetFrame'
 
 function StickyNoteCard({
@@ -27,18 +26,6 @@ function StickyNoteCard({
   onAdd: () => void
 }) {
   const { t } = useI18n()
-  const [text, setText] = useState(note.text)
-
-  useEffect(() => {
-    setText(note.text)
-  }, [note.text])
-
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      if (text !== note.text) onChange({ ...note, text })
-    }, 400)
-    return () => window.clearTimeout(id)
-  }, [text, note, onChange])
 
   return (
     <WidgetFrame
@@ -62,24 +49,7 @@ function StickyNoteCard({
         ) : null
       }
     >
-      <textarea
-        className="os-notes-input"
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        placeholder={t('widgetNotesPlaceholder')}
-        maxLength={2000}
-      />
-      <div className="os-notes-colors os-widget-nodrag">
-        {STICKY_NOTE_COLORS.map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={`os-notes-swatch is-${item}${item === note.color ? ' is-active' : ''}`}
-            onClick={() => onChange({ ...note, color: item })}
-            aria-label={item}
-          />
-        ))}
-      </div>
+      <StickyNoteEditor note={note} canDelete={false} onChange={onChange} onRemove={onRemove} />
     </WidgetFrame>
   )
 }

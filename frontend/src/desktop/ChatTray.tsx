@@ -5,6 +5,8 @@ import { useFeedback } from '../components/feedback'
 import { useI18n } from '../i18n'
 import ChatApp from './ChatApp'
 import { onOsFlyout, openOsFlyout } from './osFlyout'
+import { ErpFlyoutPanel, useFlyoutDismiss } from '../layout/ErpFlyoutPanel'
+import { useErpFlyoutMount } from '../layout/ErpFlyoutContext'
 
 function IconChat({ className = 'h-4 w-4' }: { className?: string }) {
   return (
@@ -21,6 +23,7 @@ export function ChatTray() {
   const feedback = useFeedback()
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const erpMount = useErpFlyoutMount()
   const [unread, setUnread] = useState(0)
   const prevUnread = useRef(0)
   const primed = useRef(false)
@@ -67,21 +70,7 @@ export function ChatTray() {
 
   useEffect(() => onOsFlyout('chat', () => setOpen(false)), [])
 
-  useEffect(() => {
-    if (!open) return
-    function onDoc(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  useFlyoutDismiss(rootRef, open, () => setOpen(false), Boolean(erpMount))
 
   if (!allowed) return null
 
@@ -101,19 +90,23 @@ export function ChatTray() {
         {unread > 0 ? <span className="os-notify-badge os-chat-badge">{badge}</span> : null}
       </button>
 
-      {open ? (
-        <div className="os-chat-flyout" role="dialog" aria-label={t('appChat')}>
-          <div className="os-chat-flyout-head">
-            <div className="text-sm font-semibold text-fg">{t('appChat')}</div>
-            <button type="button" className="os-notify-clear" onClick={() => setOpen(false)}>
-              {t('close')}
-            </button>
-          </div>
-          <div className="os-chat-flyout-body">
-            <ChatApp compact onActivity={() => void refreshUnread()} />
-          </div>
+      <ErpFlyoutPanel
+        open={open}
+        onClose={() => setOpen(false)}
+        className="os-chat-flyout"
+        role="dialog"
+        ariaLabel={t('appChat')}
+      >
+        <div className="os-chat-flyout-head">
+          <div className="text-sm font-semibold text-fg">{t('appChat')}</div>
+          <button type="button" className="os-notify-clear" onClick={() => setOpen(false)}>
+            {t('close')}
+          </button>
         </div>
-      ) : null}
+        <div className="os-chat-flyout-body">
+          <ChatApp compact onActivity={() => void refreshUnread()} />
+        </div>
+      </ErpFlyoutPanel>
     </div>
   )
 }
