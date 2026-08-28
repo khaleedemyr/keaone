@@ -25,9 +25,17 @@ class ProductController extends Controller
     public function index(Request $request): JsonResponse
     {
         if ($request->boolean('for_select')) {
-            $this->ensureCanAny(['products', 'pos', 'promotions', 'discounts']);
+            $this->ensureCanAny([
+                'products',
+                'pos',
+                'promotions',
+                'discounts',
+                'purchaserequisitions',
+                'purchaseorders',
+                'goodsreceipts',
+            ]);
         } else {
-            $this->ensureCanAny(['products', 'pos']);
+            $this->ensureCanAny(['products', 'pos', 'purchaserequisitions', 'purchaseorders', 'goodsreceipts']);
         }
         $query = Product::query()->orderBy('name');
 
@@ -55,19 +63,43 @@ class ProductController extends Controller
             $query->where('type', $request->string('type')->toString());
         }
 
+        if ($request->boolean('for_pos')) {
+            $query->where('sell_price', '>', 0)
+                ->where(function ($q) {
+                    $q->whereNull('category_id')
+                        ->orWhereHas('category', fn ($c) => $c->where('show_pos', true));
+                });
+        }
+
+        if ($request->boolean('for_purchase')) {
+            $query->where(function ($q) {
+                $q->whereNull('category_id')
+                    ->orWhereHas('category', fn ($c) => $c->where('is_raw_material', true));
+            });
+        }
+
         if ($request->boolean('for_select')) {
             $this->applyActiveStatus($query, $request);
-            $items = $query->limit(500)->get(['id', 'name', 'sku', 'unit', 'unit_id', 'is_active']);
+            $items = $query
+                ->with(['productUnits.unitMaster', 'unitMaster'])
+                ->limit(500)
+                ->get();
 
-            return $this->ok($items);
+            $units = app(\App\Services\ProductUnitService::class);
+
+            return $this->ok($items->map(fn (Product $product) => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'sku' => $product->sku,
+                'unit' => $product->unit,
+                'unit_id' => $product->unit_id,
+                'is_active' => $product->is_active,
+                'units' => $units->serialize($product),
+            ])->values());
         }
 
         $query->with($this->listRelations())->withCount('bomItems');
         $this->applyActiveStatus($query, $request, true);
-
-        if ($request->boolean('for_pos')) {
-            $query->where('sell_price', '>', 0);
-        }
 
         $outlet = CurrentCompany::outlet();
         $products = $query->paginate($this->perPage($request, 50));
@@ -153,6 +185,8 @@ class ProductController extends Controller
 
             return $product;
         });
+
+        $this->ensurePrimary($product);
 
         return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
     }
@@ -623,7 +657,7 @@ class ProductController extends Controller
             'subCategory:id,name,category_id',
             'outletPrices:id,product_id,outlet_id,sell_price',
             'channelPrices.priceChannel:id,name,code',
-            'images' => fn ($q) => $q->where('is_primary', true),
+            'images' => fn ($q) => $q->orderByDesc('is_primary')->orderBy('sort_order')->orderBy('id')->limit(1),
             'choices.choiceType:id,name',
             'productUnits.unitMaster:id,name,symbol',
             'unitMaster:id,name,symbol',

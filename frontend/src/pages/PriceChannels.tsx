@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import type { ApiOk, PriceChannel } from '../types'
 import { useFeedback } from '../components/feedback'
 import { PageHeader } from '../components/ui'
@@ -51,6 +52,7 @@ export default function PriceChannels() {
     setName('')
     setError('')
     setOpen(true)
+    logMasterForm('pricechannel', 'create')
   }
 
   function openEdit(item: PriceChannel) {
@@ -58,6 +60,7 @@ export default function PriceChannels() {
     setName(item.name)
     setError('')
     setOpen(true)
+    logMasterForm('pricechannel', 'edit', item.name)
   }
 
   async function onSubmit(event: FormEvent) {

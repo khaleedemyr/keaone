@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import type { ApiOk, Category, SubCategory } from '../types'
 import { useFeedback } from '../components/feedback'
 import { PageHeader } from '../components/ui'
@@ -61,6 +62,7 @@ export default function SubCategories() {
     setCategoryId('')
     setError('')
     setOpen(true)
+    logMasterForm('subcategory', 'create')
   }
 
   function openEdit(item: SubCategory) {
@@ -69,6 +71,7 @@ export default function SubCategories() {
     setCategoryId(String(item.category_id))
     setError('')
     setOpen(true)
+    logMasterForm('subcategory', 'edit', item.name)
   }
 
   async function onSubmit(event: FormEvent) {

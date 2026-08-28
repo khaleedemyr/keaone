@@ -27,7 +27,7 @@ import {
   type Wallpaper,
 } from './wallpaper'
 
-export type TenantAppId = 'insight' | 'pos' | 'master' | 'sales' | 'purchase' | 'admin' | 'settings'
+export type TenantAppId = 'insight' | 'pos' | 'master' | 'sales' | 'purchase' | 'approvals' | 'admin' | 'settings'
 export type PlatformAppId = 'overview' | 'tenants' | 'billing' | 'blog' | 'admin' | 'settings'
 export type AppId = TenantAppId | PlatformAppId
 

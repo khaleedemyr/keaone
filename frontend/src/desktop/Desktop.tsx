@@ -20,6 +20,7 @@ import { useDesktop, type AppId } from './DesktopContext'
 import { APP_TILE, AppGlyph } from './glyphs'
 import MasterApp from './MasterApp'
 import PurchaseApp from './PurchaseApp'
+import ApprovalsApp from './ApprovalsApp'
 import SalesApp from './SalesApp'
 import SettingsApp from './SettingsApp'
 import { StartMenuPanel } from './StartMenuPanel'
@@ -121,6 +122,7 @@ export default function Desktop() {
               {win.id === 'master' ? <MasterApp /> : null}
               {win.id === 'sales' ? <SalesApp /> : null}
               {win.id === 'purchase' ? <PurchaseApp /> : null}
+              {win.id === 'approvals' ? <ApprovalsApp /> : null}
               {win.id === 'admin' ? <AdminApp /> : null}
               {win.id === 'settings' ? <SettingsApp /> : null}
             </ErrorBoundary>

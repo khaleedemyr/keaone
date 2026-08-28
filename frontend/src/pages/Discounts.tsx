@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import { formatRupiah } from '../lib/money'
 import { formatDiscountValue } from '../lib/discountCalc'
 import type { ApiOk, Discount } from '../types'
@@ -63,6 +64,7 @@ export default function Discounts() {
     setMinSubtotal('')
     setError('')
     setOpen(true)
+    logMasterForm('discount', 'create')
   }
 
   function openEdit(item: Discount) {
@@ -75,6 +77,7 @@ export default function Discounts() {
     setMinSubtotal(item.min_subtotal ? String(item.min_subtotal) : '')
     setError('')
     setOpen(true)
+    logMasterForm('discount', 'edit', item.name)
   }
 
   async function onSubmit(event: FormEvent) {

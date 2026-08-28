@@ -3,9 +3,27 @@ export type NotifyTone = 'success' | 'error' | 'info' | 'warning'
 export type TrayNotification = {
   id: string
   tone: NotifyTone
-  message: string
+  /** Local / already-translated text (feedback toasts). */
+  message?: string
+  titleKey?: string
+  bodyKey?: string
+  params?: Record<string, string>
   at: number
   read: boolean
+  source: 'local' | 'server'
+  serverId?: number
+  meta?: Record<string, unknown> | null
+}
+
+export type ServerNotificationRow = {
+  id: number
+  tone: NotifyTone | string
+  title_key: string
+  body_key: string
+  params?: Record<string, string>
+  meta?: Record<string, unknown> | null
+  read_at?: string | null
+  at: number
 }
 
 const KEY = 'kea_notifications'
@@ -18,31 +36,47 @@ function readStored(): TrayNotification[] {
     if (!raw) return []
     const parsed = JSON.parse(raw) as TrayNotification[]
     if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (item) =>
-        item &&
-        typeof item.id === 'string' &&
-        typeof item.message === 'string' &&
-        typeof item.at === 'number',
-    )
+    return parsed
+      .filter(
+        (item) =>
+          item &&
+          typeof item.id === 'string' &&
+          typeof item.at === 'number' &&
+          (typeof item.message === 'string' || typeof item.bodyKey === 'string'),
+      )
+      .map((item) => ({
+        ...item,
+        source: item.source ?? 'local',
+        read: Boolean(item.read),
+      }))
   } catch {
     return []
   }
 }
 
-let items: TrayNotification[] = readStored()
+let localItems: TrayNotification[] = readStored().filter((item) => item.source !== 'server')
+let serverItems: TrayNotification[] = []
+/** Cached snapshot for useSyncExternalStore — must be referentially stable until mutate. */
+let snapshot: TrayNotification[] = rebuildSnapshot()
 
-function emit() {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(items))
-  } catch {
-    // Quota or private mode — keep the in-memory tray.
+function rebuildSnapshot() {
+  return [...serverItems, ...localItems].sort((a, b) => b.at - a.at).slice(0, MAX)
+}
+
+function emit(persistLocal = true) {
+  snapshot = rebuildSnapshot()
+  if (persistLocal) {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(localItems))
+    } catch {
+      // Quota or private mode — keep the in-memory tray.
+    }
   }
   for (const listener of listeners) listener()
 }
 
 export function getNotifications() {
-  return items
+  return snapshot
 }
 
 export function subscribeNotifications(listener: () => void) {
@@ -53,34 +87,75 @@ export function subscribeNotifications(listener: () => void) {
 export function pushNotification(tone: NotifyTone, message: string) {
   const text = message.trim()
   if (!text) return
-  items = [
+  localItems = [
     {
       id: crypto.randomUUID(),
       tone,
       message: text,
       at: Date.now(),
       read: false,
+      source: 'local',
     },
-    ...items,
+    ...localItems,
   ].slice(0, MAX)
   emit()
 }
 
+function mapServerRows(rows: ServerNotificationRow[]): TrayNotification[] {
+  return rows.map((row) => ({
+    id: `server-${row.id}`,
+    serverId: row.id,
+    tone: (['success', 'error', 'info', 'warning'].includes(String(row.tone))
+      ? row.tone
+      : 'info') as NotifyTone,
+    titleKey: row.title_key,
+    bodyKey: row.body_key,
+    params: row.params ?? {},
+    meta: row.meta ?? null,
+    at: typeof row.at === 'number' ? row.at : Date.now(),
+    read: Boolean(row.read_at),
+    source: 'server' as const,
+  }))
+}
+
+function serverSignature(items: TrayNotification[]) {
+  return items
+    .map((item) => `${item.serverId}:${item.read ? 1 : 0}:${item.at}:${item.titleKey}:${item.bodyKey}`)
+    .join('|')
+}
+
+export function setServerNotifications(rows: ServerNotificationRow[]) {
+  const next = mapServerRows(rows)
+  if (serverSignature(next) === serverSignature(serverItems)) return
+  serverItems = next
+  emit(false)
+}
+
 export function markNotificationsRead() {
-  if (items.every((item) => item.read)) return
-  items = items.map((item) => (item.read ? item : { ...item, read: true }))
-  emit()
+  const localDirty = localItems.some((item) => !item.read)
+  const serverDirty = serverItems.some((item) => !item.read)
+  if (!localDirty && !serverDirty) return
+  if (localDirty) {
+    localItems = localItems.map((item) => (item.read ? item : { ...item, read: true }))
+  }
+  if (serverDirty) {
+    serverItems = serverItems.map((item) => (item.read ? item : { ...item, read: true }))
+  }
+  emit(localDirty)
 }
 
 export function dismissNotification(id: string) {
-  const next = items.filter((item) => item.id !== id)
-  if (next.length === items.length) return
-  items = next
-  emit()
+  const fromLocal = localItems.some((item) => item.id === id)
+  const fromServer = serverItems.some((item) => item.id === id)
+  if (!fromLocal && !fromServer) return
+  if (fromLocal) localItems = localItems.filter((item) => item.id !== id)
+  if (fromServer) serverItems = serverItems.filter((item) => item.id !== id)
+  emit(fromLocal)
 }
 
 export function clearNotifications() {
-  if (items.length === 0) return
-  items = []
-  emit()
+  if (localItems.length === 0 && serverItems.length === 0) return
+  localItems = []
+  serverItems = []
+  emit(true)
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import type { ApiOk, CustomFieldDefinition, Party } from '../types'
 import { useFeedback } from '../components/feedback'
 import { PageHeader } from '../components/ui'
@@ -24,6 +25,8 @@ const emptyForm = {
   bank_account_name: '',
   payment_term: '',
   payment_days: '',
+  is_taxable: false,
+  tax_percent: '',
   is_active: true,
 }
 
@@ -131,6 +134,7 @@ export default function Parties({
     setCustomFields({})
     setError('')
     setOpen(true)
+    logMasterForm(menu === 'customers' ? 'customer' : 'supplier', 'create')
   }
 
   function openEdit(item: Party) {
@@ -149,11 +153,14 @@ export default function Parties({
       bank_account_name: item.bank_account_name ?? '',
       payment_term: normalizeTerm(item.payment_term),
       payment_days: item.payment_days != null ? String(item.payment_days) : '',
+      is_taxable: Boolean(item.is_taxable),
+      tax_percent: item.tax_percent != null ? String(item.tax_percent) : '',
       is_active: item.is_active,
     })
     setCustomFields({ ...(item.custom_fields ?? {}) })
     setError('')
     setOpen(true)
+    logMasterForm(menu === 'customers' ? 'customer' : 'supplier', 'edit', item.name)
   }
 
   async function onSubmit(event: FormEvent) {
@@ -175,6 +182,9 @@ export default function Parties({
         bank_account_name: isSupplier ? blank(form.bank_account_name) : undefined,
         payment_term: blank(form.payment_term),
         payment_days: form.payment_days === '' ? null : Number(form.payment_days),
+        is_taxable: isSupplier ? form.is_taxable : undefined,
+        tax_percent:
+          isSupplier && form.is_taxable && form.tax_percent !== '' ? Number(form.tax_percent) : null,
         is_active: form.is_active,
         custom_fields: customFields,
       }
@@ -408,6 +418,33 @@ export default function Parties({
               onChange={(e) => field('payment_days', e.target.value)}
             />
           </label>
+          {isSupplier ? (
+            <>
+              <label className="flex items-center gap-2 text-sm text-fg sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={form.is_taxable}
+                  onChange={(e) => field('is_taxable', e.target.checked)}
+                />
+                {t('supplierTaxable')}
+              </label>
+              {form.is_taxable ? (
+                <label className="text-sm text-muted sm:col-span-2">
+                  {t('supplierTaxPercent')}
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    className="field"
+                    value={form.tax_percent}
+                    onChange={(e) => field('tax_percent', e.target.value)}
+                    required
+                  />
+                </label>
+              ) : null}
+            </>
+          ) : null}
           <label className="text-sm text-muted">
             {t('status')}
             <select
@@ -463,6 +500,17 @@ export default function Parties({
             }
           />
           <ViewField label={t('paymentDays')} value={viewing?.payment_days} />
+          {isSupplier ? (
+            <>
+              <ViewField
+                label={t('supplierTaxable')}
+                value={viewing?.is_taxable ? t('yes') : t('no')}
+              />
+              {viewing?.is_taxable ? (
+                <ViewField label={t('supplierTaxPercent')} value={`${viewing.tax_percent ?? 0}%`} />
+              ) : null}
+            </>
+          ) : null}
           <ViewField label={t('status')} value={viewing?.is_active ? t('active') : t('inactive')} />
         </div>
         {customFieldDefs.length > 0 && viewing ? (

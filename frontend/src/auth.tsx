@@ -16,6 +16,7 @@ import { readWallpaper } from './desktop/wallpaper'
 import type { ApiOk, AuthPayload, MePayload } from './types'
 import { useI18n } from './i18n'
 import { useTheme } from './theme'
+import { useUiSkin } from './uiSkin'
 
 type AuthContextValue = {
   me: MePayload | null
@@ -40,6 +41,7 @@ function PrefsSync() {
   const { me } = useAuth()
   const { theme, setTheme } = useTheme()
   const { lang, setLang } = useI18n()
+  const { setPreference: setUiSkinPreference } = useUiSkin()
 
   useEffect(() => {
     if (!me) {
@@ -51,6 +53,7 @@ function PrefsSync() {
     if (remote) {
       setTheme(remote.theme)
       setLang(remote.lang)
+      setUiSkinPreference(remote.uiSkin ?? 'auto')
       const id = window.setTimeout(() => markPrefsHydrated(), 0)
       return () => window.clearTimeout(id)
     }

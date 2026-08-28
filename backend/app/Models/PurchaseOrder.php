@@ -20,13 +20,20 @@ class PurchaseOrder extends Model
         'purchase_requisition_id',
         'number',
         'client_uuid',
+        'share_token',
         'status',
         'ordered_at',
         'expected_at',
         'subtotal',
+        'tax_percent',
         'tax',
         'total',
         'note',
+        'payment_term',
+        'payment_days',
+        'approved_by',
+        'approved_at',
+        'current_approval_level',
     ];
 
     protected function casts(): array
@@ -35,14 +42,23 @@ class PurchaseOrder extends Model
             'ordered_at' => 'date',
             'expected_at' => 'date',
             'subtotal' => 'integer',
+            'tax_percent' => 'float',
             'tax' => 'integer',
             'total' => 'integer',
+            'payment_days' => 'integer',
+            'approved_at' => 'datetime',
+            'current_approval_level' => 'integer',
         ];
     }
 
     public function items(): HasMany
     {
         return $this->hasMany(PurchaseOrderItem::class);
+    }
+
+    public function approvals(): HasMany
+    {
+        return $this->hasMany(PurchaseOrderApproval::class)->orderBy('level');
     }
 
     public function supplier(): BelongsTo
@@ -60,6 +76,11 @@ class PurchaseOrder extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class);
@@ -68,5 +89,10 @@ class PurchaseOrder extends Model
     public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import { formatRupiah } from '../lib/money'
 import { formatPromotionLabel } from '../lib/promoCalc'
 import type { ApiOk, Category, ProductOption, Promotion, PromotionConfig } from '../types'
@@ -147,6 +148,7 @@ export default function Promotions() {
     resetForm()
     setError('')
     setOpen(true)
+    logMasterForm('promotion', 'create')
   }
 
   function openEdit(item: Promotion) {
@@ -173,6 +175,7 @@ export default function Promotions() {
     setBundlePrice(String(config.bundle_price ?? item.value ?? ''))
     setError('')
     setOpen(true)
+    logMasterForm('promotion', 'edit', item.name)
   }
 
   function buildConfig(): PromotionConfig | null {

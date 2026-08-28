@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import type { ApiOk, ChoiceType } from '../types'
 import { useFeedback } from '../components/feedback'
 import { PageHeader } from '../components/ui'
@@ -57,6 +58,7 @@ export default function ChoiceTypes() {
     setMaxSelect('1')
     setError('')
     setOpen(true)
+    logMasterForm('choicetype', 'create')
   }
 
   function openEdit(item: ChoiceType) {
@@ -67,6 +69,7 @@ export default function ChoiceTypes() {
     setMaxSelect(String(item.max_select))
     setError('')
     setOpen(true)
+    logMasterForm('choicetype', 'edit', item.name)
   }
 
   async function onSubmit(event: FormEvent) {

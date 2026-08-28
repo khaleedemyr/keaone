@@ -18,6 +18,7 @@ class PurchaseOrderItem extends Model
         'qty',
         'qty_received',
         'unit_cost',
+        'discount',
         'total',
         'unit',
         'unit_level',
@@ -32,6 +33,7 @@ class PurchaseOrderItem extends Model
             'qty' => 'integer',
             'qty_received' => 'integer',
             'unit_cost' => 'integer',
+            'discount' => 'integer',
             'total' => 'integer',
             'factor_to_base' => 'integer',
         ];

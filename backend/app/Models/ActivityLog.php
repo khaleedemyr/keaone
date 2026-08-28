@@ -61,6 +61,7 @@ class ActivityLog extends Model
             'path' => $this->path,
             'ip' => $this->ip,
             'status' => $this->status,
+            'meta' => $this->meta,
             'created_at' => $this->created_at?->toIso8601String(),
             'user' => $this->user ? [
                 'id' => $this->user->id,

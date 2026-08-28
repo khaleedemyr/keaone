@@ -42,6 +42,8 @@ class MenuCatalog
             self::menu('purchaserequisitions', self::ACTIONS),
             self::menu('purchaseorders', self::ACTIONS),
             self::menu('goodsreceipts', self::ACTIONS),
+            self::menu('purchasesettings', ['view', 'edit']),
+            self::menu('approvals', ['view', 'edit']),
             self::menu('users', self::ACTIONS),
             self::menu('roles', self::ACTIONS),
             self::menu('company', ['view', 'edit']),

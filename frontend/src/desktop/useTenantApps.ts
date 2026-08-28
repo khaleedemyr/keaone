@@ -43,9 +43,10 @@ export function useTenantApps() {
         : []),
       ...(can('sales') || canAny([...SALES_REPORT_MENUS], 'view') ? (['sales'] as TenantAppId[]) : []),
       ...(me?.modules?.purchase &&
-      canAny(['purchaserequisitions', 'purchaseorders', 'goodsreceipts'], 'view')
+      canAny(['purchaserequisitions', 'purchaseorders', 'goodsreceipts', 'purchasesettings'], 'view')
         ? (['purchase'] as TenantAppId[])
         : []),
+      ...(can('approvals', 'view') ? (['approvals'] as TenantAppId[]) : []),
       ...(canAdmin ? (['admin'] as TenantAppId[]) : []),
       ...(canAny(['settings', 'possettings', 'cafetables']) ? (['settings'] as TenantAppId[]) : []),
     ],
@@ -59,6 +60,7 @@ export function useTenantApps() {
       master: t('appMaster'),
       sales: t('appSales'),
       purchase: t('appPurchase'),
+      approvals: t('appApprovals'),
       admin: t('appAdmin'),
       settings: t('appSettings'),
     }),

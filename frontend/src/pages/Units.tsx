@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import type { ApiOk, Unit } from '../types'
 import { useFeedback } from '../components/feedback'
 import { PageHeader } from '../components/ui'
@@ -53,6 +54,7 @@ export default function Units() {
     setSymbol('')
     setError('')
     setOpen(true)
+    logMasterForm('unit', 'create')
   }
 
   function openEdit(item: Unit) {
@@ -61,6 +63,7 @@ export default function Units() {
     setSymbol(item.symbol ?? '')
     setError('')
     setOpen(true)
+    logMasterForm('unit', 'edit', item.name)
   }
 
   async function onSubmit(event: FormEvent) {

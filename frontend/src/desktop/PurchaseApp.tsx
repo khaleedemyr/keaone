@@ -5,9 +5,10 @@ import { useAuth } from '../auth'
 import { useI18n, type MsgKey } from '../i18n'
 import { AppNavShell } from './AppNavShell'
 
-type Section = 'pr' | 'po' | 'gr' | 'direct'
+type Section = 'pr' | 'po' | 'gr' | 'direct' | 'settings'
 
 const PurchaseDocs = lazy(() => import('../pages/purchase/PurchaseDocs'))
+const PurchaseSettings = lazy(() => import('../pages/purchase/PurchaseSettings'))
 
 export default function PurchaseApp() {
   const { t } = useI18n()
@@ -28,6 +29,9 @@ export default function PurchaseApp() {
     }
     if (flow === 'direct' && can('goodsreceipts', 'view')) {
       items.push({ id: 'direct', label: 'purchaseDirectTitle', menu: 'goodsreceipts' })
+    }
+    if (can('purchasesettings', 'view')) {
+      items.push({ id: 'settings', label: 'navPurchaseSettings', menu: 'purchasesettings' })
     }
     return items
   }, [can, flow])
@@ -51,6 +55,7 @@ export default function PurchaseApp() {
       {current === 'po' ? <PurchaseDocs kind="po" /> : null}
       {current === 'gr' ? <PurchaseDocs kind="gr" /> : null}
       {current === 'direct' ? <PurchaseDocs kind="direct" /> : null}
+      {current === 'settings' ? <PurchaseSettings /> : null}
     </AppNavShell>
   )
 }

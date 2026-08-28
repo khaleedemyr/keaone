@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { api, apiMessage, apiUpload } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import { formatRupiah } from '../lib/money'
 import type { ApiOk, Category, ChoiceType, CustomFieldDefinition, ItemType, Outlet, PriceChannel, Product, ProductImage, ProductOption, SubCategory, Unit } from '../types'
 import { PageEnter } from '../components/motion'
@@ -64,6 +65,22 @@ function newBomRow(): BomDraft {
 
 function coverImage(product: Product): ProductImage | undefined {
   return product.images?.find((image) => image.is_primary) ?? product.images?.[0]
+}
+
+function resolveExistingPrimaryId(
+  existing: ProductImage[],
+  removedIds: number[],
+  primaryPick: PrimaryPick | null,
+): number | null {
+  const removed = new Set(removedIds)
+  const remaining = existing.filter((image) => !removed.has(image.id))
+  if (remaining.length === 0) return null
+
+  if (primaryPick?.kind === 'existing' && !removed.has(primaryPick.id)) {
+    return primaryPick.id
+  }
+
+  return remaining.find((image) => image.is_primary)?.id ?? remaining[0]?.id ?? null
 }
 
 export default function Products() {
@@ -276,6 +293,7 @@ export default function Products() {
     setFormError('')
     setTab('info')
     setOpen(true)
+    logMasterForm('product', 'create')
   }
 
   async function openEdit(product: Product) {
@@ -343,6 +361,8 @@ export default function Products() {
     setFormError('')
     setTab('info')
     setOpen(true)
+    const ref = product.sku ? `${product.name} (${product.sku})` : product.name
+    logMasterForm('product', 'edit', ref)
   }
 
   function onPickImages(event: ChangeEvent<HTMLInputElement>) {
@@ -373,26 +393,32 @@ export default function Products() {
   }
 
   function removeExisting(image: ProductImage) {
-    setExistingImages((current) => current.filter((item) => item.id !== image.id))
+    setExistingImages((current) => {
+      const next = current.filter((item) => item.id !== image.id)
+      setDraftImages((drafts) => {
+        setPrimaryPick((pick) =>
+          pick?.kind === 'existing' && pick.id === image.id ? pickNextPrimary(next, drafts, image.id) : pick,
+        )
+        return drafts
+      })
+      return next
+    })
     setRemovedImageIds((current) => [...current, image.id])
-    setPrimaryPick((current) =>
-      current?.kind === 'existing' && current.id === image.id
-        ? pickNextPrimary(existingImages, draftImages, image.id)
-        : current,
-    )
   }
 
   function removeDraft(key: string) {
     setDraftImages((current) => {
       const found = current.find((item) => item.key === key)
       if (found) URL.revokeObjectURL(found.url)
-      return current.filter((item) => item.key !== key)
+      const next = current.filter((item) => item.key !== key)
+      setExistingImages((existing) => {
+        setPrimaryPick((pick) =>
+          pick?.kind === 'draft' && pick.key === key ? pickNextPrimary(existing, next, undefined, key) : pick,
+        )
+        return existing
+      })
+      return next
     })
-    setPrimaryPick((current) =>
-      current?.kind === 'draft' && current.key === key
-        ? pickNextPrimary(existingImages, draftImages, undefined, key)
-        : current,
-    )
   }
 
   async function onSubmit(event: FormEvent) {
@@ -492,8 +518,12 @@ export default function Products() {
         await apiUpload(`/products/${productId}/images`, body)
       }
 
-      if (primaryPick?.kind === 'existing') {
-        await api.post(`/products/${productId}/images/${primaryPick.id}/primary`)
+      const wantsDraftPrimary = primaryPick?.kind === 'draft' && draftImages.length > 0
+      const primaryExistingId = wantsDraftPrimary
+        ? null
+        : resolveExistingPrimaryId(existingImages, removedImageIds, primaryPick)
+      if (primaryExistingId) {
+        await api.post(`/products/${productId}/images/${primaryExistingId}/primary`)
       }
 
       setOpen(false)
@@ -785,7 +815,10 @@ export default function Products() {
         title={editing ? t('editProduct') : t('newProduct')}
         error={formError}
         saving={saving}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false)
+          resetImages()
+        }}
         onSubmit={(e) => void onSubmit(e)}
         onInvalid={(event) => {
           const field = event.target as HTMLElement
@@ -1285,7 +1318,7 @@ export default function Products() {
               ? () => {
                   const product = viewing
                   setViewing(null)
-                  applyEdit(product)
+                  void openEdit(product)
                 }
               : undefined
           }

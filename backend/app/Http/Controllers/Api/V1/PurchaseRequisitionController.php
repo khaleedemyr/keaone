@@ -15,20 +15,27 @@ class PurchaseRequisitionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $this->ensureModule('purchase');
-        $this->ensureCan('purchaserequisitions', 'view');
+        if ($request->boolean('for_po')) {
+            $this->ensureCanAny([['purchaseorders', 'create'], ['purchaseorders', 'view'], ['purchaserequisitions', 'view']]);
+        } else {
+            $this->ensureCan('purchaserequisitions', 'view');
+        }
 
         $query = PurchaseRequisition::query()
-            ->with(['user:id,name', 'warehouse:id,name'])
+            ->with(['user:id,name', 'outlet:id,name', 'warehouse:id,name', 'approvals.user:id,name', 'orders:id,purchase_requisition_id'])
             ->orderByDesc('id');
 
-        if ($status = $request->string('status')->toString()) {
+        if ($request->boolean('for_po')) {
+            $query->where('status', 'approved')->whereDoesntHave('orders');
+        } elseif ($status = $request->string('status')->toString()) {
             $query->where('status', $status);
         }
+
         if ($search = $request->string('search')->toString()) {
             $query->where('number', 'like', "%{$search}%");
         }
 
-        $page = $query->paginate($this->perPage($request, 20));
+        $page = $query->paginate($this->perPage($request, $request->boolean('for_po') ? 50 : 20));
 
         return $this->ok(
             $page->getCollection()->map(fn (PurchaseRequisition $pr) => $this->purchases->serializePr($pr))->values(),
@@ -53,6 +60,8 @@ class PurchaseRequisitionController extends Controller
             'items.*.unit' => ['nullable', 'string', 'max:40'],
             'items.*.unit_level' => ['nullable', 'string', 'in:small,medium,large'],
             'items.*.note' => ['nullable', 'string'],
+            'approvals' => ['sometimes', 'array'],
+            'approvals.*.user_id' => ['required_with:approvals', 'integer'],
         ]);
 
         $pr = $this->purchases->createRequisition($data, $request->user());
@@ -83,6 +92,8 @@ class PurchaseRequisitionController extends Controller
             'items.*.unit' => ['nullable', 'string', 'max:40'],
             'items.*.unit_level' => ['nullable', 'string', 'in:small,medium,large'],
             'items.*.note' => ['nullable', 'string'],
+            'approvals' => ['sometimes', 'array'],
+            'approvals.*.user_id' => ['required_with:approvals', 'integer'],
         ]);
 
         $pr = $this->purchases->updateRequisition($purchaseRequisition, $data);
@@ -101,15 +112,23 @@ class PurchaseRequisitionController extends Controller
     public function approve(Request $request, PurchaseRequisition $purchaseRequisition): JsonResponse
     {
         $this->ensureModule('purchase');
-        $this->ensureCan('purchaserequisitions', 'edit');
+        $this->ensureCanAny([['purchaserequisitions', 'edit'], ['approvals', 'edit']]);
 
-        return $this->ok($this->purchases->serializePr($this->purchases->approveRequisition($purchaseRequisition, $request->user())));
+        $data = $request->validate([
+            'items' => ['sometimes', 'array', 'min:1'],
+            'items.*.id' => ['required_with:items', 'integer'],
+            'items.*.qty' => ['required_with:items', 'integer', 'min:1'],
+        ]);
+
+        return $this->ok($this->purchases->serializePr(
+            $this->purchases->approveRequisition($purchaseRequisition, $request->user(), $data),
+        ));
     }
 
     public function reject(Request $request, PurchaseRequisition $purchaseRequisition): JsonResponse
     {
         $this->ensureModule('purchase');
-        $this->ensureCan('purchaserequisitions', 'edit');
+        $this->ensureCanAny([['purchaserequisitions', 'edit'], ['approvals', 'edit']]);
 
         return $this->ok($this->purchases->serializePr($this->purchases->rejectRequisition($purchaseRequisition, $request->user())));
     }
@@ -120,5 +139,19 @@ class PurchaseRequisitionController extends Controller
         $this->ensureCanAny([['purchaserequisitions', 'edit'], ['purchaserequisitions', 'delete']]);
 
         return $this->ok($this->purchases->serializePr($this->purchases->cancelRequisition($purchaseRequisition)));
+    }
+
+    public function share(PurchaseRequisition $purchaseRequisition): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaserequisitions', 'view');
+
+        abort_if(! $this->purchases->canSharePr($purchaseRequisition), 422, 'PR belum bisa dibagikan.');
+
+        $token = $this->purchases->ensurePrShareToken($purchaseRequisition);
+
+        return $this->ok([
+            'share_token' => $token,
+        ]);
     }
 }

@@ -139,12 +139,15 @@ export type Settings = {
   pos_mode?: PosMode
   purchase_flow?: 'strict_pr_po_gr' | 'po_gr' | 'direct'
   purchase_update_cost?: boolean
+  pr_need_approval?: boolean
+  po_need_approval?: boolean
   receipt_layout?: import('./lib/receiptLayout').ReceiptLayout
 }
 
 export type UserPreferences = {
   theme: 'dark' | 'light'
   lang: Lang
+  uiSkin?: 'auto' | 'desktop' | 'erp'
   wallpaper: {
     kind: 'preset' | 'image'
     id: string
@@ -203,6 +206,8 @@ export type Category = {
   name: string
   sort_order: number
   is_active: boolean
+  show_pos?: boolean
+  is_raw_material?: boolean
 }
 
 export type Unit = {
@@ -396,6 +401,8 @@ export type Party = {
   bank_account_name: string | null
   payment_term: string | null
   payment_days: number | null
+  is_taxable?: boolean
+  tax_percent?: number | null
   custom_fields?: Record<string, string | number | boolean | null> | null
   is_active: boolean
 }
@@ -718,6 +725,16 @@ export type ActivityLogRow = {
   path: string | null
   ip: string | null
   status: number | null
+  meta?: {
+    changes?: Array<{
+      field: string
+      label: string
+      from: string | number | boolean | null
+      to: string | number | boolean | null
+    }>
+    keys?: string[]
+    [key: string]: unknown
+  } | null
   created_at: string | null
   user: { id: number; name: string; email: string } | null
   company: { id: number; name: string } | null

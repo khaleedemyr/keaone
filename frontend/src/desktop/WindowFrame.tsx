@@ -110,6 +110,47 @@ export function WindowFrame({
           </button>
         </div>
         <div className="os-title">{title}</div>
+        <div className="os-caption">
+          <button
+            type="button"
+            className="os-caption-btn"
+            title="Minimize"
+            aria-label="Minimize"
+            onClick={() => desktop.minimizeApp(id)}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden>
+              <path d="M2 6h8" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="os-caption-btn"
+            title={maximized ? 'Restore' : 'Maximize'}
+            aria-label={maximized ? 'Restore' : 'Maximize'}
+            onClick={() => desktop.toggleMaximize(id)}
+          >
+            {maximized ? (
+              <svg viewBox="0 0 12 12" aria-hidden>
+                <path d="M3.5 4.5h5v5h-5zM4.5 3h5v1.2M4.5 3V4" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 12 12" aria-hidden>
+                <rect x="2.5" y="2.5" width="7" height="7" rx="0.5" />
+              </svg>
+            )}
+          </button>
+          <button
+            type="button"
+            className="os-caption-btn os-caption-close"
+            title="Close"
+            aria-label="Close"
+            onClick={() => desktop.closeApp(id)}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden>
+              <path d="M3 3l6 6M9 3L3 9" />
+            </svg>
+          </button>
+        </div>
       </div>
       <div className="os-body">{children}</div>
       {!maximized ? (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import { formatRupiah } from '../lib/money'
 import type { ApiOk, ChoiceOption, ChoiceType } from '../types'
 import { useFeedback } from '../components/feedback'
@@ -64,6 +65,7 @@ export default function Choices() {
     setExtraPrice('0')
     setError('')
     setOpen(true)
+    logMasterForm('choice', 'create')
   }
 
   function openEdit(item: ChoiceOption) {
@@ -73,6 +75,7 @@ export default function Choices() {
     setExtraPrice(String(item.extra_price ?? 0))
     setError('')
     setOpen(true)
+    logMasterForm('choice', 'edit', item.name)
   }
 
   async function onSubmit(event: FormEvent) {

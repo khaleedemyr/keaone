@@ -48,6 +48,15 @@ export function AppGlyph({ id, className = 'h-7 w-7' }: { id: AppId; className?:
       </svg>
     )
   }
+  if (id === 'approvals') {
+    return (
+      <svg {...common}>
+        <path d="M9 11 11 13l4-4" />
+        <path d="M4 6h16v14H4z" />
+        <path d="M8 6V4h8v2" />
+      </svg>
+    )
+  }
   if (id === 'admin') {
     return (
       <svg {...common}>
@@ -101,6 +110,7 @@ export const APP_TILE: Record<AppId, string> = {
   master: 'from-violet to-indigo-400',
   sales: 'from-gold to-amber-400',
   purchase: 'from-emerald-300 to-teal-500',
+  approvals: 'from-sky-300 to-blue-500',
   admin: 'from-rose-400 to-orange-400',
   settings: 'from-slate-300 to-slate-500',
   overview: 'from-cyan-300 to-violet',

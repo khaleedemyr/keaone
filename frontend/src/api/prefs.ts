@@ -7,6 +7,7 @@ import {
   readDesktopPrefs,
   type DesktopPreferences,
 } from '../desktop/desktopPrefs'
+import { parseUiSkinPreference, readUiSkinPreference } from '../uiSkin'
 import { DEFAULT_WALLPAPER, normalizeWallpaper, type Wallpaper } from '../desktop/wallpaper'
 
 let hydrated = false
@@ -51,6 +52,7 @@ export function devicePrefsSnapshot(
   return {
     theme,
     lang,
+    uiSkin: readUiSkinPreference(),
     wallpaper: normalizeWallpaper(wallpaper),
     desktop: normalizeDesktopPrefs(desktop),
   }
@@ -61,6 +63,7 @@ export function parseRemotePrefs(raw: UserPreferences | null | undefined): UserP
   return {
     theme: raw.theme === 'light' ? 'light' : 'dark',
     lang: parseLang(raw.lang),
+    uiSkin: parseUiSkinPreference(raw.uiSkin),
     wallpaper: normalizeWallpaper(raw.wallpaper ?? DEFAULT_WALLPAPER),
     desktop: normalizeDesktopPrefs(raw.desktop ?? DEFAULT_DESKTOP_PREFS),
   }

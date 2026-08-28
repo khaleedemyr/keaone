@@ -70,6 +70,7 @@ class User extends Authenticatable
         return [
             'theme' => 'dark',
             'lang' => 'id',
+            'uiSkin' => 'auto',
             'wallpaper' => [
                 'kind' => 'preset',
                 'id' => 'aurora',
@@ -112,6 +113,9 @@ class User extends Authenticatable
         $normalized = [
             'theme' => in_array($theme, ['dark', 'light'], true) ? $theme : $defaults['theme'],
             'lang' => LangCatalog::isValid($lang) ? $lang : $defaults['lang'],
+            'uiSkin' => in_array($saved['uiSkin'] ?? null, ['auto', 'desktop', 'erp'], true)
+                ? $saved['uiSkin']
+                : $defaults['uiSkin'],
             'wallpaper' => [
                 'kind' => $kind,
                 'id' => $id,

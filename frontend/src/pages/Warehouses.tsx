@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import type { ApiOk, Outlet, Warehouse } from '../types'
 import { useFeedback } from '../components/feedback'
 import { PageHeader } from '../components/ui'
@@ -63,6 +64,7 @@ export default function Warehouses() {
     setOutletId('')
     setError('')
     setOpen(true)
+    logMasterForm('warehouse', 'create')
   }
 
   function openEdit(item: Warehouse) {
@@ -72,6 +74,7 @@ export default function Warehouses() {
     setOutletId(item.outlet_id ? String(item.outlet_id) : '')
     setError('')
     setOpen(true)
+    logMasterForm('warehouse', 'edit', item.name)
   }
 
   async function onSubmit(event: FormEvent) {

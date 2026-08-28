@@ -37,6 +37,7 @@ const MENU_LABEL: Record<string, MsgKey> = {
   purchaserequisitions: 'menuPurchaseRequisitions',
   purchaseorders: 'menuPurchaseOrders',
   goodsreceipts: 'menuGoodsReceipts',
+  approvals: 'menuApprovals',
   users: 'menuUsers',
   roles: 'menuRoles',
   company: 'menuCompany',
@@ -97,6 +98,13 @@ export default function ActivityLogs({
 
   const menus = Object.keys(MENU_LABEL)
 
+  function formatChangeValue(value: string | number | boolean | null | undefined) {
+    if (value === null || value === undefined || value === '') return '—'
+    if (typeof value === 'boolean') return value ? t('yes') : t('no')
+    if (typeof value === 'number') return value.toLocaleString(locale)
+    return String(value)
+  }
+
   return (
     <div>
       <PageHeader
@@ -155,7 +163,22 @@ export default function ActivityLogs({
                 {showCompany ? (
                   <td className="px-4 py-3 text-muted">{row.company?.name ?? '—'}</td>
                 ) : null}
-                <td className="px-4 py-3">{row.summary}</td>
+                <td className="px-4 py-3">
+                  <div>{row.summary}</div>
+                  {row.target && !row.summary.includes(row.target) ? (
+                    <div className="mt-0.5 text-xs text-muted">{row.target}</div>
+                  ) : null}
+                  {row.meta?.changes && row.meta.changes.length > 0 ? (
+                    <ul className="mt-1.5 space-y-0.5 text-xs text-muted">
+                      {row.meta.changes.map((change) => (
+                        <li key={`${row.id}-${change.field}`}>
+                          <span className="font-medium text-fg">{change.label}:</span>{' '}
+                          {formatChangeValue(change.from)} → {formatChangeValue(change.to)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </td>
                 <td className="px-4 py-3 text-muted">
                   {row.menu_key && MENU_LABEL[row.menu_key] ? t(MENU_LABEL[row.menu_key]) : row.menu_key || '—'}
                 </td>

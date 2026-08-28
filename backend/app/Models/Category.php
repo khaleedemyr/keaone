@@ -17,6 +17,8 @@ class Category extends Model
         'name',
         'sort_order',
         'is_active',
+        'show_pos',
+        'is_raw_material',
     ];
 
     protected function casts(): array
@@ -24,6 +26,8 @@ class Category extends Model
         return [
             'sort_order' => 'integer',
             'is_active' => 'boolean',
+            'show_pos' => 'boolean',
+            'is_raw_material' => 'boolean',
         ];
     }
 

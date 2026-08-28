@@ -61,11 +61,13 @@ class CompanyController extends Controller
             'settings.pos_mode' => ['sometimes', Rule::in(['retail', 'restaurant', 'cafe'])],
             'settings.purchase_flow' => ['sometimes', Rule::in(['strict_pr_po_gr', 'po_gr', 'direct'])],
             'settings.purchase_update_cost' => ['sometimes', 'boolean'],
+            'settings.pr_need_approval' => ['sometimes', 'boolean'],
+            'settings.po_need_approval' => ['sometimes', 'boolean'],
         ]);
 
         $settingsInput = $data['settings'] ?? [];
         $posKeys = ['pos_mode'];
-        $purchaseKeys = ['purchase_flow', 'purchase_update_cost'];
+        $purchaseKeys = ['purchase_flow', 'purchase_update_cost', 'pr_need_approval', 'po_need_approval'];
         $incoming = array_keys($settingsInput);
         $hasPos = array_intersect($incoming, $posKeys) !== [];
         $hasPurchase = array_intersect($incoming, $purchaseKeys) !== [];
@@ -78,7 +80,7 @@ class CompanyController extends Controller
             $this->ensureCan('possettings', 'edit');
         }
         if ($hasPurchase) {
-            $this->ensureCanAny(['ops', 'settings']);
+            $this->ensureCanAny(['purchasesettings', 'ops', 'settings']);
         }
         if ($hasOps) {
             $this->ensureCan('ops', 'edit');

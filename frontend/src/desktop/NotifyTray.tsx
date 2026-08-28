@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { IconCheck, IconClose, IconInfo, IconWarn } from '../components/icons'
-import { useI18n } from '../i18n'
+import { useI18n, type MsgKey } from '../i18n'
 import {
-  clearNotifications,
   dismissNotification,
   getNotifications,
-  markNotificationsRead,
   subscribeNotifications,
   type NotifyTone,
   type TrayNotification,
 } from './notifyStore'
 import { onOsFlyout, openOsFlyout } from './osFlyout'
+import { useDesktop } from './DesktopContext'
+import {
+  clearAllNotifications,
+  dismissServerNotification,
+  markServerNotificationsRead,
+  useServerNotifications,
+} from './useServerNotifications'
 
 function IconBell({ className = 'h-4 w-4' }: { className?: string }) {
   return (
@@ -45,15 +50,17 @@ function formatWhen(at: number, locale: string, justNow: string) {
 
 export function NotifyTray() {
   const { t, locale } = useI18n()
+  const desktop = useDesktop()
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  useServerNotifications(true)
   const items = useSyncExternalStore(subscribeNotifications, getNotifications, getNotifications)
   const unread = items.filter((item) => !item.read).length
 
   useEffect(() => {
     if (!open) return
     openOsFlyout('notify')
-    markNotificationsRead()
+    void markServerNotificationsRead()
   }, [open])
 
   useEffect(() => onOsFlyout('notify', () => setOpen(false)), [])
@@ -76,6 +83,23 @@ export function NotifyTray() {
 
   const badge = unread > 9 ? '9+' : String(unread)
 
+  function resolveText(item: TrayNotification) {
+    if (item.titleKey || item.bodyKey) {
+      const title = item.titleKey ? t(item.titleKey as MsgKey, item.params) : ''
+      const body = item.bodyKey ? t(item.bodyKey as MsgKey, item.params) : item.message ?? ''
+      return { title, body }
+    }
+    return { title: '', body: item.message ?? '' }
+  }
+
+  function onOpenItem(item: TrayNotification) {
+    const app = item.meta && typeof item.meta.app === 'string' ? item.meta.app : null
+    if (app === 'approvals' || app === 'purchase' || app === 'insight' || app === 'pos' || app === 'master' || app === 'sales' || app === 'admin' || app === 'settings') {
+      desktop.openApp(app)
+      setOpen(false)
+    }
+  }
+
   return (
     <div ref={rootRef} className="relative">
       <button
@@ -95,7 +119,7 @@ export function NotifyTray() {
           <div className="flex items-center justify-between gap-2">
             <div className="text-sm font-semibold text-fg">{t('notifTitle')}</div>
             {items.length > 0 ? (
-              <button type="button" className="os-notify-clear" onClick={() => clearNotifications()}>
+              <button type="button" className="os-notify-clear" onClick={() => void clearAllNotifications()}>
                 {t('notifClear')}
               </button>
             ) : null}
@@ -105,14 +129,24 @@ export function NotifyTray() {
             <p className="os-notify-empty">{t('notifEmpty')}</p>
           ) : (
             <div className="os-notify-list">
-              {items.map((item) => (
-                <NotifyCard
-                  key={item.id}
-                  item={item}
-                  when={formatWhen(item.at, locale, t('notifJustNow'))}
-                  closeLabel={t('close')}
-                />
-              ))}
+              {items.map((item) => {
+                const text = resolveText(item)
+                return (
+                  <NotifyCard
+                    key={item.id}
+                    item={item}
+                    title={text.title}
+                    body={text.body}
+                    when={formatWhen(item.at, locale, t('notifJustNow'))}
+                    closeLabel={t('close')}
+                    onOpen={() => onOpenItem(item)}
+                    onDismiss={() => {
+                      dismissNotification(item.id)
+                      if (item.serverId) void dismissServerNotification(item.serverId)
+                    }}
+                  />
+                )
+              })}
             </div>
           )}
         </div>
@@ -123,29 +157,39 @@ export function NotifyTray() {
 
 function NotifyCard({
   item,
+  title,
+  body,
   when,
   closeLabel,
+  onOpen,
+  onDismiss,
 }: {
   item: TrayNotification
+  title: string
+  body: string
   when: string
   closeLabel: string
+  onOpen: () => void
+  onDismiss: () => void
 }) {
   const Icon = toneIcon[item.tone] ?? IconInfo
+  const clickable = Boolean(item.meta && typeof item.meta.app === 'string')
   return (
     <article className={`os-notify-card is-${item.tone}${item.read ? '' : ' is-unread'}`}>
       <span className="os-notify-icon">
         <Icon className="h-4 w-4" />
       </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] leading-snug text-fg">{item.message}</p>
-        <p className="mt-1 text-[10px] text-muted">{when}</p>
-      </div>
       <button
         type="button"
-        className="os-notify-dismiss"
-        aria-label={closeLabel}
-        onClick={() => dismissNotification(item.id)}
+        className={`min-w-0 flex-1 text-left ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
+        onClick={clickable ? onOpen : undefined}
+        disabled={!clickable}
       >
+        {title ? <p className="text-[12.5px] font-medium leading-snug text-fg">{title}</p> : null}
+        <p className={`text-[12.5px] leading-snug text-fg${title ? ' mt-0.5 text-muted' : ''}`}>{body}</p>
+        <p className="mt-1 text-[10px] text-muted">{when}</p>
+      </button>
+      <button type="button" className="os-notify-dismiss" aria-label={closeLabel} onClick={onDismiss}>
         <IconClose className="h-3.5 w-3.5" />
       </button>
     </article>

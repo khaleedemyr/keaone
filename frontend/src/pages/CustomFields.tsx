@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import type { ApiOk, CustomFieldDefinition, CustomFieldEntity, CustomFieldType } from '../types'
 import { useFeedback } from '../components/feedback'
 import { PageHeader } from '../components/ui'
@@ -68,6 +69,7 @@ export default function CustomFields() {
     setSortOrder('0')
     setError('')
     setOpen(true)
+    logMasterForm('customfield', 'create')
   }
 
   function openEdit(item: CustomFieldDefinition) {
@@ -81,6 +83,7 @@ export default function CustomFields() {
     setSortOrder(String(item.sort_order ?? 0))
     setError('')
     setOpen(true)
+    logMasterForm('customfield', 'edit', item.label)
   }
 
   async function onSubmit(event: FormEvent) {

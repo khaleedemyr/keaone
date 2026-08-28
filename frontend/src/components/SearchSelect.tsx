@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, Fragment } from 'react'
 import type { KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n } from '../i18n'
@@ -7,6 +7,7 @@ export type SearchSelectOption = {
   value: string
   label: string
   keywords?: string
+  pinned?: boolean
 }
 
 export function SearchSelect({
@@ -18,6 +19,10 @@ export function SearchSelect({
   allowEmpty = false,
   emptyLabel = '-',
   disabled = false,
+  onCommit,
+  className = '',
+  autoFocus = false,
+  pinnedSectionLabel,
 }: {
   value: string
   onChange: (value: string) => void
@@ -27,6 +32,10 @@ export function SearchSelect({
   allowEmpty?: boolean
   emptyLabel?: string
   disabled?: boolean
+  onCommit?: (value: string) => void
+  className?: string
+  autoFocus?: boolean
+  pinnedSectionLabel?: string
 }) {
   const { t } = useI18n()
   const listId = useId()
@@ -47,10 +56,16 @@ export function SearchSelect({
       const hay = `${item.label} ${item.keywords ?? ''}`.toLowerCase()
       return hay.includes(q)
     })
+    const sorted = [...rows].sort((a, b) => {
+      const aPin = a.pinned ? 0 : 1
+      const bPin = b.pinned ? 0 : 1
+      if (aPin !== bPin) return aPin - bPin
+      return a.label.localeCompare(b.label)
+    })
     if (allowEmpty && (!q || emptyLabel.toLowerCase().includes(q))) {
-      return [{ value: '', label: emptyLabel }, ...rows]
+      return [{ value: '', label: emptyLabel }, ...sorted]
     }
-    return rows
+    return sorted
   }, [allowEmpty, emptyLabel, options, query])
 
   function placeMenu() {
@@ -98,6 +113,7 @@ export function SearchSelect({
     onChange(next)
     setOpen(false)
     setQuery('')
+    onCommit?.(next)
   }
 
   function onKey(event: KeyboardEvent) {
@@ -131,7 +147,7 @@ export function SearchSelect({
   }
 
   return (
-    <div ref={wrapRef} className="relative mt-1.5">
+    <div ref={wrapRef} className={`relative ${className.includes('!mt-0') ? '' : 'mt-1.5'} ${className}`}>
       <input
         tabIndex={-1}
         required={required}
@@ -143,6 +159,7 @@ export function SearchSelect({
       <button
         type="button"
         disabled={disabled}
+        autoFocus={autoFocus}
         className={`field !mt-0 flex w-full items-center justify-between gap-2 text-left ${value ? 'text-fg' : 'text-muted'}`}
         aria-expanded={open}
         aria-controls={listId}
@@ -187,19 +204,38 @@ export function SearchSelect({
                 {filtered.length === 0 ? (
                   <div className="px-3 py-2 text-sm text-muted">{t('noSearchResults')}</div>
                 ) : (
-                  filtered.map((item, index) => (
-                    <button
-                      key={`${item.value || 'empty'}-${index}`}
-                      type="button"
-                      className={`block w-full truncate px-3 py-2 text-left text-sm ${
-                        index === active ? 'bg-fill text-mint' : 'text-fg hover:bg-fill'
-                      }`}
-                      onMouseEnter={() => setActive(index)}
-                      onClick={() => pick(item.value)}
-                    >
-                      {item.label}
-                    </button>
-                  ))
+                  filtered.map((item, index) => {
+                    const showPinnedHeader =
+                      Boolean(pinnedSectionLabel) &&
+                      !query.trim() &&
+                      item.pinned &&
+                      (index === 0 || !filtered[index - 1]?.pinned)
+                    const showDivider =
+                      !query.trim() &&
+                      !item.pinned &&
+                      index > 0 &&
+                      Boolean(filtered[index - 1]?.pinned)
+                    return (
+                      <Fragment key={`${item.value || 'empty'}-${index}`}>
+                        {showPinnedHeader ? (
+                          <div className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
+                            {pinnedSectionLabel}
+                          </div>
+                        ) : null}
+                        {showDivider ? <div className="my-1 border-t border-line" /> : null}
+                        <button
+                          type="button"
+                          className={`block w-full truncate px-3 py-2 text-left text-sm ${
+                            index === active ? 'bg-fill text-mint' : 'text-fg hover:bg-fill'
+                          }`}
+                          onMouseEnter={() => setActive(index)}
+                          onClick={() => pick(item.value)}
+                        >
+                          {item.pinned && !query.trim() ? `★ ${item.label}` : item.label}
+                        </button>
+                      </Fragment>
+                    )
+                  })
                 )}
               </div>
             </div>,

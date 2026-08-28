@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import type { ApiOk, Category } from '../types'
 import { useFeedback } from '../components/feedback'
 import { PageHeader } from '../components/ui'
@@ -16,6 +17,8 @@ export default function Categories() {
   const list = useListQuery()
   const [items, setItems] = useState<Category[]>([])
   const [name, setName] = useState('')
+  const [showPos, setShowPos] = useState(true)
+  const [rawMaterial, setRawMaterial] = useState(false)
   const [editing, setEditing] = useState<Category | null>(null)
   const [viewing, setViewing] = useState<Category | null>(null)
   const [open, setOpen] = useState(false)
@@ -49,24 +52,35 @@ export default function Categories() {
   function openCreate() {
     setEditing(null)
     setName('')
+    setShowPos(true)
+    setRawMaterial(false)
     setError('')
     setOpen(true)
+    logMasterForm('category', 'create')
   }
 
   function openEdit(item: Category) {
     setEditing(item)
     setName(item.name)
+    setShowPos(item.show_pos ?? true)
+    setRawMaterial(item.is_raw_material ?? false)
     setError('')
     setOpen(true)
+    logMasterForm('category', 'edit', item.name)
   }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
     setSaving(true)
     setError('')
+    const payload = {
+      name,
+      show_pos: showPos,
+      is_raw_material: rawMaterial,
+    }
     try {
-      if (editing) await api.put(`/categories/${editing.id}`, { name })
-      else await api.post('/categories', { name })
+      if (editing) await api.put(`/categories/${editing.id}`, payload)
+      else await api.post('/categories', payload)
       setOpen(false)
       await load()
       feedback.success(t('saved'))
@@ -130,6 +144,8 @@ export default function Categories() {
           <thead className="text-muted">
             <tr>
               <th className="px-4 py-3 font-medium">{t('name')}</th>
+              <th className="px-4 py-3 font-medium">{t('categoryShowPos')}</th>
+              <th className="px-4 py-3 font-medium">{t('categoryRawMaterial')}</th>
               <th className="px-4 py-3 font-medium">{t('status')}</th>
               {showActions ? <th className="px-4 py-3 font-medium"></th> : null}
             </tr>
@@ -140,35 +156,37 @@ export default function Categories() {
                 <td className="px-4 py-3">
                   <MasterNameButton onClick={() => setViewing(item)}>{item.name}</MasterNameButton>
                 </td>
+                <td className="px-4 py-3 text-muted">{item.show_pos ?? true ? t('yes') : t('no')}</td>
+                <td className="px-4 py-3 text-muted">{item.is_raw_material ?? false ? t('yes') : t('no')}</td>
                 <td className="px-4 py-3">
                   <span className={item.is_active ? 'text-mint' : 'text-rose-300'}>
                     {item.is_active ? t('active') : t('inactive')}
                   </span>
                 </td>
                 {showActions ? (
-                <td className="px-4 py-3 text-right">
-                  {canEdit ? (
-                    <button type="button" className="mr-3 text-mint" onClick={() => openEdit(item)}>
-                      {t('edit')}
-                    </button>
-                  ) : null}
-                  {item.is_active && canDelete ? (
-                    <button type="button" className="text-rose-300" onClick={() => void remove(item)}>
-                      {t('delete')}
-                    </button>
-                  ) : null}
-                  {!item.is_active && canEdit ? (
-                    <button type="button" className="text-mint" onClick={() => void activate(item)}>
-                      {t('activate')}
-                    </button>
-                  ) : null}
-                </td>
+                  <td className="px-4 py-3 text-right">
+                    {canEdit ? (
+                      <button type="button" className="mr-3 text-mint" onClick={() => openEdit(item)}>
+                        {t('edit')}
+                      </button>
+                    ) : null}
+                    {item.is_active && canDelete ? (
+                      <button type="button" className="text-rose-300" onClick={() => void remove(item)}>
+                        {t('delete')}
+                      </button>
+                    ) : null}
+                    {!item.is_active && canEdit ? (
+                      <button type="button" className="text-mint" onClick={() => void activate(item)}>
+                        {t('activate')}
+                      </button>
+                    ) : null}
+                  </td>
                 ) : null}
               </tr>
             ))}
             {items.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-center text-muted" colSpan={showActions ? 3 : 2}>
+                <td className="px-4 py-8 text-center text-muted" colSpan={showActions ? 5 : 4}>
                   {t('emptyMaster')}
                 </td>
               </tr>
@@ -191,6 +209,20 @@ export default function Categories() {
           {t('name')}
           <input required className="field" value={name} onChange={(e) => setName(e.target.value)} />
         </label>
+        <label className="flex items-center gap-2 text-sm text-muted">
+          <input type="checkbox" checked={showPos} onChange={(e) => setShowPos(e.target.checked)} />
+          <span>
+            <span className="text-fg">{t('categoryShowPos')}</span>
+            <span className="mt-0.5 block text-xs">{t('categoryShowPosHint')}</span>
+          </span>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted">
+          <input type="checkbox" checked={rawMaterial} onChange={(e) => setRawMaterial(e.target.checked)} />
+          <span>
+            <span className="text-fg">{t('categoryRawMaterial')}</span>
+            <span className="mt-0.5 block text-xs">{t('categoryRawMaterialHint')}</span>
+          </span>
+        </label>
       </MasterModal>
 
       <MasterViewModal
@@ -207,8 +239,14 @@ export default function Categories() {
             : undefined
         }
       >
-        <ViewField label={t('name')} value={viewing?.name} />
-        <ViewField label={t('status')} value={viewing?.is_active ? t('active') : t('inactive')} />
+        {viewing ? (
+          <>
+            <ViewField label={t('name')} value={viewing.name} />
+            <ViewField label={t('categoryShowPos')} value={viewing.show_pos ?? true ? t('yes') : t('no')} />
+            <ViewField label={t('categoryRawMaterial')} value={viewing.is_raw_material ?? false ? t('yes') : t('no')} />
+            <ViewField label={t('status')} value={viewing.is_active ? t('active') : t('inactive')} />
+          </>
+        ) : null}
       </MasterViewModal>
     </div>
   )

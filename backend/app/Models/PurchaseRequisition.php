@@ -18,11 +18,13 @@ class PurchaseRequisition extends Model
         'user_id',
         'number',
         'client_uuid',
+        'share_token',
         'status',
         'needed_at',
         'note',
         'approved_by',
         'approved_at',
+        'current_approval_level',
     ];
 
     protected function casts(): array
@@ -30,12 +32,23 @@ class PurchaseRequisition extends Model
         return [
             'needed_at' => 'date',
             'approved_at' => 'datetime',
+            'current_approval_level' => 'integer',
         ];
     }
 
     public function items(): HasMany
     {
         return $this->hasMany(PurchaseRequisitionItem::class);
+    }
+
+    public function approvals(): HasMany
+    {
+        return $this->hasMany(PurchaseRequisitionApproval::class)->orderBy('level');
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(PurchaseOrder::class);
     }
 
     public function user(): BelongsTo
@@ -56,5 +69,10 @@ class PurchaseRequisition extends Model
     public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 }

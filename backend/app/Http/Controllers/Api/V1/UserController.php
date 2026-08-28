@@ -23,7 +23,16 @@ class UserController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureCan('users', 'view');
+        if ($request->boolean('for_select')) {
+            $this->ensureCanAny([
+                'users',
+                'purchaserequisitions',
+                'purchaseorders',
+                'goodsreceipts',
+            ]);
+        } else {
+            $this->ensureCan('users', 'view');
+        }
 
         $query = CompanyUser::query()
             ->where('company_id', CurrentCompany::id())

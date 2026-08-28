@@ -134,6 +134,7 @@ class MeController extends Controller
         $data = $request->validate([
             'theme' => ['sometimes', Rule::in(['dark', 'light'])],
             'lang' => ['sometimes', Rule::in(LangCatalog::ALL)],
+            'uiSkin' => ['sometimes', Rule::in(['auto', 'desktop', 'erp'])],
             'wallpaper' => ['sometimes', 'array'],
             'wallpaper.kind' => ['required_with:wallpaper', Rule::in(['preset', 'image'])],
             'wallpaper.id' => ['required_with:wallpaper', 'string', 'max:40'],
@@ -170,6 +171,9 @@ class MeController extends Controller
         }
         if (isset($data['lang'])) {
             $current['lang'] = $data['lang'];
+        }
+        if (isset($data['uiSkin'])) {
+            $current['uiSkin'] = $data['uiSkin'];
         }
         if (isset($data['wallpaper'])) {
             $kind = $data['wallpaper']['kind'];

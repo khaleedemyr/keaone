@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\ActivityLogController;
+use App\Http\Controllers\Api\V1\ApprovalController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\CalendarController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Api\V1\DiningTableController;
 use App\Http\Controllers\Api\V1\ItemTypeController;
 use App\Http\Controllers\Api\V1\MarketingBlogController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OutletController;
 use App\Http\Controllers\Api\V1\PlatformBlogController;
 use App\Http\Controllers\Api\V1\PlatformSupportController;
@@ -31,6 +33,8 @@ use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SaleController;
 use App\Http\Controllers\Api\V1\GoodsReceiptController;
+use App\Http\Controllers\Api\V1\PublicPurchaseOrderController;
+use App\Http\Controllers\Api\V1\PublicPurchaseRequisitionController;
 use App\Http\Controllers\Api\V1\PurchaseOrderController;
 use App\Http\Controllers\Api\V1\PurchaseRequisitionController;
 use App\Http\Controllers\Api\V1\StockController;
@@ -51,6 +55,8 @@ Route::prefix('v1')->group(function () {
     Route::get('catalog', [CatalogController::class, 'show']);
     Route::get('marketing/blog', [MarketingBlogController::class, 'index']);
     Route::get('marketing/blog/{slug}', [MarketingBlogController::class, 'show']);
+    Route::get('public/purchase-orders/{shareToken}', [PublicPurchaseOrderController::class, 'show']);
+    Route::get('public/purchase-requisitions/{shareToken}', [PublicPurchaseRequisitionController::class, 'show']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
@@ -232,6 +238,7 @@ Route::prefix('v1')->group(function () {
             Route::delete('customers/{contact}', [CustomerController::class, 'destroy']);
 
             Route::get('suppliers', [SupplierController::class, 'index']);
+            Route::get('suppliers/top', [SupplierController::class, 'top']);
             Route::post('suppliers', [SupplierController::class, 'store']);
             Route::put('suppliers/{contact}', [SupplierController::class, 'update']);
             Route::delete('suppliers/{contact}', [SupplierController::class, 'destroy']);
@@ -249,6 +256,13 @@ Route::prefix('v1')->group(function () {
             Route::get('stock/low', [StockController::class, 'low']);
             Route::get('stock/movements', [StockController::class, 'movements']);
 
+            Route::get('notifications', [NotificationController::class, 'index']);
+            Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+            Route::post('notifications/read-all', [NotificationController::class, 'markAllRead']);
+            Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead']);
+
+            Route::get('approvals/pending', [ApprovalController::class, 'index']);
+
             Route::get('purchase-requisitions', [PurchaseRequisitionController::class, 'index']);
             Route::post('purchase-requisitions', [PurchaseRequisitionController::class, 'store']);
             Route::get('purchase-requisitions/{purchaseRequisition}', [PurchaseRequisitionController::class, 'show']);
@@ -257,13 +271,18 @@ Route::prefix('v1')->group(function () {
             Route::post('purchase-requisitions/{purchaseRequisition}/approve', [PurchaseRequisitionController::class, 'approve']);
             Route::post('purchase-requisitions/{purchaseRequisition}/reject', [PurchaseRequisitionController::class, 'reject']);
             Route::post('purchase-requisitions/{purchaseRequisition}/cancel', [PurchaseRequisitionController::class, 'cancel']);
+            Route::post('purchase-requisitions/{purchaseRequisition}/share', [PurchaseRequisitionController::class, 'share']);
 
             Route::get('purchase-orders', [PurchaseOrderController::class, 'index']);
             Route::post('purchase-orders', [PurchaseOrderController::class, 'store']);
             Route::get('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'show']);
             Route::put('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'update']);
             Route::post('purchase-orders/{purchaseOrder}/order', [PurchaseOrderController::class, 'markOrdered']);
+            Route::post('purchase-orders/{purchaseOrder}/submit', [PurchaseOrderController::class, 'submit']);
+            Route::post('purchase-orders/{purchaseOrder}/approve', [PurchaseOrderController::class, 'approve']);
+            Route::post('purchase-orders/{purchaseOrder}/reject', [PurchaseOrderController::class, 'reject']);
             Route::post('purchase-orders/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel']);
+            Route::post('purchase-orders/{purchaseOrder}/share', [PurchaseOrderController::class, 'share']);
 
             Route::get('goods-receipts', [GoodsReceiptController::class, 'index']);
             Route::post('goods-receipts', [GoodsReceiptController::class, 'store']);

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { api, apiMessage } from '../api/client'
+import { logMasterForm } from '../api/activity'
 import { FormAlert, useFeedback } from './feedback'
 import { PageHeader } from './ui'
 import { MasterFilters, MasterPager, useListQuery } from './MasterListBar'
@@ -41,6 +42,8 @@ const MENU_LABEL: Record<string, MsgKey> = {
   purchaserequisitions: 'menuPurchaseRequisitions',
   purchaseorders: 'menuPurchaseOrders',
   goodsreceipts: 'menuGoodsReceipts',
+  purchasesettings: 'menuPurchaseSettings',
+  approvals: 'menuApprovals',
   users: 'menuUsers',
   roles: 'menuRoles',
   company: 'menuCompany',
@@ -73,7 +76,8 @@ const ROLE_GROUPS: { id: string; label: MsgKey; menus: string[] }[] = [
   { id: 'pos', label: 'appPos', menus: ['pos'] },
   { id: 'master', label: 'appMaster', menus: ['products', 'categories', 'subcategories', 'units', 'itemtypes', 'pricechannels', 'discounts', 'promotions', 'customfields', 'choicetypes', 'choices', 'warehouses', 'suppliers', 'customers', 'stock', 'stockcard'] },
   { id: 'sales', label: 'appSales', menus: ['sales', 'salesreportsummary', 'salesreportproducts', 'salesreportcashiers', 'salesreportmethods', 'salesreportchannels', 'salesreportdaily'] },
-  { id: 'purchase', label: 'appPurchase', menus: ['purchaserequisitions', 'purchaseorders', 'goodsreceipts'] },
+  { id: 'purchase', label: 'appPurchase', menus: ['purchaserequisitions', 'purchaseorders', 'goodsreceipts', 'purchasesettings'] },
+  { id: 'approvals', label: 'appApprovals', menus: ['approvals'] },
   { id: 'stock', label: 'menuStock', menus: ['stock', 'stockcard'] },
   { id: 'contacts', label: 'menuContacts', menus: ['contacts'] },
   { id: 'tenants', label: 'appTenants', menus: ['tenants'] },
@@ -193,6 +197,7 @@ export function RolesManager({
     setError('')
     setTab(groups[0]?.id ?? ROLE_GROUPS[0].id)
     setOpen(true)
+    logMasterForm('role', 'create')
   }
 
   function openEdit(role: RoleRecord) {
@@ -202,6 +207,7 @@ export function RolesManager({
     setError('')
     setTab(groups[0]?.id ?? ROLE_GROUPS[0].id)
     setOpen(true)
+    logMasterForm('role', 'edit', role.name)
   }
 
   function toggle(menu: string, action: AclAction, allowed: boolean) {

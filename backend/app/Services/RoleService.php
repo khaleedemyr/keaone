@@ -266,6 +266,7 @@ class RoleService
         $cashier['contacts'] = $this->flags(true, true, false, false);
         $cashier['customers'] = $this->flags(true, true, false, false);
         $cashier['suppliers'] = $this->flags(true, false, false, false);
+        $cashier['approvals'] = $this->flags(true, false, true, false);
         $cashier['settings'] = $this->flags(true, false, true, false);
 
         $viewer = $none;
@@ -294,6 +295,7 @@ class RoleService
         $viewer['purchaserequisitions'] = $this->flags(true, false, false, false);
         $viewer['purchaseorders'] = $this->flags(true, false, false, false);
         $viewer['goodsreceipts'] = $this->flags(true, false, false, false);
+        $viewer['approvals'] = $this->flags(true, false, true, false);
         $viewer['customers'] = $this->flags(true, false, false, false);
         $viewer['suppliers'] = $this->flags(true, false, false, false);
         $viewer['settings'] = $this->flags(true, false, true, false);

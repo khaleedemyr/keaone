@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { api, apiMessage } from '../../api/client'
+import { logMasterForm } from '../../api/activity'
 import type { ApiOk, PlatformOperator } from '../../types'
 import { FormAlert, useFeedback } from '../../components/feedback'
 import { PageHeader } from '../../components/ui'
@@ -67,6 +68,7 @@ export default function PlatformUsers() {
     setForm({ ...empty, role_id: fallback ? String(fallback.id) : '' })
     setError('')
     setOpen(true)
+    logMasterForm('user', 'create')
   }
 
   function openEdit(user: PlatformOperator) {
@@ -81,6 +83,7 @@ export default function PlatformUsers() {
     })
     setError('')
     setOpen(true)
+    logMasterForm('user', 'edit', user.name)
   }
 
   async function onSubmit(event: FormEvent) {

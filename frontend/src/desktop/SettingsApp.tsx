@@ -14,6 +14,7 @@ import { AppNavShell } from './AppNavShell'
 import { SettingsDesktop } from './SettingsDesktop'
 import { usePlatformApps } from './usePlatformApps'
 import { useTenantApps } from './useTenantApps'
+import { UiSkinPicker } from '../uiSkin'
 
 type Section = 'account' | 'possettings' | 'cafetables'
 
@@ -79,6 +80,12 @@ function SettingsAccount() {
       <section>
         <h3 className="mb-2 text-sm font-medium">{t('appearance')}</h3>
         <PrefsBar />
+      </section>
+
+      <section>
+        <h3 className="mb-2 text-sm font-medium">{t('uiSkinLayout')}</h3>
+        <p className="mb-3 text-xs text-muted">{t('uiSkinLayoutHint')}</p>
+        <UiSkinPicker />
       </section>
 
       <SettingsDesktop apps={desktopApps.apps} titles={desktopApps.titles} />

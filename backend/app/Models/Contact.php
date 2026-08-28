@@ -27,6 +27,8 @@ class Contact extends Model
         'bank_account_name',
         'payment_term',
         'payment_days',
+        'is_taxable',
+        'tax_percent',
         'custom_fields',
         'is_active',
     ];
@@ -37,6 +39,8 @@ class Contact extends Model
             'custom_fields' => 'array',
             'is_active' => 'boolean',
             'payment_days' => 'integer',
+            'is_taxable' => 'boolean',
+            'tax_percent' => 'float',
         ];
     }
 
@@ -61,6 +65,8 @@ class Contact extends Model
             'bank_account_name' => ['nullable', 'string', 'max:120'],
             'payment_term' => ['nullable', 'string', 'max:80'],
             'payment_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            'is_taxable' => ['sometimes', 'boolean'],
+            'tax_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'custom_fields' => ['nullable', 'array'],
             'is_active' => ['sometimes', 'boolean'],
         ];

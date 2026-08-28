@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { listMarketingBlog, type MarketingBlogPost } from '../api/marketingBlog'
 import { Logo } from '../components/Logo'
 import { useAuth } from '../auth'
 import { useI18n, type MsgKey } from '../i18n'
+import { MktAuthority } from './MktAuthority'
 import { HeroScene } from './HeroScene'
+import { MktHowItWorks } from './MktHowItWorks'
 import { MarketingShell } from './MarketingShell'
-import { MktReveal, MktStagger, MktStaggerItem } from './MktReveal'
+import { MktReveal, MktStagger, MktStaggerItem, MktHeroStagger, MktHeroItem } from './MktReveal'
 import { MktSectionHead } from './MktSectionHead'
+import { MktSocialProof } from './MktSocialProof'
+import { MktTestimonials } from './MktTestimonials'
 import { usePageSeo } from './pageSeo'
 import { ProductShot } from './ProductShot'
 import { TiltFrame } from './TiltFrame'
@@ -19,18 +24,63 @@ function formatDate(iso: string | null, locale: string) {
   return d.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+type BizPick = 'retail' | 'restaurant' | 'cafe' | 'multi'
+
 const CAPS: { key: MsgKey; lead: MsgKey; mark: string; icon: string }[] = [
   { key: 'mktCapPos', lead: 'mktCapPosLead', mark: '', icon: '◉' },
   { key: 'mktCapInv', lead: 'mktCapInvLead', mark: 'is-inv', icon: '▣' },
   { key: 'mktCapOutlets', lead: 'mktCapOutletsLead', mark: 'is-out', icon: '◎' },
   { key: 'mktCapRoles', lead: 'mktCapRolesLead', mark: 'is-roles', icon: '⬡' },
   { key: 'mktCapInsight', lead: 'mktCapInsightLead', mark: 'is-insight', icon: '◈' },
-] 
+]
+
+const PICKER: { id: BizPick; label: MsgKey }[] = [
+  { id: 'retail', label: 'mktHeroPickerRetail' },
+  { id: 'restaurant', label: 'mktHeroPickerRestaurant' },
+  { id: 'cafe', label: 'mktHeroPickerCafe' },
+  { id: 'multi', label: 'mktHeroPickerMulti' },
+]
+
+const INDUSTRIES: {
+  id: string
+  label: MsgKey
+  lead: MsgKey
+  pain1: MsgKey
+  pain2: MsgKey
+  tone: string
+}[] = [
+  {
+    id: 'retail',
+    label: 'mktIndRetail',
+    lead: 'mktIndRetailLead',
+    pain1: 'mktIndRetailPain1',
+    pain2: 'mktIndRetailPain2',
+    tone: 'is-retail',
+  },
+  {
+    id: 'restaurant',
+    label: 'mktIndRestaurant',
+    lead: 'mktIndRestaurantLead',
+    pain1: 'mktIndRestaurantPain1',
+    pain2: 'mktIndRestaurantPain2',
+    tone: 'is-restaurant',
+  },
+  {
+    id: 'cafe',
+    label: 'mktIndCafe',
+    lead: 'mktIndCafeLead',
+    pain1: 'mktIndCafePain1',
+    pain2: 'mktIndCafePain2',
+    tone: 'is-cafe',
+  },
+]
 
 export default function Landing() {
   const { t, lang, locale } = useI18n()
   const { me } = useAuth()
+  const reduce = useReducedMotion()
   const [posts, setPosts] = useState<MarketingBlogPost[]>([])
+  const [bizPick, setBizPick] = useState<BizPick>('retail')
 
   const jsonLd = useMemo(
     () => [
@@ -85,38 +135,82 @@ export default function Landing() {
 
   return (
     <MarketingShell>
-      <section className="mkt-hero" aria-labelledby="mkt-hero-heading">
+      <section className="mkt-hero mkt-hero-v2" aria-labelledby="mkt-hero-heading">
         <div className="mkt-hero-bg" aria-hidden />
+        <div className="mkt-hero-glow" aria-hidden />
         <div className="mkt-hero-inner">
-          <div className="mkt-hero-copy">
-            <Logo variant="wordmark" className="mkt-hero-brand" glow />
-            <p className="mkt-hero-badge">{t('mktHeroBadge')}</p>
-            <h1 id="mkt-hero-heading" className="mkt-gradient-text">
-              {t('mktHeroTitle')}
-            </h1>
-            <p className="mkt-hero-lead">{t('mktHeroLead')}</p>
-            <div className="mkt-hero-cta">
-              {me ? (
-                <Link to="/app" className="mkt-btn mkt-btn-primary mkt-btn-glow">
-                  {t('mktNavOpenApp')}
-                </Link>
-              ) : (
-                <>
-                  <Link to="/login?demo=1" className="mkt-btn mkt-btn-primary mkt-btn-glow">
-                    {t('mktHeroDemo')}
+          <MktHeroStagger className="mkt-hero-copy">
+            <MktHeroItem>
+              <Logo variant="wordmark" className="mkt-hero-brand" glow />
+            </MktHeroItem>
+            <MktHeroItem>
+              <p className="mkt-hero-badge mkt-animate-badge">{t('mktHeroBadge')}</p>
+            </MktHeroItem>
+            <MktHeroItem>
+              <h1 id="mkt-hero-heading" className="mkt-gradient-text mkt-animate-shimmer">
+                {t('mktHeroTitle')}
+              </h1>
+            </MktHeroItem>
+            <MktHeroItem>
+              <p className="mkt-hero-lead">{t('mktHeroLead')}</p>
+            </MktHeroItem>
+
+            <MktHeroItem>
+              <div className="mkt-hero-picker">
+                <span className="mkt-hero-picker-label">{t('mktHeroPickerLabel')}</span>
+                <div className="mkt-hero-picker-row" role="group" aria-label={t('mktHeroPickerLabel')}>
+                  {PICKER.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`mkt-hero-pick${bizPick === item.id ? ' is-active' : ''}`}
+                      onClick={() => setBizPick(item.id)}
+                    >
+                      {bizPick === item.id ? (
+                        <motion.span
+                          layoutId="mkt-pick-active"
+                          className="mkt-hero-pick-bg"
+                          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                        />
+                      ) : null}
+                      <span className="mkt-hero-pick-label">{t(item.label)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </MktHeroItem>
+
+            <MktHeroItem>
+              <div className="mkt-hero-cta">
+                {me ? (
+                  <Link to="/app" className="mkt-btn mkt-btn-primary mkt-btn-glow mkt-btn-animated">
+                    {t('mktNavOpenApp')}
                   </Link>
-                  <Link to="/login" className="mkt-btn mkt-btn-ghost">
-                    {t('mktHeroLogin')}
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="mkt-hero-visual">
-            <HeroScene desktopAlt={t('mktShotDesktopAlt')} />
-          </div>
+                ) : (
+                  <>
+                    <Link to="/login?demo=1" className="mkt-btn mkt-btn-primary mkt-btn-glow mkt-btn-animated">
+                      {t('mktHeroDemo')}
+                    </Link>
+                    <Link to="/register" className="mkt-btn mkt-btn-ghost mkt-btn-animated">
+                      {t('mktNavRegister')}
+                    </Link>
+                  </>
+                )}
+              </div>
+            </MktHeroItem>
+          </MktHeroStagger>
+          <motion.div
+            className="mkt-hero-visual"
+            initial={reduce ? false : { opacity: 0, x: 48, scale: 0.94, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, x: 0, scale: 1, filter: 'blur(0px)' }}
+            transition={{ duration: 0.9, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <HeroScene desktopAlt={t('mktShotDesktopAlt')} bizPick={bizPick} />
+          </motion.div>
         </div>
       </section>
+
+      <MktSocialProof />
 
       <section id="product" className="mkt-product mkt-band" aria-labelledby="mkt-product-heading">
         <div className="mkt-section">
@@ -128,22 +222,48 @@ export default function Landing() {
               lead={t('mktProductLead')}
             />
           </MktReveal>
-          <MktStagger className="mkt-product-stage">
+          <MktStagger className="mkt-bento">
             <MktStaggerItem>
-              <TiltFrame maxTilt={8}>
-                <ProductShot src="/marketing/desktop.png" alt={t('mktShotDesktopAlt')} />
-              </TiltFrame>
+              <div className="mkt-bento-cell is-wide mkt-bento-shot">
+                <TiltFrame maxTilt={8}>
+                  <ProductShot src="/marketing/desktop.png" alt={t('mktShotDesktopAlt')} />
+                </TiltFrame>
+                <span className="mkt-bento-tag">{t('mktProductBentoErp')}</span>
+              </div>
             </MktStaggerItem>
             <MktStaggerItem>
-              <TiltFrame maxTilt={8}>
-                <ProductShot src="/marketing/pos.png" alt={t('mktShotPosAlt')} />
-              </TiltFrame>
+              <div className="mkt-bento-cell mkt-bento-shot">
+                <TiltFrame maxTilt={8}>
+                  <ProductShot src="/marketing/pos.png" alt={t('mktShotPosAlt')} />
+                </TiltFrame>
+                <span className="mkt-bento-tag">{t('mktProductBentoPos')}</span>
+              </div>
+            </MktStaggerItem>
+            <MktStaggerItem>
+              <div className="mkt-bento-cell mkt-bento-feat is-mint">
+                <span className="mkt-bento-icon" aria-hidden>
+                  ⬡
+                </span>
+                <h3>{t('mktProductBentoPurchase')}</h3>
+                <p>{t('mktAuth2Lead')}</p>
+              </div>
+            </MktStaggerItem>
+            <MktStaggerItem>
+              <div className="mkt-bento-cell mkt-bento-feat is-gold">
+                <span className="mkt-bento-icon" aria-hidden>
+                  ◈
+                </span>
+                <h3>{t('mktProductBentoInsight')}</h3>
+                <p>{t('mktCapInsightLead')}</p>
+              </div>
             </MktStaggerItem>
           </MktStagger>
         </div>
       </section>
 
-      <section className="mkt-section" aria-labelledby="mkt-cap-heading">
+      <MktHowItWorks />
+
+      <section id="features" className="mkt-section" aria-labelledby="mkt-cap-heading">
         <MktReveal>
           <MktSectionHead
             eyebrow={t('mktEyebrowFeatures')}
@@ -152,10 +272,10 @@ export default function Landing() {
             lead={t('mktCapLead')}
           />
         </MktReveal>
-        <MktStagger className="mkt-cap-grid">
+        <MktStagger className="mkt-cap-grid mkt-cap-grid-v2">
           {CAPS.map((cap) => (
             <MktStaggerItem key={cap.key}>
-              <article className="mkt-cap-card">
+              <article className="mkt-cap-card mkt-cap-card-v2">
                 <span className={`mkt-cap-mark ${cap.mark}`.trim()} aria-hidden>
                   {cap.icon}
                 </span>
@@ -169,7 +289,11 @@ export default function Landing() {
         </MktStagger>
       </section>
 
-      <section className="mkt-section mkt-band-alt" style={{ paddingTop: 0 }} aria-labelledby="mkt-ind-heading">
+      <section
+        id="industries"
+        className="mkt-section mkt-band-alt"
+        aria-labelledby="mkt-ind-heading"
+      >
         <MktReveal>
           <MktSectionHead
             eyebrow={t('mktEyebrowIndustries')}
@@ -178,24 +302,24 @@ export default function Landing() {
             lead={t('mktIndLead')}
           />
         </MktReveal>
-        <MktStagger className="mkt-ind-row">
-          <MktStaggerItem>
-            <div className="mkt-ind-item is-retail mkt-tilt-hover">
-              <span>{t('mktIndRetail')}</span>
-            </div>
-          </MktStaggerItem>
-          <MktStaggerItem>
-            <div className="mkt-ind-item is-restaurant mkt-tilt-hover">
-              <span>{t('mktIndRestaurant')}</span>
-            </div>
-          </MktStaggerItem>
-          <MktStaggerItem>
-            <div className="mkt-ind-item is-cafe mkt-tilt-hover">
-              <span>{t('mktIndCafe')}</span>
-            </div>
-          </MktStaggerItem>
+        <MktStagger className="mkt-ind-grid">
+          {INDUSTRIES.map((ind) => (
+            <MktStaggerItem key={ind.id}>
+              <article className={`mkt-ind-card ${ind.tone} mkt-tilt-hover`}>
+                <h3>{t(ind.label)}</h3>
+                <p className="mkt-ind-lead">{t(ind.lead)}</p>
+                <ul>
+                  <li>{t(ind.pain1)}</li>
+                  <li>{t(ind.pain2)}</li>
+                </ul>
+              </article>
+            </MktStaggerItem>
+          ))}
         </MktStagger>
       </section>
+
+      <MktAuthority />
+      <MktTestimonials />
 
       <section id="pricing" className="mkt-section" aria-labelledby="mkt-price-heading">
         <MktReveal>
@@ -206,7 +330,7 @@ export default function Landing() {
             lead={t('mktPriceLead')}
           />
         </MktReveal>
-        <MktStagger className="mkt-price-grid">
+        <MktStagger className="mkt-price-grid mkt-price-grid-v2">
           <MktStaggerItem>
             <article className="mkt-price-plan mkt-tilt-hover">
               <h3>{t('mktPriceStarter')}</h3>
@@ -239,7 +363,7 @@ export default function Landing() {
                 <li>{t('mktPriceGrowthF2')}</li>
                 <li>{t('mktPriceGrowthF3')}</li>
               </ul>
-              <Link to="/register" className="mkt-btn mkt-btn-primary mkt-btn-glow">
+              <Link to="/register" className="mkt-btn mkt-btn-primary mkt-btn-glow mkt-btn-animated">
                 {t('mktPriceCta')}
               </Link>
             </article>
@@ -265,6 +389,7 @@ export default function Landing() {
         </MktStagger>
         <MktReveal delay={0.1}>
           <p className="mkt-contact-note mkt-price-note">{t('mktPriceTrial')}</p>
+          <p className="mkt-scarcity-note">{t('mktScarcityNote')}</p>
         </MktReveal>
       </section>
 
@@ -278,7 +403,7 @@ export default function Landing() {
           />
         </MktReveal>
         <MktReveal delay={0.08}>
-          <div className="mkt-contact-grid">
+          <div className="mkt-contact-grid mkt-contact-grid-v2">
             <div className="mkt-contact-channels">
               <a className="mkt-contact-channel mkt-tilt-hover" href="mailto:hello@keaone.justusku.co.id">
                 <strong>{t('mktContactEmail')}</strong>
@@ -330,7 +455,9 @@ export default function Landing() {
                     <div className="mkt-blog-card-cover is-placeholder" aria-hidden />
                   )}
                   <div className="mkt-blog-card-body">
-                    <time dateTime={post.published_at ?? undefined}>{formatDate(post.published_at, locale)}</time>
+                    <time dateTime={post.published_at ?? undefined}>
+                      {formatDate(post.published_at, locale)}
+                    </time>
                     <h3>{post.title}</h3>
                     {post.excerpt ? <p>{post.excerpt}</p> : null}
                     <span className="mkt-blog-card-more">{t('blogReadMore')} →</span>
@@ -347,27 +474,29 @@ export default function Landing() {
         </MktReveal>
       </section>
 
-      <section className="mkt-cta mkt-cta-glow" aria-labelledby="mkt-cta-heading">
+      <section className="mkt-cta mkt-cta-glow mkt-cta-v2" aria-labelledby="mkt-cta-heading">
         <MktReveal>
-          <h2 id="mkt-cta-heading" className="mkt-gradient-text-soft">
-            {t('mktCtaTitle')}
-          </h2>
-          <p>{t('mktCtaLead')}</p>
-          <div className="mkt-cta-actions">
-            {me ? (
-              <Link to="/app" className="mkt-btn mkt-btn-primary mkt-btn-glow">
-                {t('mktNavOpenApp')}
-              </Link>
-            ) : (
-              <>
-                <Link to="/login?demo=1" className="mkt-btn mkt-btn-primary mkt-btn-glow">
-                  {t('mktCtaDemo')}
+          <div className="mkt-cta-inner">
+            <h2 id="mkt-cta-heading" className="mkt-gradient-text-soft">
+              {t('mktCtaTitle')}
+            </h2>
+            <p>{t('mktCtaLead')}</p>
+            <div className="mkt-cta-actions">
+              {me ? (
+                <Link to="/app" className="mkt-btn mkt-btn-primary mkt-btn-glow mkt-btn-animated">
+                  {t('mktNavOpenApp')}
                 </Link>
-                <Link to="/register" className="mkt-btn mkt-btn-ghost">
-                  {t('mktCtaRegister')}
-                </Link>
-              </>
-            )}
+              ) : (
+                <>
+                  <Link to="/login?demo=1" className="mkt-btn mkt-btn-primary mkt-btn-glow mkt-btn-animated">
+                    {t('mktCtaDemo')}
+                  </Link>
+                  <Link to="/register" className="mkt-btn mkt-btn-ghost mkt-btn-animated">
+                    {t('mktCtaRegister')}
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
         </MktReveal>
       </section>

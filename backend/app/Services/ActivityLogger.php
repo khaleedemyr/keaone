@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ActivityLog;
 use App\Support\CurrentCompany;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 class ActivityLogger
@@ -40,7 +41,7 @@ class ActivityLogger
         }
     }
 
-    public static function fromRequest(Request $request, int $status): void
+    public static function fromRequest(Request $request, int $status, ?Response $response = null): void
     {
         $described = self::describe($request);
         $path = self::path($request);
@@ -65,11 +66,19 @@ class ActivityLogger
             $described['action'] = 'view';
         }
 
-        $target = self::target($request);
+        $target = self::target($request) ?? self::routeTarget($request) ?? self::responseTarget($response);
+        $changes = self::diffFromSnapshots($request);
         $summary = $described['summary'];
-        if ($target && ! str_contains($summary, $target)) {
+        if ($target && ! str_contains($summary, (string) $target)) {
             $summary .= ': '.$target;
         }
+        $changeSuffix = self::changeSummarySuffix($changes, $request);
+        if ($changeSuffix !== '') {
+            $summary .= $changeSuffix;
+        }
+        $summary = mb_substr($summary, 0, 255);
+
+        $meta = self::meta($request, $changes);
 
         self::record([
             'action' => $described['action'],
@@ -77,11 +86,11 @@ class ActivityLogger
             'summary' => $summary,
             'target' => $target,
             'status' => $status,
-            'meta' => self::meta($request),
+            'meta' => $meta,
         ], $request);
     }
 
-    public static function client(string $kind, string $target, Request $request): void
+    public static function client(string $kind, string $target, Request $request, ?string $ref = null): void
     {
         $map = [
             'open_app' => [
@@ -120,6 +129,9 @@ class ActivityLogger
                 'warehouses' => 'Membuka menu gudang',
                 'suppliers' => 'Membuka menu pemasok',
                 'customers' => 'Membuka menu pelanggan',
+                'purchase:pr' => 'Membuka permintaan pembelian',
+                'purchase:po' => 'Membuka pesanan pembelian',
+                'purchase:gr' => 'Membuka penerimaan barang',
                 'plans' => 'Membuka paket langganan',
                 'invoices' => 'Membuka faktur platform',
                 'types' => 'Membuka jenis usaha',
@@ -127,19 +139,92 @@ class ActivityLogger
             'open_calendar' => [
                 'calendar' => 'Membuka kalender',
             ],
+            'view_doc' => [
+                'pr' => 'Lihat PR',
+                'po' => 'Lihat PO',
+                'gr' => 'Lihat penerimaan barang',
+                'product' => 'Lihat produk',
+                'sale' => 'Lihat penjualan',
+                'contact' => 'Lihat kontak',
+                'user' => 'Lihat pengguna',
+                'role' => 'Lihat peran',
+                'outlet' => 'Lihat outlet',
+                'floorlayout' => 'Lihat denah meja',
+            ],
+            'open_form' => [
+                'pr:create' => 'Buka form buat PR',
+                'pr:edit' => 'Buka form ubah PR',
+                'po:create' => 'Buka form buat PO',
+                'po:edit' => 'Buka form ubah PO',
+                'gr:create' => 'Buka form buat penerimaan barang',
+                'gr:edit' => 'Buka form ubah penerimaan barang',
+                'product:create' => 'Buka form buat produk',
+                'product:edit' => 'Buka form ubah produk',
+                'category:create' => 'Buka form buat kategori',
+                'category:edit' => 'Buka form ubah kategori',
+                'subcategory:create' => 'Buka form buat sub kategori',
+                'subcategory:edit' => 'Buka form ubah sub kategori',
+                'unit:create' => 'Buka form buat satuan',
+                'unit:edit' => 'Buka form ubah satuan',
+                'itemtype:create' => 'Buka form buat tipe item',
+                'itemtype:edit' => 'Buka form ubah tipe item',
+                'pricechannel:create' => 'Buka form buat kanal harga',
+                'pricechannel:edit' => 'Buka form ubah kanal harga',
+                'discount:create' => 'Buka form buat diskon',
+                'discount:edit' => 'Buka form ubah diskon',
+                'promotion:create' => 'Buka form buat promo',
+                'promotion:edit' => 'Buka form ubah promo',
+                'customfield:create' => 'Buka form buat field kustom',
+                'customfield:edit' => 'Buka form ubah field kustom',
+                'choicetype:create' => 'Buka form buat jenis pilihan',
+                'choicetype:edit' => 'Buka form ubah jenis pilihan',
+                'choice:create' => 'Buka form buat pilihan',
+                'choice:edit' => 'Buka form ubah pilihan',
+                'warehouse:create' => 'Buka form buat gudang',
+                'warehouse:edit' => 'Buka form ubah gudang',
+                'customer:create' => 'Buka form buat pelanggan',
+                'customer:edit' => 'Buka form ubah pelanggan',
+                'supplier:create' => 'Buka form buat pemasok',
+                'supplier:edit' => 'Buka form ubah pemasok',
+                'user:create' => 'Buka form buat pengguna',
+                'user:edit' => 'Buka form ubah pengguna',
+                'role:create' => 'Buka form buat peran',
+                'role:edit' => 'Buka form ubah peran',
+                'outlet:create' => 'Buka form buat outlet',
+                'outlet:edit' => 'Buka form ubah outlet',
+            ],
         ];
 
         $summary = $map[$kind][$target] ?? ('Aktivitas: '.$kind.' / '.$target);
+        if ($ref && ! str_contains($summary, $ref)) {
+            $summary .= ': '.$ref;
+        }
 
         self::record([
             'action' => $kind,
             'menu_key' => self::menuFromClient($kind, $target),
-            'summary' => $summary,
-            'target' => $target,
+            'summary' => mb_substr($summary, 0, 255),
+            'target' => $ref ? mb_substr($ref, 0, 120) : $target,
             'status' => 200,
             'method' => 'UI',
             'path' => $kind,
         ], $request);
+    }
+
+    public static function isShowPath(string $path): bool
+    {
+        if (preg_match('#/(receipt|images|messages|read|pay|void|cover|media|share|submit|approve|reject|cancel|confirm|order|payments|primary|barcode)/#', $path)) {
+            return false;
+        }
+
+        if (in_array($path, ['sales/settlement', 'sales/reports', 'suppliers/top'], true)) {
+            return false;
+        }
+
+        return (bool) preg_match(
+            '#^(purchase-requisitions|purchase-orders|goods-receipts|products|sales|contacts|users|roles|outlets|dining-layouts|platform/(blog-posts|companies))/\d+$#',
+            $path,
+        );
     }
 
     /**
@@ -236,6 +321,48 @@ class ActivityLogger
             };
         }
 
+        if (str_starts_with($target, 'purchase:')) {
+            $section = substr($target, 9);
+
+            return match ($section) {
+                'pr' => 'purchaserequisitions',
+                'po' => 'purchaseorders',
+                'gr' => 'goodsreceipts',
+                default => 'purchaserequisitions',
+            };
+        }
+
+        if ($kind === 'view_doc' || $kind === 'open_form') {
+            $base = explode(':', $target)[0] ?? $target;
+
+            return match ($base) {
+                'pr' => 'purchaserequisitions',
+                'po' => 'purchaseorders',
+                'gr' => 'goodsreceipts',
+                'product' => 'products',
+                'category' => 'categories',
+                'subcategory' => 'subcategories',
+                'unit' => 'units',
+                'itemtype' => 'itemtypes',
+                'pricechannel' => 'pricechannels',
+                'discount' => 'discounts',
+                'promotion' => 'promotions',
+                'customfield' => 'customfields',
+                'choicetype' => 'choicetypes',
+                'choice' => 'choices',
+                'warehouse' => 'warehouses',
+                'customer' => 'customers',
+                'supplier' => 'suppliers',
+                'user' => 'users',
+                'role' => 'roles',
+                'outlet' => 'outlets',
+                'sale' => 'sales',
+                'contact' => 'contacts',
+                'floorlayout' => 'cafetables',
+                default => self::guessMenu($base),
+            };
+        }
+
         return match ($target) {
             'master' => 'products',
             'admin' => 'users',
@@ -267,10 +394,263 @@ class ActivityLogger
         return null;
     }
 
+    private static function routeTarget(Request $request): ?string
+    {
+        foreach ($request->route()?->parameters() ?? [] as $model) {
+            $label = self::modelLabel($model);
+            if ($label) {
+                return $label;
+            }
+        }
+
+        return null;
+    }
+
+    private static function modelLabel(mixed $model): ?string
+    {
+        if (! is_object($model)) {
+            return null;
+        }
+
+        if (isset($model->number) && is_string($model->number) && $model->number !== '') {
+            return $model->number;
+        }
+
+        if (isset($model->name) && is_string($model->name) && $model->name !== '') {
+            $label = $model->name;
+            if (isset($model->sku) && is_string($model->sku) && $model->sku !== '') {
+                $label .= ' ('.$model->sku.')';
+            }
+
+            return $label;
+        }
+
+        if (isset($model->title) && is_string($model->title) && $model->title !== '') {
+            return $model->title;
+        }
+
+        if (isset($model->label) && is_string($model->label) && $model->label !== '') {
+            return $model->label;
+        }
+
+        if (isset($model->email) && is_string($model->email) && $model->email !== '') {
+            return $model->email;
+        }
+
+        if (isset($model->code) && is_string($model->code) && $model->code !== '') {
+            return $model->code;
+        }
+
+        return null;
+    }
+
+    private static function responseTarget(?Response $response): ?string
+    {
+        if (! $response) {
+            return null;
+        }
+
+        $content = $response->getContent();
+        if (! is_string($content) || $content === '') {
+            return null;
+        }
+
+        try {
+            $json = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+            $data = $json['data'] ?? null;
+            if (! is_array($data)) {
+                return null;
+            }
+
+            if (isset($data['number']) && is_string($data['number']) && $data['number'] !== '') {
+                return $data['number'];
+            }
+
+            if (isset($data['name']) && is_string($data['name']) && $data['name'] !== '') {
+                $label = $data['name'];
+                if (isset($data['sku']) && is_string($data['sku']) && $data['sku'] !== '') {
+                    $label .= ' ('.$data['sku'].')';
+                }
+
+                return $label;
+            }
+
+            if (isset($data['title']) && is_string($data['title']) && $data['title'] !== '') {
+                return $data['title'];
+            }
+
+            if (isset($data['label']) && is_string($data['label']) && $data['label'] !== '') {
+                return $data['label'];
+            }
+
+            if (isset($data['email']) && is_string($data['email']) && $data['email'] !== '') {
+                return $data['email'];
+            }
+
+            return null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     /**
+     * @return list<array{field: string, label: string, from: mixed, to: mixed}>
+     */
+    private static function diffFromSnapshots(Request $request): array
+    {
+        $snapshots = $request->attributes->get('activity_snapshots');
+        if (! is_array($snapshots)) {
+            return [];
+        }
+
+        $changes = [];
+        foreach ($snapshots as $key => $before) {
+            if (! is_array($before)) {
+                continue;
+            }
+            $model = $request->route($key);
+            if (! is_object($model) || ! method_exists($model, 'getAttributes')) {
+                continue;
+            }
+            $after = $model->getAttributes();
+            foreach ($after as $field => $newValue) {
+                if (in_array($field, ['updated_at', 'created_at'], true)) {
+                    continue;
+                }
+                $oldValue = $before[$field] ?? null;
+                if (self::valuesEqual($oldValue, $newValue)) {
+                    continue;
+                }
+                $changes[] = [
+                    'field' => (string) $field,
+                    'label' => self::fieldLabel((string) $field),
+                    'from' => self::formatValue((string) $field, $oldValue),
+                    'to' => self::formatValue((string) $field, $newValue),
+                ];
+            }
+        }
+
+        return $changes;
+    }
+
+    /**
+     * @param  list<array{field: string, label: string, from: mixed, to: mixed}>  $changes
+     */
+    private static function changeSummarySuffix(array $changes, Request $request): string
+    {
+        $labels = array_column($changes, 'label');
+        if ($request->has('items') && is_array($request->input('items'))) {
+            $labels[] = count($request->input('items')).' item';
+        }
+
+        $labels = array_values(array_unique(array_filter($labels)));
+        if ($labels === []) {
+            return '';
+        }
+
+        $shown = array_slice($labels, 0, 4);
+        $suffix = ' ('.implode(', ', $shown);
+        if (count($labels) > count($shown)) {
+            $suffix .= ', …';
+        }
+
+        return $suffix.')';
+    }
+
+    private static function valuesEqual(mixed $left, mixed $right): bool
+    {
+        if (is_array($left) || is_array($right)) {
+            return json_encode($left) === json_encode($right);
+        }
+
+        return $left == $right;
+    }
+
+    private static function fieldLabel(string $field): string
+    {
+        return match ($field) {
+            'name' => 'Nama',
+            'sku' => 'SKU',
+            'barcode' => 'Barcode',
+            'description' => 'Deskripsi',
+            'sell_price' => 'Harga jual',
+            'cost_price' => 'Harga modal',
+            'note' => 'Catatan',
+            'status' => 'Status',
+            'warehouse_id' => 'Gudang',
+            'outlet_id' => 'Outlet',
+            'supplier_id' => 'Pemasok',
+            'needed_at' => 'Tanggal dibutuhkan',
+            'expected_at' => 'Tanggal estimasi',
+            'ordered_at' => 'Tanggal pesan',
+            'is_active' => 'Status aktif',
+            'track_stock' => 'Lacak stok',
+            'min_stock' => 'Stok minimum',
+            'category_id' => 'Kategori',
+            'sub_category_id' => 'Sub kategori',
+            'unit_id' => 'Satuan',
+            'item_type_id' => 'Tipe item',
+            'payment_term' => 'Term pembayaran',
+            'payment_days' => 'Hari TOP',
+            'tax_percent' => 'Pajak %',
+            'phone' => 'Telepon',
+            'email' => 'Email',
+            'address' => 'Alamat',
+            'city' => 'Kota',
+            'province' => 'Provinsi',
+            'value' => 'Nilai',
+            'value_type' => 'Tipe nilai',
+            'scope' => 'Cakupan',
+            'code' => 'Kode',
+            'type' => 'Tipe',
+            'label' => 'Label',
+            'key' => 'Kunci',
+            'entity' => 'Entitas',
+            'show_pos' => 'Tampil di POS',
+            'is_raw_material' => 'Bahan baku',
+            'is_taxable' => 'Kena pajak',
+            'is_default' => 'Default',
+            'username' => 'Username',
+            'slug' => 'Slug',
+            'priority' => 'Prioritas',
+            'starts_at' => 'Mulai',
+            'ends_at' => 'Berakhir',
+            'apply_mode' => 'Mode apply',
+            'sort_order' => 'Urutan',
+            default => ucfirst(str_replace('_', ' ', $field)),
+        };
+    }
+
+    private static function formatValue(string $field, mixed $value): mixed
+    {
+        if ($value === null || $value === '') {
+            return '—';
+        }
+
+        if ($field === 'is_active' || $field === 'track_stock') {
+            return filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'Ya' : 'Tidak';
+        }
+
+        if (in_array($field, ['sell_price', 'cost_price', 'subtotal', 'tax', 'total'], true) && is_numeric($value)) {
+            return (int) $value;
+        }
+
+        if (is_string($value)) {
+            return mb_substr($value, 0, 120);
+        }
+
+        if (is_array($value)) {
+            return '[data]';
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param  list<array{field: string, label: string, from: mixed, to: mixed}>  $changes
      * @return array<string, mixed>|null
      */
-    private static function meta(Request $request): ?array
+    private static function meta(Request $request, array $changes = []): ?array
     {
         $payload = $request->except([
             'password',
@@ -278,18 +658,27 @@ class ActivityLogger
             'current_password',
             'token',
             'file',
+            'images',
         ]);
+
+        $meta = [];
+        if ($changes !== []) {
+            $meta['changes'] = array_slice($changes, 0, 20);
+        }
+
         if ($payload === []) {
-            return null;
+            return $meta !== [] ? $meta : null;
         }
 
         $clean = self::sanitize($payload);
         $encoded = json_encode($clean);
         if (! is_string($encoded) || strlen($encoded) > 2000) {
-            return ['keys' => array_keys($payload)];
+            $meta['keys'] = array_keys($payload);
+
+            return $meta !== [] ? $meta : null;
         }
 
-        return $clean;
+        return array_merge($clean, $meta);
     }
 
     private static function sanitize(mixed $value): mixed
@@ -385,6 +774,9 @@ class ActivityLogger
             ['POST', 'discounts', 'discounts', 'create', 'Tambah diskon'],
             ['PUT', 'discounts/*', 'discounts', 'edit', 'Ubah diskon'],
             ['DELETE', 'discounts/*', 'discounts', 'edit', 'Nonaktifkan diskon'],
+            ['POST', 'custom-fields', 'customfields', 'create', 'Tambah field kustom'],
+            ['PUT', 'custom-fields/*', 'customfields', 'edit', 'Ubah field kustom'],
+            ['DELETE', 'custom-fields/*', 'customfields', 'delete', 'Nonaktifkan field kustom'],
             ['POST', 'promotions', 'promotions', 'create', 'Tambah promo'],
             ['PUT', 'promotions/*', 'promotions', 'edit', 'Ubah promo'],
             ['DELETE', 'promotions/*', 'promotions', 'edit', 'Nonaktifkan promo'],
@@ -418,8 +810,42 @@ class ActivityLogger
             ['POST', 'contacts', 'contacts', 'create', 'Tambah kontak'],
             ['PUT', 'contacts/*', 'contacts', 'edit', 'Ubah kontak'],
             ['POST', 'sales', 'pos', 'create', 'Buat penjualan'],
-            ['POST', 'sales/*/payments', 'sales', 'edit', 'Tambah pembayaran'],
+            ['POST', 'sales/*/payments', 'sales', 'edit', 'Tambah pembayaran penjualan'],
             ['POST', 'sales/*/cancel', 'sales', 'delete', 'Batalkan penjualan'],
+
+            ['GET', 'sales/*', 'sales', 'view', 'Lihat penjualan'],
+            ['GET', 'contacts/*', 'contacts', 'view', 'Lihat kontak'],
+            ['GET', 'users/*', 'users', 'view', 'Lihat pengguna'],
+            ['GET', 'roles/*', 'roles', 'view', 'Lihat peran'],
+            ['GET', 'outlets/*', 'outlets', 'view', 'Lihat outlet'],
+            ['GET', 'dining-layouts/*', 'cafetables', 'view', 'Lihat denah meja'],
+            ['GET', 'platform/blog-posts/*', 'blog', 'view', 'Lihat artikel blog'],
+            ['GET', 'purchase-requisitions/*', 'purchaserequisitions', 'view', 'Lihat PR'],
+            ['GET', 'purchase-orders/*', 'purchaseorders', 'view', 'Lihat PO'],
+            ['GET', 'goods-receipts/*', 'goodsreceipts', 'view', 'Lihat penerimaan barang'],
+            ['GET', 'products/*', 'products', 'view', 'Lihat produk'],
+
+            ['POST', 'purchase-requisitions', 'purchaserequisitions', 'create', 'Buat PR'],
+            ['PUT', 'purchase-requisitions/*', 'purchaserequisitions', 'edit', 'Ubah PR'],
+            ['POST', 'purchase-requisitions/*/submit', 'purchaserequisitions', 'edit', 'Ajukan PR'],
+            ['POST', 'purchase-requisitions/*/approve', 'purchaserequisitions', 'edit', 'Setujui PR'],
+            ['POST', 'purchase-requisitions/*/reject', 'purchaserequisitions', 'edit', 'Tolak PR'],
+            ['POST', 'purchase-requisitions/*/cancel', 'purchaserequisitions', 'delete', 'Batalkan PR'],
+            ['POST', 'purchase-requisitions/*/share', 'purchaserequisitions', 'edit', 'Bagikan PR'],
+
+            ['POST', 'purchase-orders', 'purchaseorders', 'create', 'Buat PO'],
+            ['PUT', 'purchase-orders/*', 'purchaseorders', 'edit', 'Ubah PO'],
+            ['POST', 'purchase-orders/*/submit', 'purchaseorders', 'edit', 'Ajukan PO'],
+            ['POST', 'purchase-orders/*/approve', 'purchaseorders', 'edit', 'Setujui PO'],
+            ['POST', 'purchase-orders/*/reject', 'purchaseorders', 'edit', 'Tolak PO'],
+            ['POST', 'purchase-orders/*/order', 'purchaseorders', 'edit', 'Tandai PO dipesan'],
+            ['POST', 'purchase-orders/*/cancel', 'purchaseorders', 'delete', 'Batalkan PO'],
+            ['POST', 'purchase-orders/*/share', 'purchaseorders', 'edit', 'Bagikan PO'],
+
+            ['POST', 'goods-receipts', 'goodsreceipts', 'create', 'Buat penerimaan barang'],
+            ['PUT', 'goods-receipts/*', 'goodsreceipts', 'edit', 'Ubah penerimaan barang'],
+            ['POST', 'goods-receipts/*/confirm', 'goodsreceipts', 'edit', 'Konfirmasi penerimaan barang'],
+            ['POST', 'goods-receipts/*/cancel', 'goodsreceipts', 'delete', 'Batalkan penerimaan barang'],
         ];
     }
 }

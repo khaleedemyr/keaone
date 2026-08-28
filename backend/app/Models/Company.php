@@ -79,6 +79,8 @@ class Company extends Model
             'pos_mode' => 'retail',
             'purchase_flow' => 'direct',
             'purchase_update_cost' => true,
+            'pr_need_approval' => false,
+            'po_need_approval' => false,
         ];
     }
 

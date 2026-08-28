@@ -42,7 +42,12 @@ class CategoryController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'sort_order' => ['nullable', 'integer'],
             'is_active' => ['sometimes', 'boolean'],
+            'show_pos' => ['sometimes', 'boolean'],
+            'is_raw_material' => ['sometimes', 'boolean'],
         ]);
+
+        $data['show_pos'] = array_key_exists('show_pos', $data) ? (bool) $data['show_pos'] : true;
+        $data['is_raw_material'] = array_key_exists('is_raw_material', $data) ? (bool) $data['is_raw_material'] : false;
 
         $category = Category::query()->create($data);
 
@@ -57,6 +62,8 @@ class CategoryController extends Controller
             'name' => ['sometimes', 'string', 'max:100'],
             'sort_order' => ['nullable', 'integer'],
             'is_active' => ['sometimes', 'boolean'],
+            'show_pos' => ['sometimes', 'boolean'],
+            'is_raw_material' => ['sometimes', 'boolean'],
         ]);
 
         $category->update($data);

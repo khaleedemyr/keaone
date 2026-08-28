@@ -28,11 +28,12 @@ class ActivityLogController extends Controller
     public function storeEvent(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'kind' => ['required', 'in:open_app,open_section,open_calendar'],
+            'kind' => ['required', 'in:open_app,open_section,open_calendar,view_doc,open_form'],
             'target' => ['required', 'string', 'max:40'],
+            'ref' => ['nullable', 'string', 'max:120'],
         ]);
 
-        ActivityLogger::client($data['kind'], $data['target'], $request);
+        ActivityLogger::client($data['kind'], $data['target'], $request, $data['ref'] ?? null);
 
         return $this->ok(['ok' => true]);
     }
@@ -50,6 +51,7 @@ class ActivityLogController extends Controller
                 $q->where(function ($inner) use ($search) {
                     $inner->where('summary', 'like', "%{$search}%")
                         ->orWhere('target', 'like', "%{$search}%")
+                        ->orWhere('meta', 'like', "%{$search}%")
                         ->orWhere('ip', 'like', "%{$search}%")
                         ->orWhereHas('user', function ($user) use ($search) {
                             $user->where('name', 'like', "%{$search}%")

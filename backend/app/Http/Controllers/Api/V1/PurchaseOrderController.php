@@ -18,7 +18,7 @@ class PurchaseOrderController extends Controller
         $this->ensureCan('purchaseorders', 'view');
 
         $query = PurchaseOrder::query()
-            ->with(['supplier:id,name', 'warehouse:id,name', 'user:id,name'])
+            ->with(['supplier:id,name', 'warehouse:id,name', 'user:id,name', 'approvals.user:id,name'])
             ->orderByDesc('id');
 
         if ($status = $request->string('status')->toString()) {
@@ -56,10 +56,13 @@ class PurchaseOrderController extends Controller
             'items.*.product_id' => ['required_with:items', 'integer'],
             'items.*.qty' => ['required_with:items', 'integer', 'min:1'],
             'items.*.unit_cost' => ['nullable', 'integer', 'min:0'],
+            'items.*.discount' => ['nullable', 'integer', 'min:0'],
             'items.*.unit' => ['nullable', 'string', 'max:40'],
             'items.*.unit_level' => ['nullable', 'string', 'in:small,medium,large'],
             'items.*.note' => ['nullable', 'string'],
             'items.*.purchase_requisition_item_id' => ['nullable', 'integer'],
+            'approvals' => ['sometimes', 'array'],
+            'approvals.*.user_id' => ['required_with:approvals', 'integer'],
         ]);
 
         $po = $this->purchases->createOrder($data, $request->user());
@@ -89,15 +92,52 @@ class PurchaseOrderController extends Controller
             'items.*.product_id' => ['required_with:items', 'integer'],
             'items.*.qty' => ['required_with:items', 'integer', 'min:1'],
             'items.*.unit_cost' => ['nullable', 'integer', 'min:0'],
+            'items.*.discount' => ['nullable', 'integer', 'min:0'],
             'items.*.unit' => ['nullable', 'string', 'max:40'],
             'items.*.unit_level' => ['nullable', 'string', 'in:small,medium,large'],
             'items.*.note' => ['nullable', 'string'],
             'items.*.purchase_requisition_item_id' => ['nullable', 'integer'],
+            'approvals' => ['sometimes', 'array'],
+            'approvals.*.user_id' => ['required_with:approvals', 'integer'],
         ]);
 
         $po = $this->purchases->updateOrder($purchaseOrder, $data);
 
         return $this->ok($this->purchases->serializePo($po));
+    }
+
+    public function submit(PurchaseOrder $purchaseOrder): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaseorders', 'edit');
+
+        return $this->ok($this->purchases->serializePo($this->purchases->submitOrder($purchaseOrder)));
+    }
+
+    public function approve(Request $request, PurchaseOrder $purchaseOrder): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCanAny([['purchaseorders', 'edit'], ['approvals', 'edit']]);
+
+        $data = $request->validate([
+            'items' => ['sometimes', 'array', 'min:1'],
+            'items.*.id' => ['required_with:items', 'integer'],
+            'items.*.qty' => ['required_with:items', 'integer', 'min:1'],
+        ]);
+
+        return $this->ok($this->purchases->serializePo(
+            $this->purchases->approveOrder($purchaseOrder, $request->user(), $data),
+        ));
+    }
+
+    public function reject(Request $request, PurchaseOrder $purchaseOrder): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCanAny([['purchaseorders', 'edit'], ['approvals', 'edit']]);
+
+        return $this->ok($this->purchases->serializePo(
+            $this->purchases->rejectOrder($purchaseOrder, $request->user()),
+        ));
     }
 
     public function markOrdered(PurchaseOrder $purchaseOrder): JsonResponse
@@ -114,5 +154,19 @@ class PurchaseOrderController extends Controller
         $this->ensureCanAny([['purchaseorders', 'edit'], ['purchaseorders', 'delete']]);
 
         return $this->ok($this->purchases->serializePo($this->purchases->cancelOrder($purchaseOrder)));
+    }
+
+    public function share(PurchaseOrder $purchaseOrder): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaseorders', 'view');
+
+        abort_if(! $this->purchases->canSharePo($purchaseOrder), 422, 'PO belum bisa dibagikan.');
+
+        $token = $this->purchases->ensureShareToken($purchaseOrder);
+
+        return $this->ok([
+            'share_token' => $token,
+        ]);
     }
 }
