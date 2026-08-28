@@ -9,7 +9,7 @@ type Section = 'tickets' | 'summary' | 'products' | 'cashiers' | 'methods' | 'ch
 const Sales = lazy(() => import('../pages/Sales'))
 const SalesReports = lazy(() => import('../pages/SalesReports'))
 
-const NAV: { id: Section; label: MsgKey; menu: string }[] = [
+export const SALES_NAV_ITEMS: { id: Section; label: MsgKey; menu: string }[] = [
   { id: 'tickets', label: 'salesTickets', menu: 'sales' },
   { id: 'summary', label: 'salesReportSummary', menu: 'salesreportsummary' },
   { id: 'products', label: 'salesReportProducts', menu: 'salesreportproducts' },
@@ -19,12 +19,12 @@ const NAV: { id: Section; label: MsgKey; menu: string }[] = [
   { id: 'daily', label: 'salesReportDaily', menu: 'salesreportdaily' },
 ]
 
-export const SALES_REPORT_MENUS = NAV.filter((item) => item.id !== 'tickets').map((item) => item.menu)
+export const SALES_REPORT_MENUS = SALES_NAV_ITEMS.filter((item) => item.id !== 'tickets').map((item) => item.menu)
 
 export default function SalesApp() {
   const { t } = useI18n()
   const { can } = useAccess()
-  const visibleNav = useMemo(() => NAV.filter((item) => can(item.menu, 'view')), [can])
+  const visibleNav = useMemo(() => SALES_NAV_ITEMS.filter((item) => can(item.menu, 'view')), [can])
   const items = visibleNav.map((item) => ({ id: item.id, label: t(item.label) }))
   const [section, setSection] = useState<Section | null>(null)
   const current = section && items.some((item) => item.id === section) ? section : null

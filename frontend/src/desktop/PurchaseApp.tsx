@@ -7,6 +7,26 @@ import { AppNavShell } from './AppNavShell'
 
 type Section = 'pr' | 'po' | 'gr' | 'direct' | 'settings'
 
+type PurchaseNavDef = { id: Section; label: MsgKey; menu: string }
+
+export function getPurchaseNavDefs(flow: 'strict_pr_po_gr' | 'po_gr' | 'direct'): PurchaseNavDef[] {
+  const items: PurchaseNavDef[] = []
+  if (flow === 'strict_pr_po_gr') {
+    items.push({ id: 'pr', label: 'purchasePrTitle', menu: 'purchaserequisitions' })
+  }
+  if (flow === 'strict_pr_po_gr' || flow === 'po_gr') {
+    items.push({ id: 'po', label: 'purchasePoTitle', menu: 'purchaseorders' })
+  }
+  if (flow === 'strict_pr_po_gr' || flow === 'po_gr') {
+    items.push({ id: 'gr', label: 'purchaseGrTitle', menu: 'goodsreceipts' })
+  }
+  if (flow === 'direct') {
+    items.push({ id: 'direct', label: 'purchaseDirectTitle', menu: 'goodsreceipts' })
+  }
+  items.push({ id: 'settings', label: 'navPurchaseSettings', menu: 'purchasesettings' })
+  return items
+}
+
 const PurchaseDocs = lazy(() => import('../pages/purchase/PurchaseDocs'))
 const PurchaseSettings = lazy(() => import('../pages/purchase/PurchaseSettings'))
 
@@ -17,23 +37,11 @@ export default function PurchaseApp() {
   const flow = (me?.settings?.purchase_flow ?? 'direct') as 'strict_pr_po_gr' | 'po_gr' | 'direct'
 
   const nav = useMemo(() => {
-    const items: { id: Section; label: MsgKey; menu: string }[] = []
-    if (flow === 'strict_pr_po_gr' && can('purchaserequisitions', 'view')) {
-      items.push({ id: 'pr', label: 'purchasePrTitle', menu: 'purchaserequisitions' })
-    }
-    if ((flow === 'strict_pr_po_gr' || flow === 'po_gr') && can('purchaseorders', 'view')) {
-      items.push({ id: 'po', label: 'purchasePoTitle', menu: 'purchaseorders' })
-    }
-    if ((flow === 'strict_pr_po_gr' || flow === 'po_gr') && can('goodsreceipts', 'view')) {
-      items.push({ id: 'gr', label: 'purchaseGrTitle', menu: 'goodsreceipts' })
-    }
-    if (flow === 'direct' && can('goodsreceipts', 'view')) {
-      items.push({ id: 'direct', label: 'purchaseDirectTitle', menu: 'goodsreceipts' })
-    }
-    if (can('purchasesettings', 'view')) {
-      items.push({ id: 'settings', label: 'navPurchaseSettings', menu: 'purchasesettings' })
-    }
-    return items
+    const defs = getPurchaseNavDefs(flow)
+    return defs.filter((item) => {
+      if (item.id === 'settings') return can(item.menu, 'view')
+      return can(item.menu, 'view')
+    })
   }, [can, flow])
 
   const items = nav.map((item) => ({ id: item.id, label: t(item.label) }))

@@ -3631,8 +3631,14 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
     position: sticky;
     top: 0;
     height: 100svh;
+    width: 17rem;
     transform: none;
     flex-shrink: 0;
+    transition: width 0.22s ease;
+  }
+
+  .erp-sidebar.is-collapsed {
+    width: 4.35rem;
   }
 
   .erp-sidebar-backdrop {
@@ -3648,6 +3654,208 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
   background: color-mix(in srgb, var(--glass-a) 88%, transparent);
   padding: 1rem;
   backdrop-filter: blur(16px);
+}
+
+.erp-sidebar.is-collapsed .erp-sidebar-inner {
+  padding: 0.75rem 0.45rem;
+  align-items: center;
+}
+
+.erp-sidebar-brand {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.erp-sidebar.is-collapsed .erp-sidebar-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.35rem;
+}
+
+.erp-sidebar-foot {
+  margin-top: auto;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.erp-sidebar-collapse-btn {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--fill);
+  padding: 0.55rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.erp-sidebar-collapse-btn:hover {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--mint) 35%, var(--line));
+}
+
+.erp-sidebar.is-collapsed .erp-sidebar-collapse-btn {
+  width: 2.5rem;
+  padding: 0.55rem;
+}
+
+.erp-sidebar.is-collapsed .erp-sidebar-collapse-label,
+.erp-sidebar.is-collapsed .erp-nav-label,
+.erp-sidebar.is-collapsed .erp-nav-caret,
+.erp-sidebar.is-collapsed .erp-subnav {
+  display: none;
+}
+
+.erp-sidebar.is-collapsed .erp-nav-item {
+  justify-content: center;
+  padding: 0.6rem;
+}
+
+.erp-sidebar.is-collapsed .erp-sidebar-tools {
+  flex-direction: column;
+  align-items: center;
+}
+
+.erp-sidebar-search {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  margin-bottom: 0.75rem;
+}
+
+.erp-sidebar-search-field {
+  position: relative;
+}
+
+.erp-sidebar-search-icon {
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  left: 0.65rem;
+  height: 0.95rem;
+  width: 0.95rem;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+
+.erp-sidebar-search-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--fill);
+  padding: 0.55rem 0.7rem 0.55rem 2rem;
+  font-size: 0.78rem;
+  color: var(--fg);
+  outline: none;
+}
+
+.erp-sidebar-search-input:focus {
+  border-color: color-mix(in srgb, var(--mint) 45%, var(--line));
+}
+
+.erp-sidebar-search-results {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  z-index: 60;
+  max-height: min(16rem, 40vh);
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--page);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+}
+
+.erp-sidebar-search.is-collapsed {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.erp-sidebar-search-toggle {
+  display: grid;
+  height: 2.35rem;
+  width: 2.35rem;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--fill);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.erp-sidebar-search-toggle:hover {
+  color: var(--fg);
+}
+
+.erp-sidebar-search-popover {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 0.35rem);
+  z-index: 60;
+  width: min(14rem, 70vw);
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--page);
+  padding: 0.55rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+}
+
+.erp-sidebar-search-popover .erp-sidebar-search-input {
+  padding-left: 0.7rem;
+}
+
+.erp-sidebar-search-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.erp-sidebar-search-item {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  border: 0;
+  border-radius: 0.65rem;
+  background: transparent;
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.erp-sidebar-search-item:hover {
+  background: var(--fill);
+}
+
+.erp-sidebar-search-item-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.erp-sidebar-search-item-meta {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.erp-sidebar-search-empty {
+  padding: 0.55rem 0.65rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.erp-sidebar-search-results .erp-sidebar-search-list,
+.erp-sidebar-search-popover .erp-sidebar-search-list {
+  max-height: 12rem;
+  overflow: auto;
 }
 
 .erp-main {

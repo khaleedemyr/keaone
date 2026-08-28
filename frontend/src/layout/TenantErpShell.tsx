@@ -13,12 +13,14 @@ import { useI18n } from '../i18n'
 import { ErpAccountMenu } from './ErpAccountMenu'
 import { ErpShell } from './ErpShell'
 import { TenantAppView } from './TenantAppView'
+import { useTenantErpSearchEntries } from './useTenantErpSearchEntries'
 
 export default function TenantErpShell() {
   const { t } = useI18n()
   const { me, logout, switchCompany, createCompany } = useAuth()
   const navigate = useNavigate()
   const { apps, titles } = useTenantApps()
+  const searchEntries = useTenantErpSearchEntries(apps, titles)
   const [newCompany, setNewCompany] = useState('')
   const [newType, setNewType] = useState('retail')
   const [creating, setCreating] = useState(false)
@@ -80,6 +82,7 @@ export default function TenantErpShell() {
     <ErpShell
       apps={apps}
       titles={titles}
+      searchEntries={searchEntries}
       eyebrow={t('osLine')}
       renderApp={(id) => <TenantAppView appId={id} />}
       banners={banners}

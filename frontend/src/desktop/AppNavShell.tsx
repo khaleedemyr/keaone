@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Suspense } from 'react'
 import { useI18n } from '../i18n'
 import { useErpSubNavContext, useErpSubNavEffect, type ErpSubNavRegistration } from '../layout/ErpSubNavContext'
+import { useErpNavOptional } from '../layout/ErpNavContext'
 
 export type AppNavItem<T extends string> = { id: T; label: string }
 
@@ -130,6 +131,16 @@ export function AppNavShell<T extends string>({
   }, [erpMode, visibleGroups, grouped, flatItems, current, selectItem])
 
   useErpSubNavEffect(erpRegistration)
+
+  const erpNav = useErpNavOptional()
+  useEffect(() => {
+    if (!erpMode || !erpNav?.pendingSection) return
+    const { sectionId } = erpNav.pendingSection
+    if (flatItems.some((item) => item.id === sectionId)) {
+      erpNav.clearPendingSection()
+      selectItem(sectionId as T)
+    }
+  }, [erpMode, erpNav, erpNav?.pendingSection, flatItems, selectItem])
 
   useEffect(() => {
     if (visibleGroups.length === 0) return

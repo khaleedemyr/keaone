@@ -6,7 +6,11 @@ import type { AppId } from '../desktop/DesktopContext'
 import { useI18n } from '../i18n'
 import { ErpFlyoutProvider } from './ErpFlyoutContext'
 import { ErpNavProvider } from './ErpNavContext'
+import { ErpSidebarSearch } from './ErpSidebarSearch'
 import { ErpSubNavProvider, useErpSubNavContext } from './ErpSubNavContext'
+import type { ErpSearchEntry } from './erpNavSearch'
+
+const SIDEBAR_COLLAPSED_KEY = 'kea_erp_sidebar_collapsed'
 
 type ErpShellProps<T extends string> = {
   apps: T[]
@@ -17,18 +21,21 @@ type ErpShellProps<T extends string> = {
   banners?: ReactNode
   navbarExtras?: ReactNode
   sidebarTools?: ReactNode
+  searchEntries?: ErpSearchEntry[]
 }
 
 function ErpSidebarNav<T extends string>({
   apps,
   titles,
   active,
+  collapsed,
   onSelectApp,
   onCloseSidebar,
 }: {
   apps: T[]
   titles: Partial<Record<T, string>>
   active: T | null
+  collapsed: boolean
   onSelectApp: (id: T, opts?: { keepSidebarOpen?: boolean }) => void
   onCloseSidebar: () => void
 }) {
@@ -76,13 +83,15 @@ function ErpSidebarNav<T extends string>({
     <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
       {apps.map((id) => {
         const selected = active === id
-        const showSubNav = selected && registration && (registration.groups.length > 0 || registration.items.length > 0)
+        const showSubNav = !collapsed && selected && registration && (registration.groups.length > 0 || registration.items.length > 0)
         const expanded = expandedApps[id as string] ?? selected
+        const label = titles[id] ?? id
 
         return (
           <div key={id} className="erp-nav-block">
             <button
               type="button"
+              title={collapsed ? label : undefined}
               onClick={() => {
                 if (selected) {
                   if (showSubNav) {
@@ -98,7 +107,7 @@ function ErpSidebarNav<T extends string>({
               <span className={`erp-nav-glyph bg-gradient-to-br ${APP_TILE[id as AppId]}`}>
                 <AppGlyph id={id as AppId} className="h-4 w-4" />
               </span>
-              <span className="min-w-0 flex-1 truncate text-left font-medium">{titles[id] ?? id}</span>
+              <span className="erp-nav-label min-w-0 flex-1 truncate text-left font-medium">{label}</span>
               {showSubNav ? (
                 <span className="erp-nav-caret" aria-hidden>
                   {expanded ? '▾' : '▸'}
@@ -156,6 +165,14 @@ function ErpSidebarNav<T extends string>({
   )
 }
 
+function readSidebarCollapsed() {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 export function ErpShell<T extends string>({
   apps,
   titles,
@@ -165,11 +182,14 @@ export function ErpShell<T extends string>({
   banners,
   navbarExtras,
   sidebarTools,
+  searchEntries = [],
 }: ErpShellProps<T>) {
   const { t } = useI18n()
   const [active, setActive] = useState<T | null>(() => apps[0] ?? null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
   const [flyoutMount, setFlyoutMount] = useState<HTMLDivElement | null>(null)
+  const [pendingSection, setPendingSection] = useState<{ appId: AppId; sectionId: string } | null>(null)
 
   useEffect(() => {
     if (apps.length === 0) {
@@ -193,13 +213,50 @@ export function ErpShell<T extends string>({
     [apps, selectApp],
   )
 
+  const openAppSection = useCallback(
+    (id: AppId, sectionId: string) => {
+      setPendingSection({ appId: id, sectionId })
+      if (apps.includes(id as T)) selectApp(id as T, { keepSidebarOpen: true })
+    },
+    [apps, selectApp],
+  )
+
+  const clearPendingSection = useCallback(() => setPendingSection(null), [])
+
+  function toggleSidebarCollapsed() {
+    setSidebarCollapsed((value) => {
+      const next = !value
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }
+
+  function handleSearchSelect(entry: ErpSearchEntry) {
+    if (entry.sectionId) {
+      openAppSection(entry.appId, entry.sectionId)
+    } else {
+      setPendingSection(null)
+      openErpApp(entry.appId)
+    }
+    setSidebarOpen(false)
+  }
+
   const title = active ? (titles[active] ?? active) : t('appSettings')
 
   return (
-    <ErpNavProvider openApp={openErpApp}>
+    <ErpNavProvider
+      openApp={openErpApp}
+      openAppSection={openAppSection}
+      pendingSection={pendingSection}
+      clearPendingSection={clearPendingSection}
+    >
       <ErpSubNavProvider>
         <ErpFlyoutProvider mount={flyoutMount}>
-          <div className="erp-shell min-h-svh bg-page text-fg">
+          <div className={`erp-shell min-h-svh bg-page text-fg ${sidebarCollapsed ? 'is-sidebar-collapsed' : ''}`}>
             <div ref={setFlyoutMount} className="erp-flyout-mount" />
             {sidebarOpen ? (
               <button
@@ -210,21 +267,56 @@ export function ErpShell<T extends string>({
               />
             ) : null}
 
-            <aside className={`erp-sidebar ${sidebarOpen ? 'is-open' : ''}`}>
+            <aside className={`erp-sidebar ${sidebarOpen ? 'is-open' : ''} ${sidebarCollapsed ? 'is-collapsed' : ''}`}>
               <div className="erp-sidebar-inner">
-                <div className="mb-4 px-1">
-                  <BrandLockup subtitle={eyebrow} />
+                <div className="erp-sidebar-brand">
+                  {sidebarCollapsed ? (
+                    <Logo className="mx-auto h-9 w-9 shrink-0" />
+                  ) : (
+                    <div className="mb-1 px-1">
+                      <BrandLockup subtitle={eyebrow} />
+                    </div>
+                  )}
                 </div>
+
+                {searchEntries.length > 0 ? (
+                  <ErpSidebarSearch
+                    entries={searchEntries}
+                    collapsed={sidebarCollapsed}
+                    onSelect={handleSearchSelect}
+                  />
+                ) : null}
 
                 <ErpSidebarNav
                   apps={apps}
                   titles={titles}
                   active={active}
+                  collapsed={sidebarCollapsed}
                   onSelectApp={selectApp}
                   onCloseSidebar={() => setSidebarOpen(false)}
                 />
 
-                {sidebarTools ? <div className="erp-sidebar-tools">{sidebarTools}</div> : null}
+                <div className="erp-sidebar-foot">
+                  {sidebarTools ? <div className="erp-sidebar-tools">{sidebarTools}</div> : null}
+                  <button
+                    type="button"
+                    className="erp-sidebar-collapse-btn hidden md:inline-flex"
+                    aria-label={sidebarCollapsed ? t('erpSidebarExpand') : t('erpSidebarCollapse')}
+                    title={sidebarCollapsed ? t('erpSidebarExpand') : t('erpSidebarCollapse')}
+                    onClick={toggleSidebarCollapsed}
+                  >
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                      {sidebarCollapsed ? (
+                        <path d="M9 6v12M15 8l4 4-4 4" />
+                      ) : (
+                        <path d="M15 6v12M9 8 5 12l4 4" />
+                      )}
+                    </svg>
+                    <span className="erp-sidebar-collapse-label">
+                      {sidebarCollapsed ? t('erpSidebarExpand') : t('erpSidebarCollapse')}
+                    </span>
+                  </button>
+                </div>
               </div>
             </aside>
 

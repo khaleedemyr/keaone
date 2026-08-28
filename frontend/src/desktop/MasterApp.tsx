@@ -39,7 +39,7 @@ const Parties = lazy(() => import('../pages/Parties'))
 const StockPage = lazy(() => import('../pages/Stock'))
 const StockCardPage = lazy(() => import('../pages/StockCard'))
 
-const NAV_GROUPS: { id: string; label: MsgKey; items: { id: Section; label: MsgKey }[] }[] = [
+export const MASTER_NAV_GROUPS: { id: string; label: MsgKey; items: { id: Section; label: MsgKey }[] }[] = [
   {
     id: 'catalog',
     label: 'masterGroupCatalog',
@@ -94,7 +94,7 @@ export default function MasterApp() {
   const [cardFocus, setCardFocus] = useState<{ productId: number; warehouseId: number } | null>(null)
   const groups = useMemo<AppNavGroup<Section>[]>(
     () =>
-      NAV_GROUPS.map((group) => ({
+      MASTER_NAV_GROUPS.map((group) => ({
         id: group.id,
         label: t(group.label),
         items: group.items
