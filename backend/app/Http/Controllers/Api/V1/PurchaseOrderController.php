@@ -31,6 +31,13 @@ class PurchaseOrderController extends Controller
             });
         }
 
+        if ($from = $request->string('from')->toString()) {
+            $query->whereDate('created_at', '>=', $from);
+        }
+        if ($to = $request->string('to')->toString()) {
+            $query->whereDate('created_at', '<=', $to);
+        }
+
         $page = $query->paginate($this->perPage($request, 20));
 
         return $this->ok(

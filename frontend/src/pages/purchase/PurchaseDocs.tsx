@@ -210,6 +210,8 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
   const [detailPoId, setDetailPoId] = useState<number | null>(null)
   const [detailPrId, setDetailPrId] = useState<number | null>(null)
   const [prActionId, setPrActionId] = useState<number | null>(null)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   const { options: supplierOptions } = useSupplierSelect(suppliers)
 
@@ -300,6 +302,8 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
           page: list.page,
           per_page: list.perPage,
           direct_only: kind === 'direct' ? 1 : undefined,
+          from: (kind === 'pr' || kind === 'po') && dateFrom ? dateFrom : undefined,
+          to: (kind === 'pr' || kind === 'po') && dateTo ? dateTo : undefined,
         },
       })
       setRows(data.data)
@@ -312,7 +316,13 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
   useEffect(() => {
     const handle = window.setTimeout(() => void load(), 200)
     return () => window.clearTimeout(handle)
-  }, [list.search, list.status, list.page, list.perPage, kind])
+  }, [list.search, list.status, list.page, list.perPage, kind, dateFrom, dateTo])
+
+  useEffect(() => {
+    setDateFrom('')
+    setDateTo('')
+    list.setPage(1)
+  }, [kind])
 
   useEffect(() => {
     void api
@@ -743,7 +753,43 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
         <h3 className="mb-2 mt-2 text-sm font-semibold text-fg">{t('purchasePoListTitle')}</h3>
       ) : null}
 
-      <MasterFilters {...list.filters} searchPlaceholder={t('purchaseSearch')} statusOptions={statusOptions} />
+      <MasterFilters
+        {...list.filters}
+        searchPlaceholder={t('purchaseSearch')}
+        statusOptions={statusOptions}
+        extra={
+          kind === 'pr' || kind === 'po' ? (
+            <>
+              <label className="text-sm text-muted">
+                {t('stockFrom')}
+                <input
+                  type="date"
+                  className="field !mt-1"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(e) => {
+                    list.setPage(1)
+                    setDateFrom(e.target.value)
+                  }}
+                />
+              </label>
+              <label className="text-sm text-muted">
+                {t('stockTo')}
+                <input
+                  type="date"
+                  className="field !mt-1"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(e) => {
+                    list.setPage(1)
+                    setDateTo(e.target.value)
+                  }}
+                />
+              </label>
+            </>
+          ) : undefined
+        }
+      />
 
       <div className="mt-4 overflow-auto rounded-2xl border border-line">
         <table className="min-w-full text-left text-sm">

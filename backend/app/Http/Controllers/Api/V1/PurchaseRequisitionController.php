@@ -35,6 +35,13 @@ class PurchaseRequisitionController extends Controller
             $query->where('number', 'like', "%{$search}%");
         }
 
+        if ($from = $request->string('from')->toString()) {
+            $query->whereDate('created_at', '>=', $from);
+        }
+        if ($to = $request->string('to')->toString()) {
+            $query->whereDate('created_at', '<=', $to);
+        }
+
         $page = $query->paginate($this->perPage($request, $request->boolean('for_po') ? 50 : 20));
 
         return $this->ok(
