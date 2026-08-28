@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { Avatar } from '../components/Avatar'
+import { PrefsBar } from '../components/PrefsBar'
 import { NotifyTray } from '../desktop/NotifyTray'
 import { usePlatformApps } from '../desktop/usePlatformApps'
 import { useI18n } from '../i18n'
 import { usePlatformAccess } from '../platform/access'
 import { SupportTray } from '../platform/SupportTray'
+import { ErpAccountMenu } from './ErpAccountMenu'
 import { ErpShell } from './ErpShell'
 import { PlatformAppView } from './PlatformAppView'
 
@@ -34,20 +35,24 @@ export default function PlatformErpShell() {
           <SupportTray />
         </>
       }
-      accountPanel={
-        <div className="rounded-2xl border border-line bg-fill p-3">
-          <div className="flex items-center gap-3">
-            <Avatar name={me?.user.name ?? ''} src={me?.user.avatar} />
+      accountMenu={
+        <ErpAccountMenu name={me?.user.name ?? ''} avatar={me?.user.avatar} subtitle={me?.user.email}>
+          <div className="sm:hidden border-b border-line pb-3">
+            <PrefsBar compact />
+          </div>
+
+          <div className="erp-account-head">
             <div className="min-w-0">
               <div className="truncate text-sm font-medium text-fg">{me?.user.name}</div>
               <div className="mt-0.5 truncate text-xs text-muted">{me?.user.email}</div>
               <div className="mt-1 text-[11px] text-mint">{roleLabel}</div>
             </div>
           </div>
+
           <button type="button" className="btn-ghost mt-3 w-full" onClick={() => void handleLogout()}>
             {t('logout')}
           </button>
-        </div>
+        </ErpAccountMenu>
       }
     />
   )

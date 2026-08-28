@@ -10,6 +10,7 @@ import {
 } from './notifyStore'
 import { onOsFlyout, openOsFlyout } from './osFlyout'
 import { useDesktop } from './DesktopContext'
+import { useErpNavOptional } from '../layout/ErpNavContext'
 import {
   clearAllNotifications,
   dismissServerNotification,
@@ -51,6 +52,7 @@ function formatWhen(at: number, locale: string, justNow: string) {
 export function NotifyTray() {
   const { t, locale } = useI18n()
   const desktop = useDesktop()
+  const erpNav = useErpNavOptional()
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   useServerNotifications(true)
@@ -95,7 +97,8 @@ export function NotifyTray() {
   function onOpenItem(item: TrayNotification) {
     const app = item.meta && typeof item.meta.app === 'string' ? item.meta.app : null
     if (app === 'approvals' || app === 'purchase' || app === 'insight' || app === 'pos' || app === 'master' || app === 'sales' || app === 'admin' || app === 'settings') {
-      desktop.openApp(app)
+      if (erpNav) erpNav.openApp(app)
+      else desktop.openApp(app)
       setOpen(false)
     }
   }

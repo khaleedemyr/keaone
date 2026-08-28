@@ -1,16 +1,17 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { BrandLockup, Logo } from '../components/Logo'
 import { PrefsBar } from '../components/PrefsBar'
 import { AppGlyph, APP_TILE } from '../desktop/glyphs'
 import type { AppId } from '../desktop/DesktopContext'
 import { useI18n } from '../i18n'
+import { ErpNavProvider } from './ErpNavContext'
 
 type ErpShellProps<T extends string> = {
   apps: T[]
   titles: Partial<Record<T, string>>
   renderApp: (id: T) => ReactNode
   eyebrow: string
-  accountPanel: ReactNode
+  accountMenu: ReactNode
   banners?: ReactNode
   navbarExtras?: ReactNode
 }
@@ -20,7 +21,7 @@ export function ErpShell<T extends string>({
   titles,
   renderApp,
   eyebrow,
-  accountPanel,
+  accountMenu,
   banners,
   navbarExtras,
 }: ErpShellProps<T>) {
@@ -36,14 +37,22 @@ export function ErpShell<T extends string>({
     setActive((current) => (current && apps.includes(current) ? current : apps[0]))
   }, [apps])
 
-  function selectApp(id: T) {
+  const selectApp = useCallback((id: T) => {
     setActive(id)
     setSidebarOpen(false)
-  }
+  }, [])
+
+  const openErpApp = useCallback(
+    (id: AppId) => {
+      if (apps.includes(id as T)) selectApp(id as T)
+    },
+    [apps, selectApp],
+  )
 
   const title = active ? (titles[active] ?? active) : t('appSettings')
 
   return (
+    <ErpNavProvider openApp={openErpApp}>
     <div className="erp-shell min-h-svh bg-page text-fg">
       {sidebarOpen ? (
         <button
@@ -78,8 +87,6 @@ export function ErpShell<T extends string>({
               )
             })}
           </nav>
-
-          <div className="mt-4 shrink-0 space-y-3 border-t border-line pt-4">{accountPanel}</div>
         </div>
       </aside>
 
@@ -104,11 +111,12 @@ export function ErpShell<T extends string>({
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <div className="hidden sm:block">
               <PrefsBar compact />
             </div>
             {navbarExtras}
+            {accountMenu}
           </div>
         </header>
 
@@ -123,5 +131,6 @@ export function ErpShell<T extends string>({
         </main>
       </div>
     </div>
+    </ErpNavProvider>
   )
 }

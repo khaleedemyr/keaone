@@ -3576,7 +3576,7 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
 .erp-navbar {
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: 55;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3688,5 +3688,132 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
 .erp-company.is-active {
   background: var(--fill);
   color: var(--fg);
+}
+
+/* ERP navbar account menu */
+.erp-account-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.erp-account-trigger {
+  display: inline-flex;
+  max-width: min(12rem, 38vw);
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--fill);
+  padding: 0.2rem 0.55rem 0.2rem 0.2rem;
+  color: var(--fg);
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.erp-account-trigger:hover,
+.erp-account-trigger.is-active {
+  background: color-mix(in srgb, var(--fill) 80%, var(--mint) 8%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mint) 25%, var(--line));
+}
+
+.erp-account-trigger-text {
+  display: none;
+  min-width: 0;
+  flex-direction: column;
+  text-align: left;
+  line-height: 1.2;
+}
+
+@media (min-width: 480px) {
+  .erp-account-trigger-text {
+    display: flex;
+  }
+}
+
+.erp-account-chevron {
+  display: none;
+  height: 0.95rem;
+  width: 0.95rem;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+@media (min-width: 480px) {
+  .erp-account-chevron {
+    display: block;
+  }
+}
+
+.erp-account-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 58;
+  border: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.erp-account-dropdown {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  inset-inline-end: 0;
+  z-index: 60;
+  width: min(18rem, calc(100vw - 1.5rem));
+  max-height: min(70svh, 32rem);
+  overflow: auto;
+  overscroll-contain: contain;
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: linear-gradient(180deg, var(--glass-a), var(--glass-b));
+  padding: 0.85rem;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(22px);
+}
+
+.erp-account-head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+@media (max-width: 767px) {
+  .erp-account-dropdown {
+    position: fixed;
+    top: auto;
+    inset-inline: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: min(85svh, 36rem);
+    border-radius: 1.35rem 1.35rem 0 0;
+    padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ERP navbar trays open downward (taskbar flyouts open upward) */
+.erp-shell .os-chat-flyout,
+.erp-shell .os-notify,
+.erp-shell .os-support-flyout,
+.erp-shell .os-calendar {
+  bottom: auto;
+  top: calc(100% + 0.55rem);
+}
+
+@media (max-width: 767px) {
+  .erp-shell .os-chat-flyout,
+  .erp-shell .os-notify,
+  .erp-shell .os-support-flyout {
+    position: fixed;
+    inset-inline: 0.5rem;
+    top: 4.25rem;
+    bottom: 0.5rem;
+    width: auto;
+    height: auto;
+    max-height: none;
+    border-radius: 1.25rem;
+  }
+
+  .erp-shell .os-notify {
+    padding: 0.9rem 0.75rem 0.75rem;
+  }
 }
 
