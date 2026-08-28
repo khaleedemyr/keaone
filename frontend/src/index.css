@@ -4299,3 +4299,212 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
   color: var(--fg);
 }
 
+/* —— Beranda (home profile) —— */
+.beranda-page {
+  margin: -1rem;
+}
+
+@media (min-width: 768px) {
+  .beranda-page {
+    margin: -1.25rem -1.5rem -1.5rem;
+  }
+}
+
+.beranda-cover {
+  height: 10.5rem;
+  background-position: center !important;
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
+  border-bottom: 1px solid var(--line);
+}
+
+@media (min-width: 768px) {
+  .beranda-cover {
+    height: 14rem;
+  }
+}
+
+.beranda-body {
+  padding: 0 1rem 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .beranda-body {
+    padding: 0 1.5rem 1.5rem;
+  }
+}
+
+.beranda-profile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem 1.25rem;
+  margin-top: -2.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.beranda-avatar-wrap {
+  padding: 0.2rem;
+  border-radius: 9999px;
+  background: var(--page);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.beranda-profile-meta {
+  min-width: 0;
+  flex: 1;
+  padding-bottom: 0.15rem;
+}
+
+.beranda-eyebrow {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.beranda-name {
+  margin-top: 0.2rem;
+  font-family: var(--font-display, inherit);
+  font-size: clamp(1.35rem, 3vw, 1.75rem);
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--fg);
+}
+
+.beranda-subtitle {
+  margin-top: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.beranda-role {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--mint) 85%, var(--fg));
+}
+
+.beranda-section {
+  margin-bottom: 1.25rem;
+}
+
+.beranda-section-title {
+  margin-bottom: 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.beranda-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+@media (min-width: 768px) {
+  .beranda-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.beranda-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: 1rem;
+  border: 1px solid var(--line);
+  background: var(--fill);
+}
+
+.beranda-stat-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.beranda-stat-value {
+  font-family: var(--font-display, inherit);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.beranda-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: 0.65rem;
+}
+
+.beranda-shortcut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.75rem 0.5rem;
+  border-radius: 1rem;
+  border: 1px solid var(--line);
+  background: var(--fill);
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.beranda-shortcut:hover {
+  border-color: color-mix(in srgb, var(--mint) 45%, var(--line));
+  transform: translateY(-1px);
+}
+
+.beranda-shortcut-glyph {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.85rem;
+  color: #071018;
+}
+
+.beranda-shortcut-label {
+  max-width: 100%;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.beranda-widgets {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .beranda-widgets {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.beranda-card {
+  padding: 1rem;
+  border-radius: 1.25rem;
+  border: 1px solid var(--line);
+  background: var(--fill);
+}
+
+.beranda-card-head {
+  margin-bottom: 0.75rem;
+}
+
+.beranda-calendar.os-calendar {
+  padding: 0;
+}
+
+.beranda-calendar .os-cal-detail {
+  margin-top: 0.75rem;
+}

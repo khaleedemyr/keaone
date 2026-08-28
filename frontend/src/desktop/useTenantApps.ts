@@ -16,6 +16,7 @@ export function useTenantApps() {
 
   const apps: TenantAppId[] = useMemo(
     () => [
+      'beranda',
       ...(can('insight') ? (['insight'] as TenantAppId[]) : []),
       ...(me?.modules?.pos && can('pos') ? (['pos'] as TenantAppId[]) : []),
       ...(canAny(
@@ -55,6 +56,7 @@ export function useTenantApps() {
 
   const titles = useMemo<Partial<Record<AppId, string>>>(
     () => ({
+      beranda: t('appBeranda'),
       insight: t('appInsight'),
       pos: t('appPos'),
       master: t('appMaster'),

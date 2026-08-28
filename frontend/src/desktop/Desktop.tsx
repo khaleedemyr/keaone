@@ -5,6 +5,7 @@ import { Avatar } from '../components/Avatar'
 import { BusinessTypeField } from '../components/BusinessTypeField'
 import { Logo } from '../components/Logo'
 import { PrefsBar } from '../components/PrefsBar'
+import Beranda from '../pages/Beranda'
 import Dashboard from '../pages/Dashboard'
 import Pos from '../pages/Pos'
 import { useI18n } from '../i18n'
@@ -117,6 +118,7 @@ export default function Desktop() {
         {desktop.windows.map((win) => (
           <WindowFrame key={win.id} id={win.id} title={titles[win.id] ?? win.id}>
             <ErrorBoundary>
+              {win.id === 'beranda' ? <Beranda /> : null}
               {win.id === 'insight' ? <Dashboard /> : null}
               {win.id === 'pos' ? <Pos /> : null}
               {win.id === 'master' ? <MasterApp /> : null}

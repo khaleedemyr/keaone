@@ -9,6 +9,13 @@ export function AppGlyph({ id, className = 'h-7 w-7' }: { id: AppId; className?:
     className,
   }
 
+  if (id === 'beranda') {
+    return (
+      <svg {...common}>
+        <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z" />
+      </svg>
+    )
+  }
   if (id === 'insight') {
     return (
       <svg {...common}>
@@ -105,6 +112,7 @@ export function AppGlyph({ id, className = 'h-7 w-7' }: { id: AppId; className?:
 }
 
 export const APP_TILE: Record<AppId, string> = {
+  beranda: 'from-sky-300 to-indigo-400',
   insight: 'from-cyan-300 to-violet',
   pos: 'from-mint to-teal-400',
   master: 'from-violet to-indigo-400',
