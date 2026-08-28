@@ -681,14 +681,94 @@ html.light .os-icon-label {
   color: var(--mint, #3ee8c5);
 }
 
-@media (max-width: 767px) {
-  .os-app-nav {
-    width: 100%;
-    flex-direction: row;
-    overflow-x: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
+.os-app-nav-mobile-bar {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--fill) 75%, transparent);
+  padding: 0.55rem 0.85rem;
+}
+
+.os-app-nav-mobile-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--fill);
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.os-app-nav-mobile-kicker {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.os-app-nav-mobile-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.os-app-nav-mobile-chevron {
+  height: 1rem;
+  width: 1rem;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.os-app-nav-mobile-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  border: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.os-app-nav-mobile-sheet {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 66;
+  display: flex;
+  max-height: min(78svh, 32rem);
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+  border-radius: 1.25rem 1.25rem 0 0;
+  background: linear-gradient(180deg, var(--glass-a), var(--glass-b));
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.35);
+}
+
+.os-app-nav-mobile-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  padding: 0.85rem 1rem;
+}
+
+.os-app-nav-mobile-list {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-right: 0;
+  padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
 }
 
 .os-taskbar {
