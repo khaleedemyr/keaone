@@ -15,7 +15,7 @@ class EnsureTablePartitionsCommand extends Command
     public function handle(): int
     {
         if (! MySqlPartitions::enabled()) {
-            $this->warn('Partitioning only applies to MySQL — skipped.');
+            $this->warn('Partitioning requires mysql/mariadb — skipped.');
 
             return self::SUCCESS;
         }

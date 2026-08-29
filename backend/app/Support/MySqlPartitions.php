@@ -10,7 +10,7 @@ class MySqlPartitions
 {
     public static function enabled(): bool
     {
-        return Schema::getConnection()->getDriverName() === 'mysql';
+        return in_array(Schema::getConnection()->getDriverName(), ['mysql', 'mariadb'], true);
     }
 
     public static function isPartitioned(string $table): bool
@@ -21,12 +21,15 @@ class MySqlPartitions
 
         $db = Schema::getConnection()->getDatabaseName();
         $row = DB::selectOne(
-            'SELECT COUNT(*) AS c FROM information_schema.PARTITIONS
-             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL',
+            'SELECT PARTITION_METHOD AS method FROM information_schema.PARTITIONS
+             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+             LIMIT 1',
             [$db, $table],
         );
 
-        return ((int) ($row->c ?? 0)) > 0;
+        $method = $row->method ?? null;
+
+        return is_string($method) && $method !== '';
     }
 
     /**
