@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\ActivityLogger;
 use App\Services\CompanyInviteService;
 use App\Services\ProvisionCompany;
+use App\Support\EmployeeDocuments;
 use App\Support\EmployeeProfile;
 use App\Support\MePayload;
 use App\Support\PasswordRules;
@@ -148,7 +149,7 @@ class AuthController extends Controller
         return $this->ok(['ok' => true]);
     }
 
-    public function acceptInvite(Request $request, CompanyInviteService $invites): JsonResponse
+    public function acceptInvite(Request $request, CompanyInviteService $invites, EmployeeDocuments $documents): JsonResponse
     {
         $data = $request->validate(array_merge([
             'token' => ['required', 'string', 'max:64'],
@@ -156,7 +157,7 @@ class AuthController extends Controller
             'email' => ['nullable', 'email', 'max:150'],
             'password' => PasswordRules::optional(),
             'device_name' => ['nullable', 'string', 'max:100'],
-        ], EmployeeProfile::rules(true)));
+        ], EmployeeProfile::rules(true), EmployeeDocuments::allUploadRules()));
 
         $invite = $invites->findByToken($data['token']);
         abort_unless($invite->isAcceptable(), 422, 'Undangan tidak valid atau sudah kedaluwarsa.');
@@ -170,6 +171,14 @@ class AuthController extends Controller
         DB::transaction(function () use ($invites, $invite, $user, $profile) {
             $invites->accept($invite, $user, $profile);
         });
+
+        foreach (EmployeeDocuments::TYPES as $type) {
+            $key = EmployeeDocuments::requestKey($type);
+            $file = $request->file($key);
+            if ($file instanceof \Illuminate\Http\UploadedFile) {
+                $documents->store($user->fresh(), $file, $type);
+            }
+        }
 
         ActivityLogger::record([
             'user_id' => $user->id,

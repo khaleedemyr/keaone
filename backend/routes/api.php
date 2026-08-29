@@ -146,6 +146,8 @@ Route::prefix('v1')->group(function () {
             Route::get('users', [UserController::class, 'index']);
             Route::post('users', [UserController::class, 'store']);
             Route::put('users/{user}', [UserController::class, 'update']);
+            Route::post('users/{user}/documents/{type}', [UserController::class, 'storeDocument']);
+            Route::get('users/{user}/documents/{type}', [UserController::class, 'showDocument']);
             Route::post('users/{user}/approve-onboarding', [UserController::class, 'approveOnboarding']);
             Route::post('users/{user}/reject-onboarding', [UserController::class, 'rejectOnboarding']);
             Route::delete('users/{user}', [UserController::class, 'destroy']);

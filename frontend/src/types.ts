@@ -128,6 +128,9 @@ export type Member = {
   address?: string | null
   emergency_contact_name?: string | null
   emergency_contact_phone?: string | null
+  has_employee_photo?: boolean
+  has_ktp_document?: boolean
+  has_kk_document?: boolean
   role: string
   role_id?: number | null
   is_active: boolean

@@ -14,6 +14,7 @@ use App\Services\CompanyInviteService;
 use App\Services\RoleService;
 use App\Support\Access;
 use App\Support\CurrentCompany;
+use App\Support\EmployeeDocuments;
 use App\Support\EmployeeProfile;
 use App\Support\PasswordRules;
 use Illuminate\Http\JsonResponse;
@@ -27,6 +28,7 @@ class UserController extends Controller
     public function __construct(
         private RoleService $roles,
         private CompanyInviteService $invites,
+        private EmployeeDocuments $documents,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -333,6 +335,57 @@ class UserController extends Controller
             'jobLevel',
             'manager.user',
         ])));
+    }
+
+    public function storeDocument(Request $request, User $user, string $type): JsonResponse
+    {
+        abort_unless(in_array($type, EmployeeDocuments::TYPES, true), 404);
+
+        $member = $this->membershipOf($user);
+        $isSelf = $request->user()?->id === $user->id;
+
+        if ($isSelf) {
+            abort_unless($member->onboarding_status === 'pending_hr', 403, 'Dokumen hanya bisa diunggah saat onboarding.');
+        } else {
+            $this->ensureCan('users', 'edit');
+        }
+
+        $request->validate(EmployeeDocuments::uploadRules($type, true));
+
+        $file = $request->file(EmployeeDocuments::requestKey($type));
+        abort_unless($file instanceof \Illuminate\Http\UploadedFile, 422, 'File wajib diunggah.');
+
+        $this->documents->store($user, $file, $type);
+
+        return $this->ok($this->serialize($member->fresh([
+            'user',
+            'outlet',
+            'department',
+            'position',
+            'jobLevel',
+            'manager.user',
+        ])));
+    }
+
+    public function showDocument(Request $request, User $user, string $type): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        abort_unless(in_array($type, EmployeeDocuments::TYPES, true), 404);
+
+        $member = $this->membershipOf($user);
+        $isSelf = $request->user()?->id === $user->id;
+
+        if (! $isSelf) {
+            $this->ensureCan('users', 'view');
+        }
+
+        $path = $this->documents->path($user, $type);
+        abort_unless($path, 404);
+
+        return response()->file($path, [
+            'Content-Type' => $this->documents->mimeType($path),
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, max-age=3600',
+        ]);
     }
 
     public function destroy(User $user): JsonResponse
@@ -657,6 +710,11 @@ class UserController extends Controller
             'address' => $user?->address,
             'emergency_contact_name' => $user?->emergency_contact_name,
             'emergency_contact_phone' => $user?->emergency_contact_phone,
+            ...($user ? $this->documents->flags($user) : [
+                'has_employee_photo' => false,
+                'has_ktp_document' => false,
+                'has_kk_document' => false,
+            ]),
             'role' => $row->role,
             'role_id' => $row->role_id,
             'is_active' => $row->is_active,

@@ -13,6 +13,13 @@ import { useRoleOptions } from '../../components/RolesManager'
 import { useAccess } from '../../access'
 import { EmployeeInviteModal } from './EmployeeInviteModal'
 import { EmployeeOnboardingModal } from './EmployeeOnboardingModal'
+import {
+  EmployeeDocumentField,
+  emptyEmployeeDocuments,
+  employeeDocumentAccept,
+  uploadEmployeeDocuments,
+  type EmployeeDocumentFiles,
+} from './EmployeeDocumentField'
 
 const empty = {
   name: '',
@@ -75,6 +82,8 @@ export default function Employees() {
   const [saving, setSaving] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
   const [reviewMember, setReviewMember] = useState<Member | null>(null)
+  const [documents, setDocuments] = useState<EmployeeDocumentFiles>(emptyEmployeeDocuments())
+  const [documentFlags, setDocumentFlags] = useState({ photo: false, ktp: false, kk: false })
 
   async function loadLookups() {
     try {
@@ -130,6 +139,8 @@ export default function Employees() {
     setEditing(null)
     const fallback = roles.find((item) => item.slug === 'cashier') ?? roles.find((item) => !item.is_owner) ?? roles[0]
     setForm({ ...empty, role_id: fallback ? String(fallback.id) : '' })
+    setDocuments(emptyEmployeeDocuments())
+    setDocumentFlags({ photo: false, ktp: false, kk: false })
     setError('')
     setOpen(true)
     logMasterForm('employee', 'create')
@@ -138,6 +149,12 @@ export default function Employees() {
   function openEdit(member: Member) {
     void loadLookups()
     setEditing(member)
+    setDocuments(emptyEmployeeDocuments())
+    setDocumentFlags({
+      photo: member.has_employee_photo ?? false,
+      ktp: member.has_ktp_document ?? false,
+      kk: member.has_kk_document ?? false,
+    })
     setForm({
       name: member.name,
       email: member.email,
@@ -207,8 +224,22 @@ export default function Employees() {
     }
 
     try {
-      if (editing) await api.put(`/users/${editing.id}`, payload)
-      else await api.post('/users', { ...payload, password: form.password })
+      let userId = editing?.id
+      if (editing) {
+        await api.put(`/users/${editing.id}`, payload)
+      } else {
+        const created = await api.post<ApiOk<Member>>('/users', { ...payload, password: form.password })
+        userId = created.data.data.id
+      }
+
+      if (userId && (documents.photo || documents.ktp || documents.kk)) {
+        try {
+          await uploadEmployeeDocuments(userId, documents)
+        } catch (uploadErr) {
+          feedback.error(apiMessage(uploadErr, t('employeeDocumentFailed')))
+        }
+      }
+
       setOpen(false)
       await load()
       feedback.success(t('saved'))
@@ -508,6 +539,41 @@ export default function Employees() {
                     onChange={(e) => setForm({ ...form, emergency_contact_phone: e.target.value })}
                   />
                 </label>
+              </div>
+
+              <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-muted">{t('sectionDocuments')}</h3>
+              <p className="mb-3 text-xs text-muted">{t('employeeDocumentsOptional')}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <EmployeeDocumentField
+                  type="photo"
+                  label={t('employeePhoto')}
+                  hint={t('employeePhotoHint')}
+                  accept={employeeDocumentAccept('photo')}
+                  value={documents.photo}
+                  existing={documentFlags.photo}
+                  userId={editing?.id}
+                  onChange={(file) => setDocuments({ ...documents, photo: file })}
+                />
+                <EmployeeDocumentField
+                  type="ktp"
+                  label={t('ktpDocument')}
+                  hint={t('ktpDocumentHint')}
+                  accept={employeeDocumentAccept('ktp')}
+                  value={documents.ktp}
+                  existing={documentFlags.ktp}
+                  userId={editing?.id}
+                  onChange={(file) => setDocuments({ ...documents, ktp: file })}
+                />
+                <EmployeeDocumentField
+                  type="kk"
+                  label={t('kkDocument')}
+                  hint={t('kkDocumentHint')}
+                  accept={employeeDocumentAccept('kk')}
+                  value={documents.kk}
+                  existing={documentFlags.kk}
+                  userId={editing?.id}
+                  onChange={(file) => setDocuments({ ...documents, kk: file })}
+                />
               </div>
 
               <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-muted">{t('sectionEmployment')}</h3>

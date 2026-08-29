@@ -11,6 +11,12 @@ import { FormAlert } from '../../components/feedback'
 import { Logo } from '../../components/Logo'
 import { useI18n } from '../../i18n'
 import type { ApiOk } from '../../types'
+import {
+  EmployeeDocumentField,
+  emptyEmployeeDocuments,
+  employeeDocumentAccept,
+  type EmployeeDocumentFiles,
+} from './EmployeeDocumentField'
 import { invitePublicUrl } from './inviteShare'
 
 export type PublicInvite = {
@@ -44,6 +50,8 @@ const emptyBiodata = {
   emergency_contact_phone: '',
 }
 
+type Step = 'intro' | 'form' | 'submitted'
+
 export default function PublicInviteView({ token }: { token: string }) {
   const { t } = useI18n()
   const { me, loading: authLoading, acceptInvite } = useAuth()
@@ -52,10 +60,11 @@ export default function PublicInviteView({ token }: { token: string }) {
   const [error, setError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+  const [step, setStep] = useState<Step>('intro')
   const [companyName, setCompanyName] = useState('')
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [form, setForm] = useState(emptyBiodata)
+  const [documents, setDocuments] = useState<EmployeeDocumentFiles>(emptyEmployeeDocuments())
 
   useEffect(() => {
     setLoading(true)
@@ -97,10 +106,11 @@ export default function PublicInviteView({ token }: { token: string }) {
         address: form.address.trim(),
         emergency_contact_name: form.emergency_contact_name.trim(),
         emergency_contact_phone: form.emergency_contact_phone.trim(),
+        documents,
       })
       if ('pendingHr' in result && result.pendingHr) {
         setCompanyName(result.companyName ?? invite?.company_name ?? '')
-        setSubmitted(true)
+        setStep('submitted')
         return
       }
     } catch (err) {
@@ -119,7 +129,7 @@ export default function PublicInviteView({ token }: { token: string }) {
           ? t('inviteExhausted')
           : ''
 
-  if (submitted) {
+  if (step === 'submitted') {
     return (
       <AuthShell>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto w-full max-w-md text-center">
@@ -139,8 +149,12 @@ export default function PublicInviteView({ token }: { token: string }) {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto w-full max-w-2xl">
         <div className="mb-6 flex flex-col items-center text-center">
           <Logo variant="wordmark" className="h-14 w-[116px]" glow />
-          <h1 className="font-display mt-5 text-2xl font-bold">{t('inviteJoinTitle')}</h1>
-          <p className="mt-2 max-w-lg text-sm text-muted">{t('inviteEmployeeSelfLead')}</p>
+          <h1 className="font-display mt-5 text-2xl font-bold">
+            {step === 'intro' ? t('invitePrepareTitle') : t('inviteJoinTitle')}
+          </h1>
+          <p className="mt-2 max-w-lg text-sm text-muted">
+            {step === 'intro' ? t('invitePrepareLead') : t('inviteEmployeeSelfLead')}
+          </p>
         </div>
 
         {loading ? <p className="text-center text-sm text-muted">{t('loading')}</p> : null}
@@ -170,7 +184,30 @@ export default function PublicInviteView({ token }: { token: string }) {
 
             {!invite.is_acceptable ? <FormAlert>{statusMessage}</FormAlert> : null}
 
-            {invite.is_acceptable && !authLoading ? (
+            {invite.is_acceptable && step === 'intro' ? (
+              <div>
+                <ul className="space-y-2 text-sm text-muted">
+                  <li className="flex gap-2">
+                    <span className="text-mint">•</span>
+                    <span>{t('invitePreparePhoto')}</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-mint">•</span>
+                    <span>{t('invitePrepareKtp')}</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-mint">•</span>
+                    <span>{t('invitePrepareKk')}</span>
+                  </li>
+                </ul>
+                <p className="mt-4 rounded-xl bg-fill px-3 py-2 text-xs text-muted">{t('invitePrepareNote')}</p>
+                <button type="button" className="btn-primary mt-5 w-full" onClick={() => setStep('form')}>
+                  {t('inviteContinueRegister')}
+                </button>
+              </div>
+            ) : null}
+
+            {invite.is_acceptable && step === 'form' && !authLoading ? (
               <form onSubmit={(e) => void onSubmit(e)}>
                 {!me ? (
                   <p className="mb-4 text-sm text-muted">{t('inviteRegisterLead')}</p>
@@ -252,9 +289,43 @@ export default function PublicInviteView({ token }: { token: string }) {
                   </label>
                 </div>
 
-                <button type="submit" disabled={submitting} className="btn-primary mt-5 w-full">
-                  {submitting ? t('connecting') : t('inviteSubmitBiodata')}
-                </button>
+                <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-muted">{t('sectionDocuments')}</h3>
+                <p className="mb-3 text-xs text-muted">{t('employeeDocumentsOptional')}</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <EmployeeDocumentField
+                    type="photo"
+                    label={t('employeePhoto')}
+                    hint={t('employeePhotoHint')}
+                    accept={employeeDocumentAccept('photo')}
+                    value={documents.photo}
+                    onChange={(file) => setDocuments({ ...documents, photo: file })}
+                  />
+                  <EmployeeDocumentField
+                    type="ktp"
+                    label={t('ktpDocument')}
+                    hint={t('ktpDocumentHint')}
+                    accept={employeeDocumentAccept('ktp')}
+                    value={documents.ktp}
+                    onChange={(file) => setDocuments({ ...documents, ktp: file })}
+                  />
+                  <EmployeeDocumentField
+                    type="kk"
+                    label={t('kkDocument')}
+                    hint={t('kkDocumentHint')}
+                    accept={employeeDocumentAccept('kk')}
+                    value={documents.kk}
+                    onChange={(file) => setDocuments({ ...documents, kk: file })}
+                  />
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <button type="button" className="btn-ghost" onClick={() => setStep('intro')}>
+                    {t('back')}
+                  </button>
+                  <button type="submit" disabled={submitting} className="btn-primary min-w-[12rem] flex-1">
+                    {submitting ? t('connecting') : t('inviteSubmitBiodata')}
+                  </button>
+                </div>
 
                 {!me ? (
                   <p className="mt-4 text-center text-sm text-muted">
@@ -267,7 +338,7 @@ export default function PublicInviteView({ token }: { token: string }) {
               </form>
             ) : null}
 
-            {qrDataUrl ? (
+            {qrDataUrl && step === 'intro' ? (
               <div className="mt-5 flex flex-col items-center border-t border-line pt-5">
                 <img src={qrDataUrl} alt="" className="rounded-xl bg-white p-2" width={180} height={180} />
                 <p className="mt-2 text-xs text-muted">{t('inviteQrHint')}</p>

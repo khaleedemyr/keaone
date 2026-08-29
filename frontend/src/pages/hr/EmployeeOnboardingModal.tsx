@@ -8,6 +8,7 @@ import { useAccess } from '../../access'
 import { useI18n } from '../../i18n'
 import type { Department, JobLevel, Member, Outlet, Position } from '../../types'
 import type { ApiOk } from '../../types'
+import { EmployeeDocumentField, employeeDocumentAccept } from './EmployeeDocumentField'
 
 type Props = {
   member: Member | null
@@ -144,6 +145,54 @@ export function EmployeeOnboardingModal({ member, open, onClose, onDone }: Props
               <div><span className="text-muted">{t('gender')}:</span> {member.gender ?? '-'}</div>
               <div className="sm:col-span-2"><span className="text-muted">{t('address')}:</span> {member.address ?? '-'}</div>
             </div>
+
+            {(member.has_employee_photo || member.has_ktp_document || member.has_kk_document) ? (
+              <>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t('sectionDocuments')}</h3>
+                <p className="mb-3 text-xs text-muted">{t('onboardingDocumentsHint')}</p>
+                <div className="mb-4 grid gap-3 sm:grid-cols-2">
+                  {member.has_employee_photo ? (
+                    <EmployeeDocumentField
+                      type="photo"
+                      label={t('employeePhoto')}
+                      hint={t('employeePhotoHint')}
+                      accept={employeeDocumentAccept('photo')}
+                      value={null}
+                      existing
+                      userId={member.id}
+                      readOnly
+                      onChange={() => undefined}
+                    />
+                  ) : null}
+                  {member.has_ktp_document ? (
+                    <EmployeeDocumentField
+                      type="ktp"
+                      label={t('ktpDocument')}
+                      hint={t('ktpDocumentHint')}
+                      accept={employeeDocumentAccept('ktp')}
+                      value={null}
+                      existing
+                      userId={member.id}
+                      readOnly
+                      onChange={() => undefined}
+                    />
+                  ) : null}
+                  {member.has_kk_document ? (
+                    <EmployeeDocumentField
+                      type="kk"
+                      label={t('kkDocument')}
+                      hint={t('kkDocumentHint')}
+                      accept={employeeDocumentAccept('kk')}
+                      value={null}
+                      existing
+                      userId={member.id}
+                      readOnly
+                      onChange={() => undefined}
+                    />
+                  ) : null}
+                </div>
+              </>
+            ) : null}
 
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{t('sectionEmployment')}</h3>
             <p className="mb-3 text-xs text-muted">{t('onboardingHrFillHint')}</p>

@@ -8,7 +8,7 @@ import {
 } from 'react'
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { api, LAST_EMAIL_KEY, TOKEN_KEY, clearAuthSession, rememberCompany, sessionGet, sessionSet, setRememberMode } from './api/client'
+import { api, LAST_EMAIL_KEY, TOKEN_KEY, clearAuthSession, rememberCompany, sessionGet, sessionSet, setRememberMode, apiUpload } from './api/client'
 import { markPrefsHydrated, parseRemotePrefs, persistPrefs, resetPrefsHydration, devicePrefsSnapshot } from './api/prefs'
 import { clearNotifications } from './desktop/notifyStore'
 import { readDesktopPrefs } from './desktop/desktopPrefs'
@@ -44,6 +44,7 @@ type AuthContextValue = {
     address?: string
     emergency_contact_name?: string
     emergency_contact_phone?: string
+    documents?: { photo?: File | null; ktp?: File | null; kk?: File | null }
   }) => Promise<MePayload | { pendingHr: true; companyName?: string; message?: string }>
   logout: () => Promise<void>
   refresh: () => Promise<void>
@@ -173,11 +174,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       address?: string
       emergency_contact_name?: string
       emergency_contact_phone?: string
+      documents?: { photo?: File | null; ktp?: File | null; kk?: File | null }
     }) => {
-      const { data } = await api.post<ApiOk<AuthPayload & { pending_hr?: boolean; company_name?: string; message?: string }>>('/auth/accept-invite', {
-        ...input,
-        device_name: 'web',
-      })
+      const docs = input.documents
+      const hasDocs = docs?.photo || docs?.ktp || docs?.kk
+
+      let data: ApiOk<AuthPayload & { pending_hr?: boolean; company_name?: string; message?: string }>
+
+      if (hasDocs) {
+        const body = new FormData()
+        body.append('token', input.token)
+        body.append('device_name', 'web')
+        if (input.name) body.append('name', input.name)
+        if (input.email) body.append('email', input.email)
+        if (input.password) body.append('password', input.password)
+        if (input.phone) body.append('phone', input.phone)
+        if (input.national_id) body.append('national_id', input.national_id)
+        if (input.tax_id) body.append('tax_id', input.tax_id)
+        if (input.birth_date) body.append('birth_date', input.birth_date)
+        if (input.birth_place) body.append('birth_place', input.birth_place)
+        if (input.gender) body.append('gender', input.gender)
+        if (input.marital_status) body.append('marital_status', input.marital_status)
+        if (input.address) body.append('address', input.address)
+        if (input.emergency_contact_name) body.append('emergency_contact_name', input.emergency_contact_name)
+        if (input.emergency_contact_phone) body.append('emergency_contact_phone', input.emergency_contact_phone)
+        if (docs?.photo) body.append('employee_photo', docs.photo, docs.photo.name)
+        if (docs?.ktp) body.append('ktp_document', docs.ktp, docs.ktp.name)
+        if (docs?.kk) body.append('kk_document', docs.kk, docs.kk.name)
+        data = await apiUpload<ApiOk<AuthPayload & { pending_hr?: boolean; company_name?: string; message?: string }>>('/auth/accept-invite', body)
+      } else {
+        const response = await api.post<ApiOk<AuthPayload & { pending_hr?: boolean; company_name?: string; message?: string }>>('/auth/accept-invite', {
+          ...input,
+          device_name: 'web',
+        })
+        data = response.data
+      }
+
       if (data.data.pending_hr) {
         return {
           pendingHr: true as const,
