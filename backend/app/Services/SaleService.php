@@ -11,6 +11,7 @@ use App\Models\SaleItem;
 use App\Models\User;
 use App\Support\CurrentCompany;
 use App\Support\ReceiptLayout;
+use App\Support\TenantCache;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -26,9 +27,12 @@ class SaleService
         }
 
         try {
-            return DB::transaction(function () use ($payload, $user) {
+            $sale = DB::transaction(function () use ($payload, $user) {
                 return $this->createFresh($payload, $user);
             });
+            $this->bumpSalesReportCache((int) $sale->company_id);
+
+            return $sale;
         } catch (UniqueConstraintViolationException) {
             $sale = Sale::query()->where('client_uuid', $payload['client_uuid'])->first();
 
@@ -91,7 +95,7 @@ class SaleService
             return $this->loadSale($sale);
         }
 
-        return DB::transaction(function () use ($sale, $user) {
+        $cancelled = DB::transaction(function () use ($sale, $user) {
             $sale = Sale::query()->whereKey($sale->id)->lockForUpdate()->with('items.product.bomItems.component')->firstOrFail();
 
             foreach ($sale->items as $item) {
@@ -112,6 +116,9 @@ class SaleService
 
             return $this->loadSale($sale->fresh());
         });
+        $this->bumpSalesReportCache((int) $cancelled->company_id);
+
+        return $cancelled;
     }
 
     public function receipt(Sale $sale): array
@@ -254,7 +261,34 @@ class SaleService
     /**
      * @return array<string, mixed>
      */
-    public function salesReport(string $kind, string $fromDate, string $toDate): array
+    public function salesReport(string $kind, string $fromDate, string $toDate, ?int $outletId = null): array
+    {
+        $companyId = CurrentCompany::id();
+        $outletId ??= CurrentCompany::outlet()?->id;
+
+        if (! $companyId) {
+            return $this->salesReportUncached($kind, $fromDate, $toDate, $outletId);
+        }
+
+        $suffix = implode(':', [
+            $kind,
+            $fromDate,
+            $toDate,
+            $outletId ?? 'all',
+        ]);
+
+        return TenantCache::rememberVersioned($companyId, 'sales_reports', $suffix, 300, fn () => $this->salesReportUncached(
+            $kind,
+            $fromDate,
+            $toDate,
+            $outletId,
+        ));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function salesReportUncached(string $kind, string $fromDate, string $toDate, ?int $outletId = null): array
     {
         $from = \Illuminate\Support\Carbon::parse($fromDate)->startOfDay();
         $to = \Illuminate\Support\Carbon::parse($toDate)->endOfDay();
@@ -265,7 +299,7 @@ class SaleService
             $from = $to->copy()->subDays(366)->startOfDay();
         }
 
-        $outletId = CurrentCompany::outlet()?->id;
+        $outletId ??= CurrentCompany::outlet()?->id;
         $active = Sale::query()
             ->when($outletId, fn ($q) => $q->where('outlet_id', $outletId))
             ->whereBetween('sold_at', [$from, $to])
@@ -285,6 +319,13 @@ class SaleService
             'daily' => [...$meta, 'rows' => $this->reportDaily($active)],
             default => [...$meta, ...$this->reportSummary($active, $from, $to, $outletId)],
         };
+    }
+
+    private function bumpSalesReportCache(?int $companyId): void
+    {
+        if ($companyId) {
+            TenantCache::bump($companyId, 'sales_reports');
+        }
     }
 
     /**

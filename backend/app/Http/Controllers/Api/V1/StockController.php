@@ -10,8 +10,10 @@ use App\Models\Warehouse;
 use App\Services\InventoryService;
 use App\Services\ProductUnitService;
 use App\Support\CurrentCompany;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class StockController extends Controller
 {
@@ -22,41 +24,12 @@ class StockController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureModule('stock');
-        $this->ensureCan('stock', 'view');
-
-        $warehouseId = $this->resolveWarehouseId($request);
-        $warehouse = Warehouse::query()->findOrFail($warehouseId);
-
-        $rows = Product::query()
-            ->where('track_stock', true)
-            ->where('is_active', true)
-            ->with(['productUnits.unitMaster', 'unitMaster'])
-            ->orderBy('name')
-            ->get()
-            ->map(fn (Product $product) => $this->serializeStockRow($product, $warehouseId, $warehouse, true));
-
-        return $this->ok($rows);
+        return $this->paginatedStock($request, false);
     }
 
     public function low(Request $request): JsonResponse
     {
-        $this->ensureModule('stock');
-        $this->ensureCan('stock', 'view');
-
-        $warehouseId = $this->resolveWarehouseId($request);
-        $warehouse = Warehouse::query()->findOrFail($warehouseId);
-
-        $rows = Product::query()
-            ->where('track_stock', true)
-            ->where('is_active', true)
-            ->with(['productUnits.unitMaster', 'unitMaster'])
-            ->get()
-            ->map(fn (Product $product) => $this->serializeStockRow($product, $warehouseId, $warehouse, false))
-            ->filter(fn (array $row) => $row['qty'] <= $row['min_stock'])
-            ->values();
-
-        return $this->ok($rows);
+        return $this->paginatedStock($request, true);
     }
 
     public function movements(Request $request): JsonResponse
@@ -133,12 +106,63 @@ class StockController extends Controller
         ], $this->pageMeta($page));
     }
 
+    private function paginatedStock(Request $request, bool $lowOnly): JsonResponse
+    {
+        $this->ensureModule('stock');
+        $this->ensureCan('stock', 'view');
+
+        $warehouseId = $this->resolveWarehouseId($request);
+        $warehouse = Warehouse::query()->findOrFail($warehouseId);
+
+        $query = $this->stockProductQuery($request, $warehouseId, $lowOnly);
+        $page = $query
+            ->with(['productUnits.unitMaster', 'unitMaster'])
+            ->paginate($this->perPage($request, 50));
+
+        $rows = $page->getCollection()->map(function (Product $product) use ($warehouseId, $warehouse) {
+            $qty = (int) ($product->stock_qty ?? 0);
+
+            return $this->serializeStockRow($product, $warehouseId, $warehouse, true, $qty);
+        });
+
+        return $this->ok($rows->values(), $this->pageMeta($page));
+    }
+
+    /**
+     * @return Builder<Product>
+     */
+    private function stockProductQuery(Request $request, int $warehouseId, bool $lowOnly): Builder
+    {
+        $query = Product::query()
+            ->where('products.track_stock', true)
+            ->where('products.is_active', true)
+            ->leftJoin('stock_balances', function ($join) use ($warehouseId) {
+                $join->on('products.id', '=', 'stock_balances.product_id')
+                    ->where('stock_balances.warehouse_id', '=', $warehouseId);
+            })
+            ->select('products.*', DB::raw('COALESCE(stock_balances.qty, 0) as stock_qty'));
+
+        if ($lowOnly) {
+            $query->whereRaw('COALESCE(stock_balances.qty, 0) <= products.min_stock');
+        }
+
+        if ($search = trim($request->string('search')->toString())) {
+            $query->where(function ($q) use ($search) {
+                $q->where('products.name', 'like', "%{$search}%")
+                    ->orWhere('products.sku', 'like', "%{$search}%")
+                    ->orWhere('products.barcode', 'like', "%{$search}%");
+            });
+        }
+
+        return $query->orderBy('products.name');
+    }
+
     /**
      * @return array<string, mixed>
      */
-    private function serializeStockRow(Product $product, int $warehouseId, Warehouse $warehouse, bool $withBarcode): array
+    private function serializeStockRow(Product $product, int $warehouseId, Warehouse $warehouse, bool $withBarcode, ?int $qty = null): array
     {
-        $qty = (int) StockBalance::query()
+        $qty ??= (int) StockBalance::query()
             ->where('warehouse_id', $warehouseId)
             ->where('product_id', $product->id)
             ->value('qty');

@@ -3,6 +3,7 @@ import { api, apiMessage } from '../api/client'
 import type { ApiOk, Warehouse } from '../types'
 import { PageEnter } from '../components/motion'
 import { useFeedback } from '../components/feedback'
+import { MasterPager } from '../components/MasterListBar'
 import { PageHeader } from '../components/ui'
 import { useI18n } from '../i18n'
 
@@ -27,14 +28,26 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
   const [warehouseId, setWarehouseId] = useState('')
   const [lowOnly, setLowOnly] = useState(false)
   const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [lastPage, setLastPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const perPage = 50
 
   async function load() {
     try {
       const path = lowOnly ? '/stock/low' : '/stock'
       const { data } = await api.get<ApiOk<StockRow[]>>(path, {
-        params: { warehouse_id: warehouseId || undefined },
+        params: {
+          warehouse_id: warehouseId || undefined,
+          search: query.trim() || undefined,
+          page,
+          per_page: perPage,
+        },
       })
       setRows(data.data)
+      setLastPage(data.meta.last_page ?? 1)
+      setTotal(data.meta.total ?? data.data.length)
+      if (page > (data.meta.last_page ?? 1)) setPage(data.meta.last_page ?? 1)
     } catch (err) {
       feedback.error(apiMessage(err, t('loadFailed')))
     }
@@ -54,13 +67,7 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
   useEffect(() => {
     if (!warehouseId && warehouses.length === 0) return
     void load()
-  }, [warehouseId, lowOnly])
-
-  const filtered = rows.filter((row) => {
-    const q = query.trim().toLowerCase()
-    if (!q) return true
-    return row.name.toLowerCase().includes(q) || (row.sku ?? '').toLowerCase().includes(q)
-  })
+  }, [warehouseId, lowOnly, page, query])
 
   return (
     <PageEnter>
@@ -79,10 +86,25 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
         </label>
         <label className="text-sm text-muted">
           {t('search')}
-          <input className="field !mt-1 min-w-[200px]" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('stockSearch')} />
+          <input
+            className="field !mt-1 min-w-[200px]"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setPage(1)
+            }}
+            placeholder={t('stockSearch')}
+          />
         </label>
         <label className="flex items-center gap-2 pb-2 text-sm text-muted">
-          <input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={lowOnly}
+            onChange={(e) => {
+              setLowOnly(e.target.checked)
+              setPage(1)
+            }}
+          />
           {t('stockLowOnly')}
         </label>
       </div>
@@ -99,7 +121,7 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {rows.map((row) => (
               <tr key={row.product_id} className={`border-t border-line ${row.qty <= row.min_stock ? 'bg-rose-500/5' : ''}`}>
                 <td className="px-3 py-2 font-medium">{row.name}</td>
                 <td className="px-3 py-2 text-muted">{row.sku ?? '—'}</td>
@@ -125,7 +147,7 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-3 py-8 text-center text-muted">
                   {t('stockEmpty')}
@@ -135,6 +157,8 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
           </tbody>
         </table>
       </div>
+
+      <MasterPager page={page} lastPage={lastPage} total={total} onPage={setPage} />
     </PageEnter>
   )
 }

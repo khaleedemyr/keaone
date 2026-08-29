@@ -12,6 +12,7 @@ use App\Models\StockBalance;
 use App\Models\SubCategory;
 use App\Models\Unit;
 use App\Support\CurrentCompany;
+use App\Support\TenantCache;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -101,8 +102,36 @@ class ProductController extends Controller
         $query->with($this->listRelations())->withCount('bomItems');
         $this->applyActiveStatus($query, $request, true);
 
+        $companyId = (int) CurrentCompany::id();
         $outlet = CurrentCompany::outlet();
-        $products = $query->paginate($this->perPage($request, 50));
+        $canCachePos = $request->boolean('for_pos')
+            && ! $request->filled('search')
+            && ! $request->filled('barcode')
+            && ! $request->boolean('for_select')
+            && ! $request->boolean('for_purchase');
+        $perPage = $this->perPage($request, 50);
+        $pageNum = max(1, $request->integer('page', 1));
+
+        if ($canCachePos && $companyId) {
+            $suffix = ($outlet?->id ?? 0).':p'.$pageNum.':pp'.$perPage;
+            $cached = TenantCache::rememberVersioned($companyId, 'pos_catalog', $suffix, 300, function () use ($query, $request, $outlet, $perPage) {
+                return $this->buildProductPage($query, $request, $outlet, $perPage);
+            });
+
+            return $this->ok($cached['items'], $cached['meta']);
+        }
+
+        $page = $this->buildProductPage($query, $request, $outlet, $perPage);
+
+        return $this->ok($page['items'], $page['meta']);
+    }
+
+    /**
+     * @return array{items: list<mixed>, meta: array<string, int>}
+     */
+    private function buildProductPage($query, Request $request, ?Outlet $outlet, int $perPage): array
+    {
+        $products = (clone $query)->paginate($perPage);
         $ids = $products->getCollection()->pluck('id');
         $balances = collect();
         if ($outlet && $ids->isNotEmpty()) {
@@ -114,11 +143,23 @@ class ProductController extends Controller
                 ->pluck('qty', 'product_id');
         }
 
-        $products->getCollection()->transform(
-            fn (Product $product) => $this->serializeList($product, (int) ($balances[$product->id] ?? 0)),
-        );
+        $items = $products->getCollection()
+            ->map(fn (Product $product) => $this->serializeList($product, (int) ($balances[$product->id] ?? 0)))
+            ->values()
+            ->all();
 
-        return $this->ok($products->items(), $this->pageMeta($products));
+        return [
+            'items' => $items,
+            'meta' => $this->pageMeta($products),
+        ];
+    }
+
+    private function invalidatePosCatalog(?int $companyId = null): void
+    {
+        $companyId ??= CurrentCompany::id();
+        if ($companyId) {
+            TenantCache::bump((int) $companyId, 'pos_catalog');
+        }
     }
 
     public function show(Product $product): JsonResponse
@@ -166,6 +207,8 @@ class ProductController extends Controller
             return $product;
         });
 
+        $this->invalidatePosCatalog();
+
         return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)), [], 201);
     }
 
@@ -187,6 +230,7 @@ class ProductController extends Controller
         });
 
         $this->ensurePrimary($product);
+        $this->invalidatePosCatalog();
 
         return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
     }
@@ -195,6 +239,7 @@ class ProductController extends Controller
     {
         $this->ensureCanAny([['products', 'delete'], ['products', 'edit']]);
         $product->update(['is_active' => false]);
+        $this->invalidatePosCatalog();
 
         return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
     }

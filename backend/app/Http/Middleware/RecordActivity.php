@@ -134,6 +134,10 @@ class RecordActivity
             return true;
         }
 
+        if (str_ends_with($path, '/stream')) {
+            return true;
+        }
+
         if (str_starts_with($path, 'stock')) {
             return true;
         }

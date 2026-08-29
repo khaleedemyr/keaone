@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Support\CurrentCompany;
 use App\Support\ReceiptLayout;
+use App\Support\TenantCache;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -41,11 +42,14 @@ class CompanyController extends Controller
     public function settings(): JsonResponse
     {
         $company = CurrentCompany::company();
+        $companyId = (int) $company->id;
 
-        return $this->ok([
+        $payload = TenantCache::rememberVersioned($companyId, 'settings', 'merged', 600, fn () => [
             'modules' => $company->resolvedModules(),
             'settings' => $this->withLayout($company->mergedSettings()),
         ]);
+
+        return $this->ok($payload);
     }
 
     public function updateSettings(Request $request): JsonResponse
@@ -118,6 +122,8 @@ class CompanyController extends Controller
         }
 
         $company->save();
+
+        TenantCache::bump((int) $company->id, 'settings');
 
         return $this->ok([
             'modules' => $company->resolvedModules(),

@@ -11,6 +11,7 @@ import {
   type ChatUser,
 } from '../api/chat'
 import { apiMessage } from '../api/client'
+import { openEventStream } from '../api/eventStream'
 import { useAuth } from '../auth'
 import { Avatar } from '../components/Avatar'
 import { useFeedback } from '../components/feedback'
@@ -168,9 +169,32 @@ export default function ChatApp({
       lastIdRef.current = 0
       return
     }
-    void loadMessages(activeId)
-    const id = window.setInterval(() => void pollMessages(activeId), 4000)
-    return () => window.clearInterval(id)
+
+    let stream: ReturnType<typeof openEventStream> | null = null
+    const pollId = window.setInterval(() => void pollMessages(activeId), 30_000)
+
+    void (async () => {
+      await loadMessages(activeId)
+      stream = openEventStream(`/chat/conversations/${activeId}/stream`, {
+        params: { after_id: lastIdRef.current },
+        onEvent: (event) => {
+          try {
+            const msg = JSON.parse(event.data) as ChatMessage
+            if (!msg?.id) return
+            lastIdRef.current = Math.max(lastIdRef.current, msg.id)
+            setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
+            void markRead(activeId)
+          } catch {
+            // ignore malformed payload
+          }
+        },
+      })
+    })()
+
+    return () => {
+      stream?.close()
+      window.clearInterval(pollId)
+    }
   }, [activeId, loadMessages, pollMessages])
 
   useEffect(() => {

@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\GenerateSalesReportJob;
 use App\Models\Sale;
 use App\Services\SaleService;
+use App\Support\CurrentCompany;
 use App\Support\MenuCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class SaleController extends Controller
@@ -99,6 +103,54 @@ class SaleController extends Controller
         $to = $data['to'] ?? now()->toDateString();
 
         return $this->ok($this->sales->salesReport($kind, $from, $to));
+    }
+
+    public function reportsAsync(Request $request): JsonResponse
+    {
+        $this->ensureModule('pos');
+
+        $data = $request->validate([
+            'kind' => ['nullable', Rule::in(['summary', 'products', 'cashiers', 'methods', 'channels', 'daily'])],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+        ]);
+
+        $kind = $data['kind'] ?? 'summary';
+        $this->ensureCan(MenuCatalog::salesReportMenu($kind), 'view');
+
+        $from = $data['from'] ?? now()->startOfMonth()->toDateString();
+        $to = $data['to'] ?? now()->toDateString();
+        $companyId = (int) CurrentCompany::id();
+        $outletId = CurrentCompany::outlet()?->id;
+
+        $jobId = 'sales_report:'.$companyId.':'.Str::uuid()->toString();
+        Cache::put($jobId, ['status' => 'pending'], now()->addHour());
+
+        GenerateSalesReportJob::dispatch($jobId, [
+            'kind' => $kind,
+            'from' => $from,
+            'to' => $to,
+            'outlet_id' => $outletId,
+        ]);
+
+        return $this->ok(['job_id' => $jobId, 'status' => 'pending'], [], 202);
+    }
+
+    public function reportsAsyncStatus(string $jobId): JsonResponse
+    {
+        $this->ensureModule('pos');
+
+        $companyId = (int) CurrentCompany::id();
+        if (! str_starts_with($jobId, 'sales_report:'.$companyId.':')) {
+            return $this->error('Laporan tidak ditemukan.', [], 404);
+        }
+
+        $payload = Cache::get($jobId);
+        if (! is_array($payload)) {
+            return $this->error('Laporan tidak ditemukan.', [], 404);
+        }
+
+        return $this->ok($payload);
     }
 
     public function show(Sale $sale): JsonResponse

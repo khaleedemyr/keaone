@@ -279,6 +279,8 @@ Route::prefix('v1')->group(function () {
             Route::post('sales', [SaleController::class, 'store']);
             Route::get('sales/settlement', [SaleController::class, 'settlement']);
             Route::get('sales/reports', [SaleController::class, 'reports']);
+            Route::post('sales/reports/async', [SaleController::class, 'reportsAsync']);
+            Route::get('sales/reports/async/{jobId}', [SaleController::class, 'reportsAsyncStatus']);
             Route::get('sales/{sale}', [SaleController::class, 'show']);
             Route::get('sales/{sale}/receipt', [SaleController::class, 'receipt']);
             Route::post('sales/{sale}/payments', [SaleController::class, 'addPayment']);
@@ -292,6 +294,13 @@ Route::prefix('v1')->group(function () {
             Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
             Route::post('notifications/read-all', [NotificationController::class, 'markAllRead']);
             Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead']);
+
+            Route::middleware('sse.auth')->group(function () {
+                Route::get('notifications/stream', [NotificationController::class, 'stream'])
+                    ->withoutMiddleware('throttle:api');
+                Route::get('chat/conversations/{conversation}/stream', [ChatController::class, 'messageStream'])
+                    ->withoutMiddleware('throttle:api');
+            });
 
             Route::get('approvals/pending', [ApprovalController::class, 'index']);
 

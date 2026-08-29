@@ -1,0 +1,1 @@
+import{ht as e,mt as t}from"./ui-B58wUYVI.js";import{t as n}from"./RolesManager-CIuX68D8.js";var r=e();function i(){let{t:e}=t();return(0,r.jsx)(n,{endpoint:`/roles`,eyebrow:e(`appAdmin`),subtitle:e(`rolesDynamicLead`)})}export{i as default};

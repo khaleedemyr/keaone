@@ -131,6 +131,17 @@ export function setServerNotifications(rows: ServerNotificationRow[]) {
   emit(false)
 }
 
+export function appendServerNotification(row: ServerNotificationRow) {
+  const mapped = mapServerRows([row])[0]
+  const existing = serverItems.findIndex((item) => item.serverId === row.id)
+  if (existing >= 0) {
+    serverItems = serverItems.map((item) => (item.serverId === row.id ? mapped : item))
+  } else {
+    serverItems = [mapped, ...serverItems].slice(0, MAX)
+  }
+  emit(false)
+}
+
 export function markNotificationsRead() {
   const localDirty = localItems.some((item) => !item.read)
   const serverDirty = serverItems.some((item) => !item.read)

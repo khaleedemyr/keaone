@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ChatController extends Controller
 {
@@ -192,6 +193,50 @@ class ChatController extends Controller
         }
 
         return $this->ok($items->map(fn (Message $m) => $this->serializeMessage($m))->values());
+    }
+
+    public function messageStream(Request $request, Conversation $conversation): StreamedResponse
+    {
+        $this->ensureCan('chat', 'view');
+        $meId = (int) $request->user()->id;
+        $this->ensureParticipant($conversation, $meId);
+
+        $afterId = max(0, $request->integer('after_id'));
+
+        return response()->stream(function () use ($conversation, $afterId) {
+            @set_time_limit(0);
+            $cursor = $afterId;
+            $started = time();
+
+            while (! connection_aborted() && (time() - $started) < 3600) {
+                $items = Message::query()
+                    ->where('conversation_id', $conversation->id)
+                    ->when($cursor > 0, fn ($q) => $q->where('id', '>', $cursor))
+                    ->orderBy('id')
+                    ->limit(20)
+                    ->with('user:id,name,avatar')
+                    ->get();
+
+                foreach ($items as $message) {
+                    echo 'event: message'."\n";
+                    echo 'data: '.json_encode($this->serializeMessage($message), JSON_UNESCAPED_UNICODE)."\n\n";
+                    $cursor = (int) $message->id;
+                }
+
+                echo ": heartbeat\n\n";
+                if (function_exists('ob_flush')) {
+                    @ob_flush();
+                }
+                flush();
+
+                sleep(3);
+            }
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache, no-transform',
+            'Connection' => 'keep-alive',
+            'X-Accel-Buffering' => 'no',
+        ]);
     }
 
     public function storeMessage(Request $request, Conversation $conversation): JsonResponse
