@@ -16,12 +16,18 @@ return new class extends Migration
             return;
         }
 
+        foreach (array_keys(config('partitions.tables', [])) as $table) {
+            if (Schema::hasTable($table)) {
+                MySqlPartitions::dropAllForeignKeyConstraints($table);
+            }
+        }
+
         $this->partitionActivityLogs();
         $this->partitionUserNotifications();
         $this->partitionMessages();
         $this->partitionStockMovements();
-        $this->partitionSales();
         $this->partitionSaleItems();
+        $this->partitionSales();
         $this->partitionPayments();
     }
 
@@ -143,6 +149,7 @@ return new class extends Migration
             return;
         }
 
+        MySqlPartitions::dropIncomingForeignKeys('sales');
         MySqlPartitions::dropForeignKeys('sales');
         MySqlPartitions::dropIndexIfExists('sales', 'sales_company_id_client_uuid_unique');
         MySqlPartitions::dropIndexIfExists('sales', 'sales_company_id_number_unique');

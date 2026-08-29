@@ -101,6 +101,39 @@ class MySqlPartitions
         }
     }
 
+    /**
+     * Drop FKs on other tables that reference this table (required before ALTER PARTITION).
+     */
+    public static function dropIncomingForeignKeys(string $referencedTable): void
+    {
+        if (! self::enabled()) {
+            return;
+        }
+
+        $db = Schema::getConnection()->getDatabaseName();
+        $rows = DB::table('information_schema.KEY_COLUMN_USAGE')
+            ->where('REFERENCED_TABLE_SCHEMA', $db)
+            ->where('REFERENCED_TABLE_NAME', $referencedTable)
+            ->whereNotNull('REFERENCED_COLUMN_NAME')
+            ->select('TABLE_NAME', 'CONSTRAINT_NAME')
+            ->distinct()
+            ->get();
+
+        foreach ($rows as $row) {
+            DB::statement(sprintf(
+                'ALTER TABLE `%s` DROP FOREIGN KEY `%s`',
+                $row->TABLE_NAME,
+                $row->CONSTRAINT_NAME,
+            ));
+        }
+    }
+
+    public static function dropAllForeignKeyConstraints(string $table): void
+    {
+        self::dropIncomingForeignKeys($table);
+        self::dropForeignKeys($table);
+    }
+
     public static function createIndexIfNotExists(string $table, string $index, string $columns, bool $unique = false): void
     {
         if (! self::enabled() || self::indexExists($table, $index)) {
