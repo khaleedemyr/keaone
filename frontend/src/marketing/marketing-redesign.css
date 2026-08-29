@@ -1051,6 +1051,7 @@ body.mkt-menu-open {
     linear-gradient(145deg, rgba(12, 18, 28, 0.95), rgba(8, 12, 20, 0.98));
   padding: clamp(1.5rem, 3vw, 2.5rem);
   margin-bottom: 2.5rem;
+  color: #eef3fb;
 }
 
 .mkt-custom-hero-glow {
@@ -1100,7 +1101,7 @@ body.mkt-menu-open {
   font-size: clamp(1.45rem, 2.8vw, 2rem);
   font-weight: 700;
   line-height: 1.15;
-  color: var(--fg, #f4f7fb);
+  color: #f4f7fb;
 }
 
 .mkt-custom-hero-copy p {
@@ -1108,7 +1109,7 @@ body.mkt-menu-open {
   max-width: 38rem;
   font-size: 0.95rem;
   line-height: 1.65;
-  color: var(--muted, #94a3b8);
+  color: rgba(232, 238, 248, 0.78);
 }
 
 .mkt-custom-stack {
@@ -1122,7 +1123,7 @@ body.mkt-menu-open {
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted, #94a3b8);
+  color: rgba(232, 238, 248, 0.62);
 }
 
 .mkt-custom-stack-row {
@@ -1255,7 +1256,7 @@ body.mkt-menu-open {
   max-width: 42rem;
   font-size: 0.92rem;
   line-height: 1.65;
-  color: var(--muted, #94a3b8);
+  color: var(--mkt-muted);
 }
 
 .mkt-custom-principles {
@@ -1321,14 +1322,14 @@ body.mkt-menu-open {
   margin-top: 0.85rem;
   font-size: 0.92rem;
   font-weight: 700;
-  color: var(--fg, #f4f7fb);
+  color: var(--mkt-fg);
 }
 
 .mkt-custom-principle p {
   margin-top: 0.45rem;
   font-size: 0.82rem;
   line-height: 1.55;
-  color: var(--muted, #94a3b8);
+  color: var(--mkt-muted);
 }
 
 .mkt-custom-subhead {
@@ -1386,13 +1387,14 @@ body.mkt-menu-open {
   margin-top: 1rem;
   font-size: 1.05rem;
   font-weight: 700;
+  color: var(--mkt-fg);
 }
 
 .mkt-custom-service p {
   margin-top: 0.55rem;
   font-size: 0.86rem;
   line-height: 1.6;
-  color: var(--muted, #94a3b8);
+  color: var(--mkt-muted);
 }
 
 .mkt-custom-stats {
@@ -1425,7 +1427,7 @@ body.mkt-menu-open {
   display: block;
   margin-top: 0.35rem;
   font-size: 0.78rem;
-  color: var(--muted, #94a3b8);
+  color: var(--mkt-muted);
 }
 
 .mkt-custom-steps {
@@ -1459,13 +1461,14 @@ body.mkt-menu-open {
   margin-top: 0.55rem;
   font-size: 0.95rem;
   font-weight: 700;
+  color: var(--mkt-fg);
 }
 
 .mkt-custom-step p {
   margin-top: 0.45rem;
   font-size: 0.82rem;
   line-height: 1.55;
-  color: var(--muted, #94a3b8);
+  color: var(--mkt-muted);
 }
 
 .mkt-custom-offer {
@@ -1479,6 +1482,7 @@ body.mkt-menu-open {
     radial-gradient(800px 320px at 100% 0%, rgba(139, 108, 255, 0.14), transparent 55%),
     linear-gradient(135deg, rgba(10, 16, 26, 0.98), rgba(14, 22, 34, 0.96));
   padding: clamp(1.35rem, 3vw, 2rem);
+  color: #eef3fb;
 }
 
 .mkt-custom-offer-glow {
@@ -1513,6 +1517,7 @@ body.mkt-menu-open {
   margin-top: 0.85rem;
   font-size: clamp(1.25rem, 2.4vw, 1.65rem);
   font-weight: 700;
+  color: #f4f7fb;
 }
 
 .mkt-custom-offer-copy p {
@@ -1520,13 +1525,13 @@ body.mkt-menu-open {
   max-width: 40rem;
   font-size: 0.92rem;
   line-height: 1.65;
-  color: var(--muted, #94a3b8);
+  color: rgba(232, 238, 248, 0.78);
 }
 
 .mkt-custom-offer-note {
   margin-top: 0.85rem !important;
   font-size: 0.84rem !important;
-  color: #cbd5e1 !important;
+  color: rgba(232, 238, 248, 0.88) !important;
 }
 
 .mkt-custom-offer-actions {
