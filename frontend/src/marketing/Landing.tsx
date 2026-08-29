@@ -5,6 +5,7 @@ import { listMarketingBlog, type MarketingBlogPost } from '../api/marketingBlog'
 import { Logo } from '../components/Logo'
 import { useAuth } from '../auth'
 import { useI18n, type MsgKey } from '../i18n'
+import { MktCustomDev } from './MktCustomDev'
 import { MktAuthority } from './MktAuthority'
 import { HeroScene } from './HeroScene'
 import { MktHowItWorks } from './MktHowItWorks'
@@ -319,6 +320,7 @@ export default function Landing() {
       </section>
 
       <MktAuthority />
+      <MktCustomDev />
       <MktTestimonials />
 
       <section id="pricing" className="mkt-section" aria-labelledby="mkt-price-heading">

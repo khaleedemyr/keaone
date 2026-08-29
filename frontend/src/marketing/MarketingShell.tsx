@@ -24,6 +24,9 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
       <a href="/#pricing" onClick={onNavigate}>
         {t('mktNavPricing')}
       </a>
+      <a href="/#custom-dev" onClick={onNavigate}>
+        {t('mktNavCustom')}
+      </a>
       <a href="/#contact" onClick={onNavigate}>
         {t('mktNavContact')}
       </a>
@@ -148,6 +151,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
           </div>
           <div className="mkt-footer-links">
             <a href="/#pricing">{t('mktNavPricing')}</a>
+            <a href="/#custom-dev">{t('mktNavCustom')}</a>
             <a href="/#contact">{t('mktNavContact')}</a>
             <Link to="/blog">{t('mktNavBlog')}</Link>
             {me ? (
