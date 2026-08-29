@@ -141,6 +141,8 @@ class MySqlPartitions
             return;
         }
 
+        self::ensureDatetimeCreatedAt($table);
+
         [$from, $to] = self::window();
         $definitions = self::monthlyDefinitions($from, $to);
 
@@ -149,6 +151,43 @@ class MySqlPartitions
             $table,
             $definitions,
         ));
+    }
+
+    /**
+     * RANGE COLUMNS does not accept TIMESTAMP on many hosted MySQL builds (error 1659).
+     */
+    public static function ensureDatetimeCreatedAt(string $table): void
+    {
+        if (! self::enabled() || ! Schema::hasColumn($table, 'created_at')) {
+            return;
+        }
+
+        $meta = self::columnMeta($table, 'created_at');
+        if (! $meta || strtolower((string) $meta->DATA_TYPE) !== 'timestamp') {
+            return;
+        }
+
+        $nullable = ($meta->IS_NULLABLE ?? 'NO') === 'YES';
+
+        if ($nullable) {
+            DB::statement(sprintf('ALTER TABLE `%s` MODIFY `created_at` DATETIME NULL', $table));
+        } else {
+            DB::statement(sprintf(
+                'ALTER TABLE `%s` MODIFY `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP',
+                $table,
+            ));
+        }
+    }
+
+    private static function columnMeta(string $table, string $column): ?object
+    {
+        $db = Schema::getConnection()->getDatabaseName();
+
+        return DB::table('information_schema.COLUMNS')
+            ->where('TABLE_SCHEMA', $db)
+            ->where('TABLE_NAME', $table)
+            ->where('COLUMN_NAME', $column)
+            ->first(['DATA_TYPE', 'IS_NULLABLE', 'COLUMN_DEFAULT', 'EXTRA']);
     }
 
     public static function ensureMonthPartition(string $table, Carbon $month): bool
