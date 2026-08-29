@@ -7,11 +7,14 @@ use Illuminate\Support\Facades\Schema;
 class HighVolumePartitionInstaller
 {
     /**
+     * @param  callable(string, string): void|null  $log
      * @return list<string> tables partitioned in this run
      */
-    public static function apply(): array
+    public static function apply(?callable $log = null): array
     {
         if (! MySqlPartitions::enabled()) {
+            $log?->__invoke('_', 'partitioning disabled (not mysql/mariadb)');
+
             return [];
         }
 
@@ -32,13 +35,26 @@ class HighVolumePartitionInstaller
             'sales' => fn () => self::sales(),
             'payments' => fn () => self::payments(),
         ] as $table => $callback) {
-            if (! Schema::hasTable($table) || MySqlPartitions::isPartitioned($table)) {
+            if (! Schema::hasTable($table)) {
+                $log?->__invoke($table, 'skip (table missing)');
+
                 continue;
             }
 
+            if (MySqlPartitions::isPartitioned($table)) {
+                $log?->__invoke($table, 'skip (already partitioned)');
+
+                continue;
+            }
+
+            $log?->__invoke($table, 'applying...');
             $callback();
+
             if (MySqlPartitions::isPartitioned($table)) {
                 $applied[] = $table;
+                $log?->__invoke($table, 'done');
+            } else {
+                $log?->__invoke($table, 'failed (ALTER did not partition — check MySQL error log)');
             }
         }
 

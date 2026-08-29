@@ -20,16 +20,12 @@ class MySqlPartitions
         }
 
         $db = Schema::getConnection()->getDatabaseName();
-        $row = DB::selectOne(
-            'SELECT PARTITION_METHOD AS method FROM information_schema.PARTITIONS
-             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
-             LIMIT 1',
-            [$db, $table],
-        );
 
-        $method = $row->method ?? null;
-
-        return is_string($method) && $method !== '';
+        return DB::table('information_schema.PARTITIONS')
+            ->where('TABLE_SCHEMA', $db)
+            ->where('TABLE_NAME', $table)
+            ->whereNotNull('PARTITION_NAME')
+            ->exists();
     }
 
     /**

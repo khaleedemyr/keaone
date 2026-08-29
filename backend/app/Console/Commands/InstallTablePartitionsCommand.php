@@ -22,10 +22,20 @@ class InstallTablePartitionsCommand extends Command
             return self::FAILURE;
         }
 
-        $applied = HighVolumePartitionInstaller::apply();
+        if ($this->output->isVerbose()) {
+            $this->line('Driver: '.Schema::getConnection()->getDriverName());
+            $this->line('Database: '.Schema::getConnection()->getDatabaseName());
+        }
+
+        $applied = HighVolumePartitionInstaller::apply(function (string $table, string $status) {
+            if ($this->output->isVerbose()) {
+                $this->line("  {$table}: {$status}");
+            }
+        });
 
         if ($applied === []) {
             $this->warn('No tables were partitioned (already done or tables missing).');
+            $this->line('Run partitions:status for details.');
 
             return self::SUCCESS;
         }
