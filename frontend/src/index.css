@@ -4522,11 +4522,24 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
 }
 
 .beranda-cover {
+  position: relative;
   height: 10.5rem;
   background-position: center !important;
   background-size: cover !important;
   background-repeat: no-repeat !important;
   border-bottom: 1px solid var(--line);
+}
+
+.beranda-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 45%, rgba(5, 7, 12, 0.35) 100%);
+  pointer-events: none;
+}
+
+html.light .beranda-cover::after {
+  background: linear-gradient(180deg, transparent 50%, rgba(15, 23, 42, 0.12) 100%);
 }
 
 @media (min-width: 768px) {
@@ -4550,15 +4563,22 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 1rem 1.25rem;
-  margin-top: -2.75rem;
+  margin-top: 0;
   margin-bottom: 1.5rem;
 }
 
 .beranda-avatar-wrap {
+  margin-top: -3.25rem;
   padding: 0.2rem;
   border-radius: 9999px;
   background: var(--page);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+@media (min-width: 768px) {
+  .beranda-avatar-wrap {
+    margin-top: -4rem;
+  }
 }
 
 .beranda-profile-meta {
