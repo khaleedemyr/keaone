@@ -60,7 +60,7 @@ class MySqlPartitions
             $name = 'p'.$cursor->format('Ym');
             $next = $cursor->copy()->addMonth();
             $parts[] = sprintf(
-                "PARTITION %s VALUES LESS THAN (TO_DAYS('%s'))",
+                "PARTITION %s VALUES LESS THAN ('%s')",
                 $name,
                 $next->format('Y-m-d'),
             );
@@ -101,22 +101,38 @@ class MySqlPartitions
         }
     }
 
-    public static function dropIndexIfExists(string $table, string $index): void
+    public static function createIndexIfNotExists(string $table, string $index, string $columns, bool $unique = false): void
     {
-        if (! self::enabled()) {
+        if (! self::enabled() || self::indexExists($table, $index)) {
             return;
         }
 
+        $type = $unique ? 'UNIQUE INDEX' : 'INDEX';
+        DB::statement(sprintf('CREATE %s `%s` ON `%s` (%s)', $type, $index, $table, $columns));
+    }
+
+    public static function indexExists(string $table, string $index): bool
+    {
+        if (! self::enabled()) {
+            return false;
+        }
+
         $db = Schema::getConnection()->getDatabaseName();
-        $exists = DB::table('information_schema.STATISTICS')
+
+        return DB::table('information_schema.STATISTICS')
             ->where('TABLE_SCHEMA', $db)
             ->where('TABLE_NAME', $table)
             ->where('INDEX_NAME', $index)
             ->exists();
+    }
 
-        if ($exists) {
-            DB::statement(sprintf('ALTER TABLE `%s` DROP INDEX `%s`', $table, $index));
+    public static function dropIndexIfExists(string $table, string $index): void
+    {
+        if (! self::enabled() || ! self::indexExists($table, $index)) {
+            return;
         }
+
+        DB::statement(sprintf('ALTER TABLE `%s` DROP INDEX `%s`', $table, $index));
     }
 
     public static function applyRangeByCreatedAt(string $table): void
@@ -129,7 +145,7 @@ class MySqlPartitions
         $definitions = self::monthlyDefinitions($from, $to);
 
         DB::statement(sprintf(
-            'ALTER TABLE `%s` PARTITION BY RANGE (TO_DAYS(`created_at`)) (%s)',
+            'ALTER TABLE `%s` PARTITION BY RANGE COLUMNS (`created_at`) (%s)',
             $table,
             $definitions,
         ));
@@ -149,8 +165,8 @@ class MySqlPartitions
         $next = $month->copy()->addMonth()->format('Y-m-d');
         DB::statement(sprintf(
             'ALTER TABLE `%s` REORGANIZE PARTITION pmax INTO (
-                PARTITION %s VALUES LESS THAN (TO_DAYS(\'%s\')),
-                PARTITION pmax VALUES LESS THAN MAXVALUE
+                PARTITION %s VALUES LESS THAN (\'%s\'),
+                PARTITION pmax VALUES LESS THAN (MAXVALUE)
             )',
             $table,
             $name,
@@ -189,7 +205,7 @@ class MySqlPartitions
 
     public static function recomposePrimaryKey(string $table): void
     {
-        if (! self::enabled()) {
+        if (! self::enabled() || self::primaryKeyIncludes($table, 'created_at')) {
             return;
         }
 
@@ -197,5 +213,21 @@ class MySqlPartitions
             'ALTER TABLE `%s` DROP PRIMARY KEY, ADD PRIMARY KEY (`id`, `created_at`)',
             $table,
         ));
+    }
+
+    public static function primaryKeyIncludes(string $table, string $column): bool
+    {
+        if (! self::enabled()) {
+            return false;
+        }
+
+        $db = Schema::getConnection()->getDatabaseName();
+
+        return DB::table('information_schema.KEY_COLUMN_USAGE')
+            ->where('TABLE_SCHEMA', $db)
+            ->where('TABLE_NAME', $table)
+            ->where('CONSTRAINT_NAME', 'PRIMARY')
+            ->where('COLUMN_NAME', $column)
+            ->exists();
     }
 }

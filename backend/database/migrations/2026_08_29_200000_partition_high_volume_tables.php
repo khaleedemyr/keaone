@@ -85,8 +85,8 @@ return new class extends Migration
             MySqlPartitions::dropIndexIfExists('activity_logs', $index);
         }
 
-        DB::statement('CREATE INDEX activity_logs_company_created_idx ON activity_logs (company_id, created_at, id)');
-        DB::statement('CREATE INDEX activity_logs_user_created_idx ON activity_logs (user_id, created_at, id)');
+        MySqlPartitions::createIndexIfNotExists('activity_logs', 'activity_logs_company_created_idx', '`company_id`, `created_at`, `id`');
+        MySqlPartitions::createIndexIfNotExists('activity_logs', 'activity_logs_user_created_idx', '`user_id`, `created_at`, `id`');
 
         MySqlPartitions::recomposePrimaryKey('activity_logs');
         MySqlPartitions::applyRangeByCreatedAt('activity_logs');
@@ -102,8 +102,8 @@ return new class extends Migration
         MySqlPartitions::dropIndexIfExists('user_notifications', 'user_notif_user_read_idx');
         MySqlPartitions::dropIndexIfExists('user_notifications', 'user_notif_company_user_idx');
 
-        DB::statement('CREATE INDEX user_notif_user_read_created_idx ON user_notifications (user_id, read_at, created_at)');
-        DB::statement('CREATE INDEX user_notif_company_user_created_idx ON user_notifications (company_id, user_id, created_at)');
+        MySqlPartitions::createIndexIfNotExists('user_notifications', 'user_notif_user_read_created_idx', '`user_id`, `read_at`, `created_at`');
+        MySqlPartitions::createIndexIfNotExists('user_notifications', 'user_notif_company_user_created_idx', '`company_id`, `user_id`, `created_at`');
 
         MySqlPartitions::recomposePrimaryKey('user_notifications');
         MySqlPartitions::applyRangeByCreatedAt('user_notifications');
@@ -119,7 +119,7 @@ return new class extends Migration
         MySqlPartitions::dropIndexIfExists('messages', 'messages_conversation_id_id_index');
         MySqlPartitions::dropIndexIfExists('messages', 'messages_company_id_conversation_id_index');
 
-        DB::statement('CREATE INDEX messages_company_conv_created_idx ON messages (company_id, conversation_id, created_at)');
+        MySqlPartitions::createIndexIfNotExists('messages', 'messages_company_conv_created_idx', '`company_id`, `conversation_id`, `created_at`');
 
         MySqlPartitions::recomposePrimaryKey('messages');
         MySqlPartitions::applyRangeByCreatedAt('messages');
@@ -147,8 +147,8 @@ return new class extends Migration
         MySqlPartitions::dropIndexIfExists('sales', 'sales_company_id_client_uuid_unique');
         MySqlPartitions::dropIndexIfExists('sales', 'sales_company_id_number_unique');
 
-        DB::statement('CREATE UNIQUE INDEX sales_company_uuid_created_unique ON sales (company_id, client_uuid, created_at)');
-        DB::statement('CREATE UNIQUE INDEX sales_company_number_created_unique ON sales (company_id, number, created_at)');
+        MySqlPartitions::createIndexIfNotExists('sales', 'sales_company_uuid_created_unique', '`company_id`, `client_uuid`, `created_at`', true);
+        MySqlPartitions::createIndexIfNotExists('sales', 'sales_company_number_created_unique', '`company_id`, `number`, `created_at`', true);
 
         MySqlPartitions::recomposePrimaryKey('sales');
         MySqlPartitions::applyRangeByCreatedAt('sales');
@@ -161,9 +161,7 @@ return new class extends Migration
         }
 
         MySqlPartitions::dropForeignKeys('sale_items');
-        if (! $this->indexExists('sale_items', 'sale_items_sale_created_idx')) {
-            DB::statement('CREATE INDEX sale_items_sale_created_idx ON sale_items (sale_id, created_at, id)');
-        }
+        MySqlPartitions::createIndexIfNotExists('sale_items', 'sale_items_sale_created_idx', '`sale_id`, `created_at`, `id`');
 
         MySqlPartitions::recomposePrimaryKey('sale_items');
         MySqlPartitions::applyRangeByCreatedAt('sale_items');
@@ -179,8 +177,8 @@ return new class extends Migration
         MySqlPartitions::dropIndexIfExists('payments', 'payments_company_id_client_uuid_unique');
         MySqlPartitions::dropIndexIfExists('payments', 'payments_payable_type_payable_id_index');
 
-        DB::statement('CREATE UNIQUE INDEX payments_company_uuid_created_unique ON payments (company_id, client_uuid, created_at)');
-        DB::statement('CREATE INDEX payments_payable_created_idx ON payments (payable_type, payable_id, created_at)');
+        MySqlPartitions::createIndexIfNotExists('payments', 'payments_company_uuid_created_unique', '`company_id`, `client_uuid`, `created_at`', true);
+        MySqlPartitions::createIndexIfNotExists('payments', 'payments_payable_created_idx', '`payable_type`, `payable_id`, `created_at`');
 
         MySqlPartitions::recomposePrimaryKey('payments');
         MySqlPartitions::applyRangeByCreatedAt('payments');
