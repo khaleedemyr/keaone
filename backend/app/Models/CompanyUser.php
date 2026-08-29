@@ -26,6 +26,14 @@ class CompanyUser extends Pivot
         'manager_id',
         'hired_at',
         'employment_status',
+        'onboarding_status',
+        'onboarding_submitted_at',
+        'onboarding_approved_at',
+        'onboarding_approved_by',
+        'invite_id',
+        'contract_type',
+        'contract_end_at',
+        'terminated_at',
         'is_active',
         'last_seen_at',
     ];
@@ -36,6 +44,10 @@ class CompanyUser extends Pivot
             'is_active' => 'boolean',
             'last_seen_at' => 'datetime',
             'hired_at' => 'date',
+            'onboarding_submitted_at' => 'datetime',
+            'onboarding_approved_at' => 'datetime',
+            'contract_end_at' => 'date',
+            'terminated_at' => 'date',
         ];
     }
 

@@ -105,6 +105,13 @@ export type Outlet = {
   is_active?: boolean
 }
 
+export type EmploymentStatus = 'active' | 'probation' | 'resigned' | 'terminated'
+export type ContractType = 'permanent' | 'contract' | 'intern' | 'part_time'
+export type Gender = 'male' | 'female'
+export type MaritalStatus = 'single' | 'married' | 'divorced' | 'widowed'
+
+export type OnboardingStatus = 'complete' | 'pending_hr' | 'rejected'
+
 export type Member = {
   id: number
   membership_id?: number
@@ -112,17 +119,50 @@ export type Member = {
   email: string
   username: string | null
   phone: string | null
+  national_id?: string | null
+  tax_id?: string | null
+  birth_date?: string | null
+  birth_place?: string | null
+  gender?: Gender | null
+  marital_status?: MaritalStatus | null
+  address?: string | null
+  emergency_contact_name?: string | null
+  emergency_contact_phone?: string | null
   role: string
   role_id?: number | null
   is_active: boolean
   employee_code?: string | null
   hired_at?: string | null
-  employment_status?: 'active' | 'resigned'
+  employment_status?: EmploymentStatus
+  contract_type?: ContractType | null
+  contract_end_at?: string | null
+  terminated_at?: string | null
+  onboarding_status?: OnboardingStatus
+  onboarding_submitted_at?: string | null
   outlet: { id: number; name: string } | null
   department?: { id: number; name: string } | null
   position?: { id: number; name: string } | null
   job_level?: { id: number; name: string } | null
   manager?: { membership_id: number; name: string | null | undefined } | null
+}
+
+export type CompanyInvite = {
+  id: number
+  token: string
+  role: string
+  role_id?: number | null
+  role_name?: string | null
+  email?: string | null
+  label?: string | null
+  max_uses?: number | null
+  use_count: number
+  expires_at?: string | null
+  revoked_at?: string | null
+  is_acceptable?: boolean
+  is_personal?: boolean
+  is_reusable?: boolean
+  created_at?: string | null
+  creator_name?: string | null
 }
 
 export type RoleDef = RoleRecord

@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\ChatController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\ChoiceController;
 use App\Http\Controllers\Api\V1\ChoiceTypeController;
+use App\Http\Controllers\Api\V1\CompanyInviteController;
 use App\Http\Controllers\Api\V1\CompanyController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\CustomFieldDefinitionController;
@@ -36,6 +37,7 @@ use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SaleController;
 use App\Http\Controllers\Api\V1\GoodsReceiptController;
+use App\Http\Controllers\Api\V1\PublicCompanyInviteController;
 use App\Http\Controllers\Api\V1\PublicPurchaseOrderController;
 use App\Http\Controllers\Api\V1\PublicPurchaseRequisitionController;
 use App\Http\Controllers\Api\V1\PurchaseOrderController;
@@ -55,11 +57,15 @@ Route::prefix('v1')->group(function () {
     Route::post('auth/login', [AuthController::class, 'login'])
         ->middleware('throttle:login')
         ->withoutMiddleware('throttle:api');
+    Route::post('auth/accept-invite', [AuthController::class, 'acceptInvite'])
+        ->middleware('throttle:register')
+        ->withoutMiddleware('throttle:api');
     Route::get('catalog', [CatalogController::class, 'show']);
     Route::get('marketing/blog', [MarketingBlogController::class, 'index']);
     Route::get('marketing/blog/{slug}', [MarketingBlogController::class, 'show']);
     Route::get('public/purchase-orders/{shareToken}', [PublicPurchaseOrderController::class, 'show']);
     Route::get('public/purchase-requisitions/{shareToken}', [PublicPurchaseRequisitionController::class, 'show']);
+    Route::get('public/invites/{token}', [PublicCompanyInviteController::class, 'show']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
@@ -140,7 +146,13 @@ Route::prefix('v1')->group(function () {
             Route::get('users', [UserController::class, 'index']);
             Route::post('users', [UserController::class, 'store']);
             Route::put('users/{user}', [UserController::class, 'update']);
+            Route::post('users/{user}/approve-onboarding', [UserController::class, 'approveOnboarding']);
+            Route::post('users/{user}/reject-onboarding', [UserController::class, 'rejectOnboarding']);
             Route::delete('users/{user}', [UserController::class, 'destroy']);
+
+            Route::get('company-invites', [CompanyInviteController::class, 'index']);
+            Route::post('company-invites', [CompanyInviteController::class, 'store']);
+            Route::delete('company-invites/{invite}', [CompanyInviteController::class, 'destroy']);
 
             Route::get('departments', [DepartmentController::class, 'index']);
             Route::post('departments', [DepartmentController::class, 'store']);

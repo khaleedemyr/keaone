@@ -115,19 +115,19 @@ class HrDemoSeeder extends Seeder
         ]);
 
         $employees = [
-            ['email' => 'owner@demo.test', 'name' => 'Owner Demo', 'username' => 'owner', 'role' => 'owner', 'outlet' => $outletMain, 'code' => 'TK-001', 'dept' => 'Direksi', 'position' => 'Direktur', 'level' => 'Director', 'hired' => '2020-01-15', 'manager' => null],
-            ['email' => 'admin@demo.test', 'name' => 'Admin Demo', 'username' => 'admin', 'role' => 'admin', 'outlet' => $outletMain, 'code' => 'TK-002', 'dept' => 'Keuangan', 'position' => 'Admin Keuangan', 'level' => 'Manager', 'hired' => '2021-03-01', 'manager' => 'owner@demo.test'],
+            ['email' => 'owner@demo.test', 'name' => 'Owner Demo', 'username' => 'owner', 'role' => 'owner', 'outlet' => $outletMain, 'code' => 'TK-001', 'dept' => 'Direksi', 'position' => 'Direktur', 'level' => 'Director', 'hired' => '2020-01-15', 'manager' => null, 'biodata' => ['national_id' => '3174011501850001', 'tax_id' => '12.345.678.9-012.000', 'birth_date' => '1985-01-15', 'birth_place' => 'Jakarta', 'gender' => 'male', 'marital_status' => 'married', 'address' => 'Jl. Merdeka No. 1, Jakarta Pusat', 'emergency_contact_name' => 'Siti Demo', 'emergency_contact_phone' => '081234567890'], 'contract_type' => 'permanent'],
+            ['email' => 'admin@demo.test', 'name' => 'Admin Demo', 'username' => 'admin', 'role' => 'admin', 'outlet' => $outletMain, 'code' => 'TK-002', 'dept' => 'Keuangan', 'position' => 'Admin Keuangan', 'level' => 'Manager', 'hired' => '2021-03-01', 'manager' => 'owner@demo.test', 'biodata' => ['national_id' => '3174022002900002', 'birth_date' => '1990-02-20', 'birth_place' => 'Bandung', 'gender' => 'female', 'marital_status' => 'single'], 'contract_type' => 'permanent'],
             ['email' => 'ops@demo.test', 'name' => 'Agus Setiawan', 'username' => 'ops', 'role' => 'admin', 'outlet' => $outletMain, 'code' => 'TK-003', 'dept' => 'Operasional', 'position' => 'Manager Operasional', 'level' => 'Manager', 'hired' => '2021-06-10', 'manager' => 'owner@demo.test'],
             ['email' => 'supervisor@demo.test', 'name' => 'Rina Wijaya', 'username' => 'supervisor', 'role' => 'admin', 'outlet' => $outletMain, 'code' => 'TK-004', 'dept' => 'Operasional', 'position' => 'Supervisor Toko', 'level' => 'Supervisor', 'hired' => '2022-02-20', 'manager' => 'ops@demo.test'],
             ['email' => 'finance@demo.test', 'name' => 'Hendra Gunawan', 'username' => 'finance', 'role' => 'viewer', 'outlet' => $outletMain, 'code' => 'TK-005', 'dept' => 'Keuangan', 'position' => 'Admin Keuangan', 'level' => 'Staff', 'hired' => '2022-08-01', 'manager' => 'admin@demo.test'],
-            ['email' => 'kasir@demo.test', 'name' => 'Kasir Demo', 'username' => 'kasir', 'role' => 'cashier', 'outlet' => $outletMain, 'code' => 'TK-006', 'dept' => 'Penjualan & Kasir', 'position' => 'Kasir', 'level' => 'Staff', 'hired' => '2023-01-05', 'manager' => 'supervisor@demo.test'],
+            ['email' => 'kasir@demo.test', 'name' => 'Kasir Demo', 'username' => 'kasir', 'role' => 'cashier', 'outlet' => $outletMain, 'code' => 'TK-006', 'dept' => 'Penjualan & Kasir', 'position' => 'Kasir', 'level' => 'Staff', 'hired' => '2023-01-05', 'manager' => 'supervisor@demo.test', 'biodata' => ['national_id' => '3174031005950006', 'birth_date' => '1995-05-10', 'birth_place' => 'Depok', 'gender' => 'male', 'marital_status' => 'single', 'address' => 'Jl. Margonda Raya No. 12, Depok'], 'contract_type' => 'permanent'],
             ['email' => 'kasir2@demo.test', 'name' => 'Siti Rahayu', 'username' => 'kasir2', 'role' => 'cashier', 'outlet' => $outletMain, 'code' => 'TK-007', 'dept' => 'Penjualan & Kasir', 'position' => 'Kasir', 'level' => 'Staff', 'hired' => '2023-05-12', 'manager' => 'supervisor@demo.test'],
-            ['email' => 'kasir3@demo.test', 'name' => 'Dewi Lestari', 'username' => 'kasir3', 'role' => 'cashier', 'outlet' => $outletBranch, 'code' => 'TK-008', 'dept' => 'Penjualan & Kasir', 'position' => 'Kasir', 'level' => 'Junior', 'hired' => '2024-01-08', 'manager' => 'supervisor@demo.test'],
+            ['email' => 'kasir3@demo.test', 'name' => 'Dewi Lestari', 'username' => 'kasir3', 'role' => 'cashier', 'outlet' => $outletBranch, 'code' => 'TK-008', 'dept' => 'Penjualan & Kasir', 'position' => 'Kasir', 'level' => 'Junior', 'hired' => '2024-01-08', 'manager' => 'supervisor@demo.test', 'employment_status' => 'probation', 'contract_type' => 'contract', 'contract_end_at' => '2024-07-08'],
             ['email' => 'gudang1@demo.test', 'name' => 'Budi Pratama', 'username' => 'gudang1', 'role' => 'cashier', 'outlet' => $outletMain, 'code' => 'TK-009', 'dept' => 'Gudang & Logistik', 'position' => 'Staff Gudang', 'level' => 'Staff', 'hired' => '2022-11-01', 'manager' => 'ops@demo.test'],
             ['email' => 'gudang2@demo.test', 'name' => 'Andi Saputra', 'username' => 'gudang2', 'role' => 'cashier', 'outlet' => $outletMain, 'code' => 'TK-010', 'dept' => 'Gudang & Logistik', 'position' => 'Staff Gudang', 'level' => 'Junior', 'hired' => '2024-03-15', 'manager' => 'gudang1@demo.test'],
             ['email' => 'kasir4@demo.test', 'name' => 'Fitri Anggraini', 'username' => 'kasir4', 'role' => 'cashier', 'outlet' => $outletBranch, 'code' => 'TK-011', 'dept' => 'Penjualan & Kasir', 'position' => 'Kasir', 'level' => 'Junior', 'hired' => '2024-06-01', 'manager' => 'supervisor@demo.test'],
             ['email' => 'viewer@demo.test', 'name' => 'Dian Permata', 'username' => 'viewer', 'role' => 'viewer', 'outlet' => $outletMain, 'code' => 'TK-012', 'dept' => 'Keuangan', 'position' => 'Admin Keuangan', 'level' => 'Junior', 'hired' => '2024-09-01', 'manager' => 'finance@demo.test'],
-            ['email' => 'resigned@demo.test', 'name' => 'Eko Prasetyo', 'username' => 'resigned', 'role' => 'viewer', 'outlet' => $outletMain, 'code' => 'TK-013', 'dept' => 'Penjualan & Kasir', 'position' => 'Kasir', 'level' => 'Staff', 'hired' => '2021-09-01', 'manager' => 'supervisor@demo.test', 'employment_status' => 'resigned', 'is_active' => false],
+            ['email' => 'resigned@demo.test', 'name' => 'Eko Prasetyo', 'username' => 'resigned', 'role' => 'viewer', 'outlet' => $outletMain, 'code' => 'TK-013', 'dept' => 'Penjualan & Kasir', 'position' => 'Kasir', 'level' => 'Staff', 'hired' => '2021-09-01', 'manager' => 'supervisor@demo.test', 'employment_status' => 'resigned', 'terminated_at' => '2024-11-30', 'is_active' => false, 'biodata' => ['national_id' => '3174041208870013', 'birth_date' => '1987-08-12', 'birth_place' => 'Tangerang', 'gender' => 'male']],
         ];
 
         $this->seedEmployees($company, $employees);
@@ -254,6 +254,7 @@ class HrDemoSeeder extends Seeder
             $user->forceFill([
                 'name' => $row['name'],
                 'username' => $row['username'] ?? $user->username,
+                ...($row['biodata'] ?? []),
             ])->save();
 
             $member = $this->syncMember($company, $user, $row['role'], [
@@ -264,6 +265,9 @@ class HrDemoSeeder extends Seeder
                 'hired_at' => $row['hired'],
                 'manager_email' => $row['manager'] ?? null,
                 'employment_status' => $row['employment_status'] ?? 'active',
+                'contract_type' => $row['contract_type'] ?? null,
+                'contract_end_at' => $row['contract_end_at'] ?? null,
+                'terminated_at' => $row['terminated_at'] ?? null,
                 'is_active' => $row['is_active'] ?? true,
                 'outlet_id' => $row['outlet']->id ?? null,
             ]);
@@ -308,6 +312,9 @@ class HrDemoSeeder extends Seeder
                 'job_level_id' => $jobLevel?->id,
                 'hired_at' => isset($hr['hired_at']) ? Carbon::parse($hr['hired_at']) : null,
                 'employment_status' => $hr['employment_status'] ?? 'active',
+                'contract_type' => $hr['contract_type'] ?? null,
+                'contract_end_at' => isset($hr['contract_end_at']) ? Carbon::parse($hr['contract_end_at']) : null,
+                'terminated_at' => isset($hr['terminated_at']) ? Carbon::parse($hr['terminated_at']) : null,
                 'is_active' => $hr['is_active'] ?? true,
             ],
         );

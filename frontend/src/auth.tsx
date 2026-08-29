@@ -29,6 +29,22 @@ type AuthContextValue = {
     company_name: string
     business_type?: string
   }) => Promise<MePayload>
+  acceptInvite: (input: {
+    token: string
+    name?: string
+    email?: string
+    password?: string
+    phone?: string
+    national_id?: string
+    tax_id?: string
+    birth_date?: string
+    birth_place?: string
+    gender?: string
+    marital_status?: string
+    address?: string
+    emergency_contact_name?: string
+    emergency_contact_phone?: string
+  }) => Promise<MePayload | { pendingHr: true; companyName?: string; message?: string }>
   logout: () => Promise<void>
   refresh: () => Promise<void>
   switchCompany: (companyId: number | null) => Promise<MePayload>
@@ -141,6 +157,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const acceptInvite = useCallback(
+    async (input: {
+      token: string
+      name?: string
+      email?: string
+      password?: string
+      phone?: string
+      national_id?: string
+      tax_id?: string
+      birth_date?: string
+      birth_place?: string
+      gender?: string
+      marital_status?: string
+      address?: string
+      emergency_contact_name?: string
+      emergency_contact_phone?: string
+    }) => {
+      const { data } = await api.post<ApiOk<AuthPayload & { pending_hr?: boolean; company_name?: string; message?: string }>>('/auth/accept-invite', {
+        ...input,
+        device_name: 'web',
+      })
+      if (data.data.pending_hr) {
+        return {
+          pendingHr: true as const,
+          companyName: data.data.company_name,
+          message: data.data.message,
+        }
+      }
+      const next = applySession(data.data, true)
+      rememberCompany(next.company?.id)
+      clearNotifications()
+      setMe(next)
+      return next
+    },
+    [],
+  )
+
   const logout = useCallback(async () => {
     resetPrefsHydration()
     const token = sessionGet(TOKEN_KEY)
@@ -195,12 +248,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       login,
       register,
+      acceptInvite,
       logout,
       refresh,
       switchCompany,
       createCompany,
     }),
-    [me, loading, login, register, logout, refresh, switchCompany, createCompany],
+    [me, loading, login, register, acceptInvite, logout, refresh, switchCompany, createCompany],
   )
 
   return <AuthContext.Provider value={value}><PrefsSync />{children}</AuthContext.Provider>

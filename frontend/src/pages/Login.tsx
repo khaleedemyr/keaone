@@ -80,7 +80,11 @@ export default function Login() {
     setSubmitting(true)
     try {
       const next = await login(email, password, remember)
-      navigate(homePath(next), { replace: true })
+      const dest =
+        from && from !== '/login' && from !== '/register' && from !== '/platform' && from !== '/'
+          ? from
+          : homePath(next)
+      navigate(dest, { replace: true })
     } catch (err) {
       setError(apiMessage(err, t('loginError')))
       busy.current = false

@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\ActivityLogger;
+use App\Services\CompanyInviteService;
 use App\Services\ProvisionCompany;
+use App\Support\EmployeeProfile;
 use App\Support\MePayload;
 use App\Support\PasswordRules;
 use Illuminate\Http\JsonResponse;
@@ -144,5 +146,105 @@ class AuthController extends Controller
         $request->user()->tokens()->delete();
 
         return $this->ok(['ok' => true]);
+    }
+
+    public function acceptInvite(Request $request, CompanyInviteService $invites): JsonResponse
+    {
+        $data = $request->validate(array_merge([
+            'token' => ['required', 'string', 'max:64'],
+            'name' => ['nullable', 'string', 'max:120'],
+            'email' => ['nullable', 'email', 'max:150'],
+            'password' => PasswordRules::optional(),
+            'device_name' => ['nullable', 'string', 'max:100'],
+        ], EmployeeProfile::rules(true)));
+
+        $invite = $invites->findByToken($data['token']);
+        abort_unless($invite->isAcceptable(), 422, 'Undangan tidak valid atau sudah kedaluwarsa.');
+
+        $user = $this->resolveInviteUser($request, $data, $invite);
+        $profile = EmployeeProfile::validated($data);
+        if (! empty($data['name'])) {
+            $profile['name'] = $data['name'];
+        }
+
+        DB::transaction(function () use ($invites, $invite, $user, $profile) {
+            $invites->accept($invite, $user, $profile);
+        });
+
+        ActivityLogger::record([
+            'user_id' => $user->id,
+            'company_id' => $invite->company_id,
+            'scope' => 'tenant',
+            'action' => 'accept_invite',
+            'menu_key' => 'auth',
+            'summary' => 'Mengirim biodata via undangan',
+            'target' => $invite->company?->name,
+            'status' => 200,
+        ], $request);
+
+        return $this->ok([
+            'pending_hr' => true,
+            'company_name' => $invite->company?->name,
+            'message' => 'Biodata terkirim. Menunggu persetujuan HR.',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function resolveInviteUser(Request $request, array $data, \App\Models\CompanyInvite $invite): User
+    {
+        $bearer = $request->bearerToken();
+        if (is_string($bearer) && $bearer !== '') {
+            $accessToken = PersonalAccessToken::findToken($bearer);
+            if ($accessToken?->tokenable instanceof User) {
+                return $accessToken->tokenable;
+            }
+        }
+
+        $email = strtolower(trim((string) ($data['email'] ?? $invite->email ?? '')));
+        abort_unless($email !== '', 422, 'Email wajib diisi.');
+
+        if ($invite->email && strtolower($invite->email) !== $email) {
+            throw ValidationException::withMessages([
+                'email' => ['Undangan ini khusus untuk email '.$invite->email.'.'],
+            ]);
+        }
+
+        $existing = User::query()->where('email', $email)->first();
+        if ($existing) {
+            if (empty($data['password'])) {
+                throw ValidationException::withMessages([
+                    'password' => ['Password wajib untuk akun yang sudah terdaftar.'],
+                ]);
+            }
+
+            $hash = $existing->getRawOriginal('password');
+            if (! is_string($hash) || $hash === '' || ! Hash::check($data['password'], $hash)) {
+                throw ValidationException::withMessages([
+                    'password' => ['Password salah.'],
+                ]);
+            }
+
+            return $existing;
+        }
+
+        if (empty($data['name'])) {
+            throw ValidationException::withMessages([
+                'name' => ['Nama wajib diisi.'],
+            ]);
+        }
+
+        if (empty($data['password'])) {
+            throw ValidationException::withMessages([
+                'password' => ['Password wajib diisi.'],
+            ]);
+        }
+
+        return User::query()->create([
+            'name' => $data['name'],
+            'email' => $email,
+            'password' => $data['password'],
+        ]);
     }
 }

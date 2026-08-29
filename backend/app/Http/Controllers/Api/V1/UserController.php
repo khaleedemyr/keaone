@@ -10,9 +10,11 @@ use App\Models\Outlet;
 use App\Models\Position;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\CompanyInviteService;
 use App\Services\RoleService;
 use App\Support\Access;
 use App\Support\CurrentCompany;
+use App\Support\EmployeeProfile;
 use App\Support\PasswordRules;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,7 +24,10 @@ use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
-    public function __construct(private RoleService $roles) {}
+    public function __construct(
+        private RoleService $roles,
+        private CompanyInviteService $invites,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -55,14 +60,101 @@ class UserController extends Controller
                     ->orWhereHas('user', function ($inner) use ($search) {
                         $inner->where('name', 'like', "%{$search}%")
                             ->orWhere('email', 'like', "%{$search}%")
-                            ->orWhere('username', 'like', "%{$search}%");
+                            ->orWhere('username', 'like', "%{$search}%")
+                            ->orWhere('national_id', 'like', "%{$search}%");
                     });
             });
         }
 
-        $this->applyActiveStatus($query, $request);
+        if ($employmentStatus = $request->string('employment_status')->toString()) {
+            if ($employmentStatus !== 'all') {
+                $query->where('employment_status', $employmentStatus);
+            }
+        }
+
+        if ($onboarding = $request->string('onboarding_status')->toString()) {
+            if ($onboarding !== 'all') {
+                $query->where('onboarding_status', $onboarding);
+            }
+        } elseif (! $request->boolean('for_select')) {
+            $query->where('onboarding_status', 'complete');
+        }
+
+        if ($request->string('onboarding_status')->toString() === 'pending_hr') {
+            // Pending onboarding rows are inactive until HR approves.
+        } else {
+            $this->applyActiveStatus($query, $request);
+        }
 
         return $this->paged($query, $request, fn (CompanyUser $row) => $this->serialize($row));
+    }
+
+    public function approveOnboarding(Request $request, User $user): JsonResponse
+    {
+        $this->ensureCan('users', 'edit');
+
+        $member = $this->membershipOf($user);
+        abort_unless($member->onboarding_status === 'pending_hr', 422, 'Karyawan tidak menunggu persetujuan HR.');
+
+        $data = $request->validate([
+            'employee_code' => [
+                'nullable',
+                'string',
+                'max:40',
+                Rule::unique('company_user', 'employee_code')
+                    ->where('company_id', CurrentCompany::id())
+                    ->ignore($member->id),
+            ],
+            'department_id' => ['nullable', 'integer', Rule::exists('departments', 'id')],
+            'position_id' => ['nullable', 'integer', Rule::exists('positions', 'id')],
+            'job_level_id' => ['nullable', 'integer', Rule::exists('job_levels', 'id')],
+            'manager_id' => ['nullable', 'integer', Rule::exists('company_user', 'id')],
+            'hired_at' => ['nullable', 'date'],
+            'employment_status' => ['nullable', 'string', Rule::in(['active', 'probation', 'resigned', 'terminated'])],
+            'contract_type' => ['nullable', 'string', Rule::in(['permanent', 'contract', 'intern', 'part_time'])],
+            'contract_end_at' => ['nullable', 'date'],
+            'role_id' => ['nullable', 'integer'],
+            'role' => ['nullable', 'string', 'max:80'],
+            'outlet_id' => ['nullable', 'integer'],
+        ]);
+
+        if (isset($data['role_id']) || isset($data['role'])) {
+            $nextRole = $this->roles->resolveTenantRole(CurrentCompany::id(), $data['role_id'] ?? null, $data['role'] ?? null);
+            $this->assertCanAssignRole($nextRole, $member->role_id);
+        } else {
+            $nextRole = null;
+        }
+
+        if (array_key_exists('outlet_id', $data)) {
+            $data['outlet_id'] = $this->validOutletId($data['outlet_id'], $member->outlet_id);
+        }
+
+        $hr = $this->validatedHrFields($data, $member);
+        if (array_key_exists('manager_id', $hr)) {
+            $this->assertValidManager($member, $hr['manager_id']);
+        }
+
+        if ($nextRole) {
+            $hr['role'] = $nextRole->slug;
+            $hr['role_id'] = $nextRole->id;
+        }
+        if (array_key_exists('outlet_id', $data)) {
+            $hr['outlet_id'] = $data['outlet_id'];
+        }
+
+        $member = DB::transaction(fn () => $this->invites->approve($member, $request->user(), $hr));
+
+        return $this->ok($this->serialize($member));
+    }
+
+    public function rejectOnboarding(User $user): JsonResponse
+    {
+        $this->ensureCanAny([['users', 'delete'], ['users', 'edit']]);
+
+        $member = $this->membershipOf($user);
+        $member = $this->invites->reject($member);
+
+        return $this->ok($this->serialize($member));
     }
 
     public function store(Request $request): JsonResponse
@@ -78,6 +170,7 @@ class UserController extends Controller
         $this->ensurePlanLimit('users');
         $outletId = $this->validOutletId($data['outlet_id'] ?? null);
         $hr = $this->validatedHrFields($data);
+        $profile = $this->validatedProfileFields($data);
 
         if ($existingUser) {
             $alreadyMember = CompanyUser::query()
@@ -104,11 +197,12 @@ class UserController extends Controller
             }
         }
 
-        $member = DB::transaction(function () use ($data, $outletId, $role, $hr, $existingUser) {
+        $member = DB::transaction(function () use ($data, $outletId, $role, $hr, $profile, $existingUser) {
             if ($existingUser) {
                 $existingUser->fill(array_filter([
                     'name' => $data['name'],
                     'phone' => $data['phone'] ?? null,
+                    ...$profile,
                 ], fn ($value) => $value !== null));
 
                 if (array_key_exists('username', $data)) {
@@ -127,6 +221,7 @@ class UserController extends Controller
                     'username' => $data['username'] ?? null,
                     'phone' => $data['phone'] ?? null,
                     'password' => $data['password'],
+                    ...$profile,
                 ]);
             }
 
@@ -140,6 +235,7 @@ class UserController extends Controller
                 'role' => $role->slug,
                 'role_id' => $role->id,
                 'is_active' => $data['is_active'] ?? true,
+                'onboarding_status' => 'complete',
                 ...$hr,
             ]);
 
@@ -186,14 +282,16 @@ class UserController extends Controller
         }
 
         $hr = $this->validatedHrFields($data, $member);
+        $profile = $this->validatedProfileFields($data);
         if (array_key_exists('manager_id', $hr)) {
             $this->assertValidManager($member, $hr['manager_id']);
         }
 
-        DB::transaction(function () use ($user, $member, $data, $nextRole, $hr) {
+        DB::transaction(function () use ($user, $member, $data, $nextRole, $hr, $profile) {
             $user->fill(array_filter([
                 'name' => $data['name'] ?? null,
                 'email' => $data['email'] ?? null,
+                ...$profile,
             ], fn ($value) => $value !== null));
 
             if (array_key_exists('username', $data)) {
@@ -270,7 +368,7 @@ class UserController extends Controller
      */
     private function storeRules(?User $existingUser): array
     {
-        return [
+        return array_merge([
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:150'],
             'username' => ['nullable', 'string', 'max:60'],
@@ -291,8 +389,11 @@ class UserController extends Controller
             'job_level_id' => ['nullable', 'integer', Rule::exists('job_levels', 'id')],
             'manager_id' => ['nullable', 'integer', Rule::exists('company_user', 'id')],
             'hired_at' => ['nullable', 'date'],
-            'employment_status' => ['nullable', 'string', Rule::in(['active', 'resigned'])],
-        ];
+            'employment_status' => ['nullable', 'string', Rule::in(['active', 'probation', 'resigned', 'terminated'])],
+            'contract_type' => ['nullable', 'string', Rule::in(['permanent', 'contract', 'intern', 'part_time'])],
+            'contract_end_at' => ['nullable', 'date'],
+            'terminated_at' => ['nullable', 'date'],
+        ], $this->profileRules());
     }
 
     /**
@@ -300,7 +401,7 @@ class UserController extends Controller
      */
     private function updateRules(User $user, CompanyUser $member): array
     {
-        return [
+        return array_merge([
             'name' => ['sometimes', 'string', 'max:120'],
             'email' => ['sometimes', 'email', 'max:150', Rule::unique('users', 'email')->ignore($user->id)],
             'username' => ['nullable', 'string', 'max:60', Rule::unique('users', 'username')->ignore($user->id)],
@@ -323,8 +424,19 @@ class UserController extends Controller
             'job_level_id' => ['nullable', 'integer', Rule::exists('job_levels', 'id')],
             'manager_id' => ['nullable', 'integer', Rule::exists('company_user', 'id')],
             'hired_at' => ['nullable', 'date'],
-            'employment_status' => ['nullable', 'string', Rule::in(['active', 'resigned'])],
-        ];
+            'employment_status' => ['nullable', 'string', Rule::in(['active', 'probation', 'resigned', 'terminated'])],
+            'contract_type' => ['nullable', 'string', Rule::in(['permanent', 'contract', 'intern', 'part_time'])],
+            'contract_end_at' => ['nullable', 'date'],
+            'terminated_at' => ['nullable', 'date'],
+        ], $this->profileRules());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function profileRules(): array
+    {
+        return EmployeeProfile::rules(false);
     }
 
     /**
@@ -335,7 +447,18 @@ class UserController extends Controller
     {
         $fields = [];
 
-        foreach (['employee_code', 'department_id', 'position_id', 'job_level_id', 'manager_id', 'hired_at', 'employment_status'] as $key) {
+        foreach ([
+            'employee_code',
+            'department_id',
+            'position_id',
+            'job_level_id',
+            'manager_id',
+            'hired_at',
+            'employment_status',
+            'contract_type',
+            'contract_end_at',
+            'terminated_at',
+        ] as $key) {
             if (! array_key_exists($key, $data)) {
                 continue;
             }
@@ -352,6 +475,14 @@ class UserController extends Controller
                 }
                 continue;
             }
+            if (in_array($key, ['hired_at', 'contract_end_at', 'terminated_at'], true)) {
+                $fields[$key] = $value !== null && $value !== '' ? $value : null;
+                continue;
+            }
+            if ($key === 'contract_type') {
+                $fields[$key] = $value !== null && $value !== '' ? $value : null;
+                continue;
+            }
             $fields[$key] = $value;
         }
 
@@ -360,6 +491,15 @@ class UserController extends Controller
         }
 
         return $fields;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function validatedProfileFields(array $data): array
+    {
+        return EmployeeProfile::validated($data);
     }
 
     private function assertHrBelongsToCompany(string $field, int $id): void
@@ -508,12 +648,27 @@ class UserController extends Controller
             'email' => $user?->email,
             'username' => $user?->username,
             'phone' => $user?->phone,
+            'national_id' => $user?->national_id,
+            'tax_id' => $user?->tax_id,
+            'birth_date' => $user?->birth_date?->toDateString(),
+            'birth_place' => $user?->birth_place,
+            'gender' => $user?->gender,
+            'marital_status' => $user?->marital_status,
+            'address' => $user?->address,
+            'emergency_contact_name' => $user?->emergency_contact_name,
+            'emergency_contact_phone' => $user?->emergency_contact_phone,
             'role' => $row->role,
             'role_id' => $row->role_id,
             'is_active' => $row->is_active,
             'employee_code' => $row->employee_code,
             'hired_at' => $row->hired_at?->toDateString(),
             'employment_status' => $row->employment_status ?? 'active',
+            'contract_type' => $row->contract_type,
+            'contract_end_at' => $row->contract_end_at?->toDateString(),
+            'terminated_at' => $row->terminated_at?->toDateString(),
+            'onboarding_status' => $row->onboarding_status ?? 'complete',
+            'onboarding_submitted_at' => $row->onboarding_submitted_at?->toIso8601String(),
+            'onboarding_approved_at' => $row->onboarding_approved_at?->toIso8601String(),
             'outlet' => $row->outlet ? [
                 'id' => $row->outlet->id,
                 'name' => $row->outlet->name,
