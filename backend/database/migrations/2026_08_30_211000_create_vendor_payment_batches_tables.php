@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -44,10 +45,22 @@ return new class extends Migration
                 $table->unsignedBigInteger('amount');
                 $table->timestamps();
 
-                $table->unique(['vendor_payment_batch_id', 'vendor_invoice_id']);
+                $table->unique(['vendor_payment_batch_id', 'vendor_invoice_id'], 'vpbi_batch_invoice_unique');
                 $table->index(['vendor_invoice_id', 'created_at'], 'vpbi_invoice_created_idx');
             });
+        } elseif (! $this->indexExists('vendor_payment_batch_items', 'vpbi_batch_invoice_unique')) {
+            // Recover partial run: table created before unique index failed (MySQL 1059).
+            Schema::table('vendor_payment_batch_items', function (Blueprint $table) {
+                $table->unique(['vendor_payment_batch_id', 'vendor_invoice_id'], 'vpbi_batch_invoice_unique');
+            });
         }
+    }
+
+    private function indexExists(string $table, string $index): bool
+    {
+        $rows = DB::select('SHOW INDEX FROM `'.$table.'` WHERE Key_name = ?', [$index]);
+
+        return count($rows) > 0;
     }
 
     public function down(): void
