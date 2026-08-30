@@ -27,8 +27,12 @@ const emptyForm = {
   unit_id: '',
   item_type_id: '',
   min_stock: '0',
+  reorder_qty: '0',
   initial_qty: '0',
   track_stock: true,
+  is_procurement_item: false,
+  is_fixed_asset_item: false,
+  preferred_supplier_id: '',
 }
 
 type UnitLevelDraft = {
@@ -102,6 +106,7 @@ export default function Products() {
   const [useBom, setUseBom] = useState(false)
   const [outlets, setOutlets] = useState<Outlet[]>([])
   const [priceChannels, setPriceChannels] = useState<PriceChannel[]>([])
+  const [suppliers, setSuppliers] = useState<Array<{ id: number; name: string }>>([])
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [categoryId, setCategoryId] = useState('')
@@ -160,7 +165,7 @@ export default function Products() {
     if (lookupsLoaded.current || lookupsLoading.current) return
     lookupsLoading.current = true
     try {
-      const [subs, unitRes, itemTypeRes, choiceRes, outletRes, channelRes, productRes] = await Promise.all([
+      const [subs, unitRes, itemTypeRes, choiceRes, outletRes, channelRes, productRes, supplierRes] = await Promise.all([
         api.get<ApiOk<SubCategory[]>>('/subcategories', { params: { for_select: 1, status: 'all' }, silent: true }),
         api.get<ApiOk<Unit[]>>('/units', { params: { for_select: 1, status: 'all' }, silent: true }),
         api.get<ApiOk<ItemType[]>>('/item-types', { params: { for_select: 1, status: 'all' }, silent: true }),
@@ -168,6 +173,7 @@ export default function Products() {
         api.get<ApiOk<Outlet[]>>('/outlets', { params: { for_select: 1, status: 'all' }, silent: true }),
         api.get<ApiOk<PriceChannel[]>>('/price-channels', { params: { for_select: 1, status: 'all' }, silent: true }),
         api.get<ApiOk<ProductOption[]>>('/products', { params: { for_select: 1, status: 'all' }, silent: true }),
+        api.get<ApiOk<Array<{ id: number; name: string }>>>('/suppliers', { params: { for_select: 1, status: 'active', per_page: 200 }, silent: true }),
       ])
       setSubCategories(subs.data.data)
       setUnits(unitRes.data.data)
@@ -176,6 +182,7 @@ export default function Products() {
       setOutlets(outletRes.data.data)
       setPriceChannels(channelRes.data.data)
       setProductOptions(productRes.data.data)
+      setSuppliers(supplierRes.data.data ?? [])
       lookupsLoaded.current = true
     } catch (err) {
       feedback.error(apiMessage(err, t('loadFailed')))
@@ -331,8 +338,12 @@ export default function Products() {
       unit_id: nextLevels.small.unit_id || (product.unit_id ? String(product.unit_id) : ''),
       item_type_id: product.item_type_id ? String(product.item_type_id) : '',
       min_stock: String(product.min_stock),
+      reorder_qty: String(product.reorder_qty ?? 0),
       initial_qty: '0',
       track_stock: product.track_stock,
+      is_procurement_item: product.is_procurement_item ?? false,
+      is_fixed_asset_item: product.is_fixed_asset_item ?? false,
+      preferred_supplier_id: product.preferred_supplier_id ? String(product.preferred_supplier_id) : '',
     })
     setOutletPrices(priceMapFor(product))
     setChannelPrices(
@@ -484,7 +495,11 @@ export default function Products() {
         }))
         .filter((row) => Number.isFinite(row.sell_price)),
       min_stock: Number(form.min_stock || 0),
-      track_stock: form.track_stock,
+      reorder_qty: Number(form.reorder_qty || 0),
+      track_stock: form.is_procurement_item || form.is_fixed_asset_item ? false : form.track_stock,
+      is_procurement_item: form.is_procurement_item,
+      is_fixed_asset_item: form.is_fixed_asset_item,
+      preferred_supplier_id: form.preferred_supplier_id ? Number(form.preferred_supplier_id) : null,
       initial_qty: Number(form.initial_qty || 0),
       custom_fields: customFields,
       choice_ids: useChoices && choicesEnabled ? selectedChoiceIds : [],
@@ -1003,6 +1018,70 @@ export default function Products() {
               value={form.min_stock}
               onChange={(e) => setForm({ ...form, min_stock: e.target.value })}
             />
+          </label>
+          {form.track_stock && !form.is_procurement_item && !form.is_fixed_asset_item ? (
+            <label className="text-sm text-muted">
+              {t('reorderQty')}
+              <input
+                type="number"
+                min={0}
+                className="field"
+                value={form.reorder_qty}
+                onChange={(e) => setForm({ ...form, reorder_qty: e.target.value })}
+              />
+              <span className="mt-1 block text-xs">{t('reorderQtyHint')}</span>
+            </label>
+          ) : null}
+          <label className="flex items-center gap-2 text-sm text-muted sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={form.is_procurement_item}
+              disabled={form.is_fixed_asset_item}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  is_procurement_item: e.target.checked,
+                  is_fixed_asset_item: e.target.checked ? false : form.is_fixed_asset_item,
+                  track_stock: e.target.checked ? false : form.track_stock,
+                })
+              }
+            />
+            <span>
+              <span className="text-fg">{t('productProcurementItem')}</span>
+              <span className="mt-0.5 block text-xs">{t('productProcurementItemHint')}</span>
+            </span>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-muted sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={form.is_fixed_asset_item}
+              disabled={form.is_procurement_item}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  is_fixed_asset_item: e.target.checked,
+                  is_procurement_item: e.target.checked ? false : form.is_procurement_item,
+                  track_stock: e.target.checked ? false : form.track_stock,
+                })
+              }
+            />
+            <span>
+              <span className="text-fg">{t('productFixedAssetItem')}</span>
+              <span className="mt-0.5 block text-xs">{t('productFixedAssetItemHint')}</span>
+            </span>
+          </label>
+          <label className="block text-sm text-muted sm:col-span-2">
+            {t('productPreferredSupplier')}
+            <SearchSelect
+              className="!mt-0"
+              value={form.preferred_supplier_id}
+              onChange={(value) => setForm({ ...form, preferred_supplier_id: value })}
+              options={suppliers.map((s) => ({ value: String(s.id), label: s.name }))}
+              placeholder={t('purchaseSelectSupplier')}
+              allowEmpty
+              emptyLabel={t('filterAll')}
+            />
+            <span className="mt-0.5 block text-xs">{t('productPreferredSupplierHint')}</span>
           </label>
           {!editing ? (
             <label className="text-sm text-muted">

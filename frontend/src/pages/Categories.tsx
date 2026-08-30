@@ -7,18 +7,25 @@ import { useFeedback } from '../components/feedback'
 import { PageHeader } from '../components/ui'
 import { MasterFilters, MasterPager, useListQuery } from '../components/MasterListBar'
 import { MasterModal, MasterViewModal, MasterNameButton, ViewField } from '../components/MasterModal'
+import { SearchSelect } from '../components/SearchSelect'
 import { useI18n } from '../i18n'
 import { useAccess } from '../access'
+import { useAuth } from '../auth'
 
 export default function Categories() {
   const { t } = useI18n()
   const { can } = useAccess()
+  const { me } = useAuth()
+  const twoWayEnabled = me?.settings?.procurement_two_way_match_enabled === true
   const feedback = useFeedback()
   const list = useListQuery()
   const [items, setItems] = useState<Category[]>([])
   const [name, setName] = useState('')
   const [showPos, setShowPos] = useState(true)
   const [rawMaterial, setRawMaterial] = useState(false)
+  const [matchMode, setMatchMode] = useState<'three_way' | 'two_way'>('three_way')
+  const [preferredSupplierId, setPreferredSupplierId] = useState('')
+  const [suppliers, setSuppliers] = useState<Array<{ id: number; name: string }>>([])
   const [editing, setEditing] = useState<Category | null>(null)
   const [viewing, setViewing] = useState<Category | null>(null)
   const [open, setOpen] = useState(false)
@@ -43,6 +50,16 @@ export default function Categories() {
   }
 
   useEffect(() => {
+    void api
+      .get<ApiOk<Array<{ id: number; name: string }>>>('/suppliers', {
+        params: { for_select: 1, status: 'active', per_page: 200 },
+        silent: true,
+      })
+      .then(({ data }) => setSuppliers(data.data ?? []))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     const handle = window.setTimeout(() => {
       void load()
     }, 200)
@@ -54,6 +71,8 @@ export default function Categories() {
     setName('')
     setShowPos(true)
     setRawMaterial(false)
+    setMatchMode('three_way')
+    setPreferredSupplierId('')
     setError('')
     setOpen(true)
     logMasterForm('category', 'create')
@@ -64,6 +83,8 @@ export default function Categories() {
     setName(item.name)
     setShowPos(item.show_pos ?? true)
     setRawMaterial(item.is_raw_material ?? false)
+    setMatchMode(item.procurement_match_mode ?? 'three_way')
+    setPreferredSupplierId(item.preferred_supplier_id ? String(item.preferred_supplier_id) : '')
     setError('')
     setOpen(true)
     logMasterForm('category', 'edit', item.name)
@@ -77,6 +98,8 @@ export default function Categories() {
       name,
       show_pos: showPos,
       is_raw_material: rawMaterial,
+      preferred_supplier_id: preferredSupplierId ? Number(preferredSupplierId) : null,
+      ...(twoWayEnabled ? { procurement_match_mode: matchMode } : {}),
     }
     try {
       if (editing) await api.put(`/categories/${editing.id}`, payload)
@@ -146,6 +169,7 @@ export default function Categories() {
               <th className="px-4 py-3 font-medium">{t('name')}</th>
               <th className="px-4 py-3 font-medium">{t('categoryShowPos')}</th>
               <th className="px-4 py-3 font-medium">{t('categoryRawMaterial')}</th>
+              {twoWayEnabled ? <th className="px-4 py-3 font-medium">{t('categoryMatchMode')}</th> : null}
               <th className="px-4 py-3 font-medium">{t('status')}</th>
               {showActions ? <th className="px-4 py-3 font-medium"></th> : null}
             </tr>
@@ -158,6 +182,11 @@ export default function Categories() {
                 </td>
                 <td className="px-4 py-3 text-muted">{item.show_pos ?? true ? t('yes') : t('no')}</td>
                 <td className="px-4 py-3 text-muted">{item.is_raw_material ?? false ? t('yes') : t('no')}</td>
+                {twoWayEnabled ? (
+                  <td className="px-4 py-3 text-muted">
+                    {item.procurement_match_mode === 'two_way' ? t('categoryMatchModeTwoWay') : t('categoryMatchModeThreeWay')}
+                  </td>
+                ) : null}
                 <td className="px-4 py-3">
                   <span className={item.is_active ? 'text-mint' : 'text-rose-300'}>
                     {item.is_active ? t('active') : t('inactive')}
@@ -186,7 +215,7 @@ export default function Categories() {
             ))}
             {items.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-center text-muted" colSpan={showActions ? 5 : 4}>
+                <td className="px-4 py-8 text-center text-muted" colSpan={showActions ? (twoWayEnabled ? 6 : 5) : twoWayEnabled ? 5 : 4}>
                   {t('emptyMaster')}
                 </td>
               </tr>
@@ -223,6 +252,29 @@ export default function Categories() {
             <span className="mt-0.5 block text-xs">{t('categoryRawMaterialHint')}</span>
           </span>
         </label>
+        {twoWayEnabled ? (
+          <label className="block text-sm text-muted">
+            {t('categoryMatchMode')}
+            <select className="field" value={matchMode} onChange={(e) => setMatchMode(e.target.value as 'three_way' | 'two_way')}>
+              <option value="three_way">{t('categoryMatchModeThreeWay')}</option>
+              <option value="two_way">{t('categoryMatchModeTwoWay')}</option>
+            </select>
+            <span className="mt-0.5 block text-xs">{t('categoryMatchModeHint')}</span>
+          </label>
+        ) : null}
+        <label className="block text-sm text-muted">
+          {t('categoryPreferredSupplier')}
+          <SearchSelect
+            className="!mt-0"
+            value={preferredSupplierId}
+            onChange={setPreferredSupplierId}
+            options={suppliers.map((s) => ({ value: String(s.id), label: s.name }))}
+            placeholder={t('purchaseSelectSupplier')}
+            allowEmpty
+            emptyLabel={t('filterAll')}
+          />
+          <span className="mt-0.5 block text-xs">{t('categoryPreferredSupplierHint')}</span>
+        </label>
       </MasterModal>
 
       <MasterViewModal
@@ -244,6 +296,16 @@ export default function Categories() {
             <ViewField label={t('name')} value={viewing.name} />
             <ViewField label={t('categoryShowPos')} value={viewing.show_pos ?? true ? t('yes') : t('no')} />
             <ViewField label={t('categoryRawMaterial')} value={viewing.is_raw_material ?? false ? t('yes') : t('no')} />
+            {twoWayEnabled ? (
+              <ViewField
+                label={t('categoryMatchMode')}
+                value={viewing.procurement_match_mode === 'two_way' ? t('categoryMatchModeTwoWay') : t('categoryMatchModeThreeWay')}
+              />
+            ) : null}
+            <ViewField
+              label={t('categoryPreferredSupplier')}
+              value={viewing.preferred_supplier?.name ?? (viewing.preferred_supplier_id ? `#${viewing.preferred_supplier_id}` : '—')}
+            />
             <ViewField label={t('status')} value={viewing.is_active ? t('active') : t('inactive')} />
           </>
         ) : null}

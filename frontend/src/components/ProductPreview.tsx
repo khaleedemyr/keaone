@@ -156,6 +156,9 @@ export function ProductViewModal({
               <ViewField label={t('itemType')} value={product.item_type?.name} />
               <ViewField label={t('unit')} value={unitLabel} />
               <ViewField label={t('minStock')} value={String(product.min_stock)} />
+              {product.track_stock ? (
+                <ViewField label={t('reorderQty')} value={String(product.reorder_qty ?? 0)} />
+              ) : null}
               <ViewField label={t('status')} value={product.is_active ? t('active') : t('inactive')} />
             </dl>
             <div className="mt-4">

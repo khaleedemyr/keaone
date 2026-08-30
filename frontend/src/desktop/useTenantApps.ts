@@ -44,7 +44,7 @@ export function useTenantApps() {
         : []),
       ...(can('sales') || canAny([...SALES_REPORT_MENUS], 'view') ? (['sales'] as TenantAppId[]) : []),
       ...(me?.modules?.purchase &&
-      canAny(['purchaserequisitions', 'purchaseorders', 'goodsreceipts', 'purchasesettings'], 'view')
+      canAny(['procurementdashboard', 'procurementreports', 'purchaserequisitions', 'purchaseorders', 'goodsreceipts', 'purchasereturns', 'vendoradjustmentnotes', 'deliveryschedules', 'vendorinvoices', 'matchexceptions', 'vendorpaymentbatches', 'vendorprepayments', 'purchasesettings'], 'view')
         ? (['purchase'] as TenantAppId[])
         : []),
       ...(canAny(['departments', 'positions', 'joblevels', 'users'], 'view') ? (['hr'] as TenantAppId[]) : []),
@@ -62,7 +62,7 @@ export function useTenantApps() {
       pos: t('appPos'),
       master: t('appMaster'),
       sales: t('appSales'),
-      purchase: t('appPurchase'),
+      purchase: t('appProcurement'),
       hr: t('appHr'),
       approvals: t('appApprovals'),
       admin: t('appAdmin'),

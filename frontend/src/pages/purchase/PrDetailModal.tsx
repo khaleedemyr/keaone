@@ -13,6 +13,7 @@ import {
   type PrDetailRecord,
 } from './prDocumentActions'
 import { PrDetailView } from './PrDetailView'
+import { ProcurementAttachmentsPanel } from './ProcurementAttachmentsPanel'
 
 export function PrDetailModal({
   prId,
@@ -101,6 +102,7 @@ export function PrDetailModal({
       {loading ? (
         <p className="font-sans text-sm text-muted">{t('loading')}</p>
       ) : pr ? (
+        <>
         <PrDetailView
           pr={pr}
           locale={locale}
@@ -141,6 +143,8 @@ export function PrDetailModal({
             ) : null
           }
         />
+        <ProcurementAttachmentsPanel documentType="purchase_requisition" documentId={pr.id} />
+        </>
       ) : (
         <p className="font-sans text-sm text-muted">{t('purchaseEmpty')}</p>
       )}

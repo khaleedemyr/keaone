@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\PurchaseRequisition;
+use App\Services\ProcurementFieldAuditService;
 use App\Services\PurchaseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,7 +23,7 @@ class PurchaseRequisitionController extends Controller
         }
 
         $query = PurchaseRequisition::query()
-            ->with(['user:id,name', 'outlet:id,name', 'warehouse:id,name', 'approvals.user:id,name', 'orders:id,purchase_requisition_id'])
+            ->with(['user:id,name', 'outlet:id,name', 'department:id,name,code', 'warehouse:id,name', 'approvals.user:id,name', 'orders:id,purchase_requisition_id'])
             ->orderByDesc('id');
 
         if ($request->boolean('for_po')) {
@@ -42,6 +43,13 @@ class PurchaseRequisitionController extends Controller
             $query->whereDate('created_at', '<=', $to);
         }
 
+        if ($departmentId = $request->integer('department_id')) {
+            $query->where('department_id', $departmentId);
+        }
+        if ($outletId = $request->integer('outlet_id')) {
+            $query->where('outlet_id', $outletId);
+        }
+
         $page = $query->paginate($this->perPage($request, $request->boolean('for_po') ? 50 : 20));
 
         return $this->ok(
@@ -59,6 +67,8 @@ class PurchaseRequisitionController extends Controller
         $data = $request->validate([
             'client_uuid' => ['required', 'uuid'],
             'warehouse_id' => ['nullable', 'integer'],
+            'outlet_id' => ['nullable', 'integer'],
+            'department_id' => ['nullable', 'integer'],
             'needed_at' => ['nullable', 'date'],
             'note' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
@@ -91,6 +101,8 @@ class PurchaseRequisitionController extends Controller
 
         $data = $request->validate([
             'warehouse_id' => ['nullable', 'integer'],
+            'outlet_id' => ['nullable', 'integer'],
+            'department_id' => ['nullable', 'integer'],
             'needed_at' => ['nullable', 'date'],
             'note' => ['nullable', 'string'],
             'items' => ['sometimes', 'array', 'min:1'],
@@ -160,5 +172,17 @@ class PurchaseRequisitionController extends Controller
         return $this->ok([
             'share_token' => $token,
         ]);
+    }
+
+    public function fieldAudits(PurchaseRequisition $purchaseRequisition, ProcurementFieldAuditService $audits): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaserequisitions', 'view');
+
+        return $this->ok($audits->listForDocument(
+            (int) $purchaseRequisition->company_id,
+            'pr',
+            (int) $purchaseRequisition->id,
+        ));
     }
 }

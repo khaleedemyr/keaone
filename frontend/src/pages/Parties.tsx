@@ -10,6 +10,7 @@ import { MasterModal, MasterViewModal, MasterNameButton, ViewField } from '../co
 import { CustomFieldsEditor } from '../components/CustomFieldsEditor'
 import { useI18n, type MsgKey } from '../i18n'
 import { useAccess } from '../access'
+import { SupplierVendorPanel } from './SupplierVendorPanel'
 
 const emptyForm = {
   name: '',
@@ -27,7 +28,12 @@ const emptyForm = {
   payment_days: '',
   is_taxable: false,
   tax_percent: '',
+  withholding_tax_enabled: false,
+  withholding_tax_type: 'pph23',
+  withholding_tax_rate: '',
+  withholding_tax_base: 'subtotal',
   is_active: true,
+  vendor_tier: '',
 }
 
 function blank(value: string) {
@@ -155,7 +161,12 @@ export default function Parties({
       payment_days: item.payment_days != null ? String(item.payment_days) : '',
       is_taxable: Boolean(item.is_taxable),
       tax_percent: item.tax_percent != null ? String(item.tax_percent) : '',
+      withholding_tax_enabled: Boolean(item.withholding_tax_enabled),
+      withholding_tax_type: item.withholding_tax_type ?? 'pph23',
+      withholding_tax_rate: item.withholding_tax_rate != null ? String(item.withholding_tax_rate) : '',
+      withholding_tax_base: item.withholding_tax_base ?? 'subtotal',
       is_active: item.is_active,
+      vendor_tier: item.vendor_tier ?? '',
     })
     setCustomFields({ ...(item.custom_fields ?? {}) })
     setError('')
@@ -185,7 +196,17 @@ export default function Parties({
         is_taxable: isSupplier ? form.is_taxable : undefined,
         tax_percent:
           isSupplier && form.is_taxable && form.tax_percent !== '' ? Number(form.tax_percent) : null,
+        withholding_tax_enabled: isSupplier ? form.withholding_tax_enabled : undefined,
+        withholding_tax_type:
+          isSupplier && form.withholding_tax_enabled ? form.withholding_tax_type : null,
+        withholding_tax_rate:
+          isSupplier && form.withholding_tax_enabled && form.withholding_tax_rate !== ''
+            ? Number(form.withholding_tax_rate)
+            : null,
+        withholding_tax_base:
+          isSupplier && form.withholding_tax_enabled ? form.withholding_tax_base : undefined,
         is_active: form.is_active,
+        vendor_tier: isSupplier && form.vendor_tier ? form.vendor_tier : undefined,
         custom_fields: customFields,
       }
       if (editing) await api.put(`${endpoint}/${editing.id}`, payload)
@@ -238,6 +259,27 @@ export default function Parties({
     return ''
   }
 
+  const vendorStatusMap: Record<string, MsgKey> = {
+    active: 'vendorStatusActive',
+    suspended: 'vendorStatusSuspended',
+    blacklisted: 'vendorStatusBlacklisted',
+  }
+
+  const vendorTierMap: Record<string, MsgKey> = {
+    strategic: 'vendorTierStrategic',
+    preferred: 'vendorTierPreferred',
+    one_time: 'vendorTierOneTime',
+  }
+
+  function vendorStatusLabel(status?: string | null) {
+    return t(vendorStatusMap[status ?? 'active'] ?? 'vendorStatusActive')
+  }
+
+  function vendorTierLabel(tier?: string | null) {
+    if (!tier) return '—'
+    return t(vendorTierMap[tier] ?? 'vendorTierPreferred')
+  }
+
   function onTermChange(id: string) {
     const term = PAYMENT_TERMS.find((item) => item.id === id)
     setForm((current) => ({
@@ -277,6 +319,8 @@ export default function Parties({
               <th className="px-4 py-3 font-medium">{t('phone')}</th>
               <th className="px-4 py-3 font-medium">{t('city')}</th>
               <th className="px-4 py-3 font-medium">{t('paymentTerm')}</th>
+              {isSupplier ? <th className="px-4 py-3 font-medium">{t('vendorTierLabel')}</th> : null}
+              {isSupplier ? <th className="px-4 py-3 font-medium">{t('vendorStatusLabel')}</th> : null}
               <th className="px-4 py-3 font-medium">{t('status')}</th>
               {showActions ? <th className="px-4 py-3 font-medium"></th> : null}
             </tr>
@@ -295,6 +339,24 @@ export default function Parties({
                     item.payment_term ||
                     (item.payment_days != null ? `${item.payment_days} ${t('days')}` : '-')}
                 </td>
+                {isSupplier ? (
+                  <td className="px-4 py-3 text-muted">{vendorTierLabel(item.vendor_tier)}</td>
+                ) : null}
+                {isSupplier ? (
+                  <td className="px-4 py-3">
+                    <span
+                      className={
+                        item.vendor_status === 'blacklisted'
+                          ? 'text-rose-300'
+                          : item.vendor_status === 'suspended'
+                            ? 'text-amber-300'
+                            : 'text-mint'
+                      }
+                    >
+                      {vendorStatusLabel(item.vendor_status)}
+                    </span>
+                  </td>
+                ) : null}
                 <td className="px-4 py-3">
                   <span className={item.is_active ? 'text-mint' : 'text-rose-300'}>
                     {item.is_active ? t('active') : t('inactive')}
@@ -323,7 +385,7 @@ export default function Parties({
             ))}
             {items.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-center text-muted" colSpan={showActions ? 6 : 5}>
+                <td className="px-4 py-8 text-center text-muted" colSpan={showActions ? (isSupplier ? 8 : 6) : isSupplier ? 7 : 5}>
                   {t('emptyMaster')}
                 </td>
               </tr>
@@ -420,6 +482,15 @@ export default function Parties({
           </label>
           {isSupplier ? (
             <>
+              <label className="text-sm text-muted">
+                {t('vendorTierLabel')}
+                <select className="field" value={form.vendor_tier} onChange={(e) => field('vendor_tier', e.target.value)}>
+                  <option value="">{t('vendorTierNone')}</option>
+                  <option value="strategic">{t('vendorTierStrategic')}</option>
+                  <option value="preferred">{t('vendorTierPreferred')}</option>
+                  <option value="one_time">{t('vendorTierOneTime')}</option>
+                </select>
+              </label>
               <label className="flex items-center gap-2 text-sm text-fg sm:col-span-2">
                 <input
                   type="checkbox"
@@ -442,6 +513,54 @@ export default function Parties({
                     required
                   />
                 </label>
+              ) : null}
+              <label className="flex items-center gap-2 text-sm text-fg sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={form.withholding_tax_enabled}
+                  onChange={(e) => field('withholding_tax_enabled', e.target.checked)}
+                />
+                {t('supplierWithholdingEnabled')}
+              </label>
+              {form.withholding_tax_enabled ? (
+                <>
+                  <label className="text-sm text-muted">
+                    {t('supplierWithholdingType')}
+                    <select
+                      className="field"
+                      value={form.withholding_tax_type}
+                      onChange={(e) => field('withholding_tax_type', e.target.value)}
+                    >
+                      <option value="pph23">{t('supplierWithholdingTypePph23')}</option>
+                      <option value="pph22">{t('supplierWithholdingTypePph22')}</option>
+                      <option value="pph42">{t('supplierWithholdingTypePph42')}</option>
+                    </select>
+                  </label>
+                  <label className="text-sm text-muted">
+                    {t('supplierWithholdingRate')}
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      className="field"
+                      value={form.withholding_tax_rate}
+                      onChange={(e) => field('withholding_tax_rate', e.target.value)}
+                      required
+                    />
+                  </label>
+                  <label className="text-sm text-muted sm:col-span-2">
+                    {t('supplierWithholdingBase')}
+                    <select
+                      className="field"
+                      value={form.withholding_tax_base}
+                      onChange={(e) => field('withholding_tax_base', e.target.value)}
+                    >
+                      <option value="subtotal">{t('supplierWithholdingBaseSubtotal')}</option>
+                      <option value="total">{t('supplierWithholdingBaseTotal')}</option>
+                    </select>
+                  </label>
+                </>
               ) : null}
             </>
           ) : null}
@@ -509,6 +628,33 @@ export default function Parties({
               {viewing?.is_taxable ? (
                 <ViewField label={t('supplierTaxPercent')} value={`${viewing.tax_percent ?? 0}%`} />
               ) : null}
+              <ViewField
+                label={t('supplierWithholdingEnabled')}
+                value={viewing?.withholding_tax_enabled ? t('yes') : t('no')}
+              />
+              {viewing?.withholding_tax_enabled ? (
+                <>
+                  <ViewField
+                    label={t('supplierWithholdingType')}
+                    value={
+                      viewing.withholding_tax_type === 'pph22'
+                        ? t('supplierWithholdingTypePph22')
+                        : viewing.withholding_tax_type === 'pph42'
+                          ? t('supplierWithholdingTypePph42')
+                          : t('supplierWithholdingTypePph23')
+                    }
+                  />
+                  <ViewField label={t('supplierWithholdingRate')} value={`${viewing.withholding_tax_rate ?? 0}%`} />
+                  <ViewField
+                    label={t('supplierWithholdingBase')}
+                    value={
+                      viewing.withholding_tax_base === 'total'
+                        ? t('supplierWithholdingBaseTotal')
+                        : t('supplierWithholdingBaseSubtotal')
+                    }
+                  />
+                </>
+              ) : null}
             </>
           ) : null}
           <ViewField label={t('status')} value={viewing?.is_active ? t('active') : t('inactive')} />
@@ -532,6 +678,7 @@ export default function Parties({
             </div>
           </div>
         ) : null}
+        {isSupplier && viewing ? <SupplierVendorPanel supplierId={viewing.id} canEdit={canEdit} /> : null}
       </MasterViewModal>
     </div>
   )

@@ -12,7 +12,7 @@ class PositionController extends Controller
     public function index(Request $request): JsonResponse
     {
         if ($request->boolean('for_select')) {
-            $this->ensureCanAny(['positions', 'users']);
+            $this->ensureCanAny(['positions', 'users', 'approvalmatrix']);
         } else {
             $this->ensureCan('positions', 'view');
         }

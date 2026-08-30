@@ -4,13 +4,17 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\GoodsReceipt;
+use App\Services\LandedCostService;
 use App\Services\PurchaseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class GoodsReceiptController extends Controller
 {
-    public function __construct(private PurchaseService $purchases) {}
+    public function __construct(
+        private PurchaseService $purchases,
+        private LandedCostService $landedCosts,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -109,11 +113,56 @@ class GoodsReceiptController extends Controller
         return $this->ok($this->purchases->serializeGr($this->purchases->confirmReceipt($goodsReceipt)));
     }
 
+    public function void(Request $request, GoodsReceipt $goodsReceipt): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('goodsreceipts', 'edit');
+
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        return $this->ok($this->purchases->serializeGr(
+            $this->purchases->voidReceipt($goodsReceipt, $request->user(), $data['reason'] ?? null),
+        ));
+    }
+
     public function cancel(GoodsReceipt $goodsReceipt): JsonResponse
     {
         $this->ensureModule('purchase');
         $this->ensureCanAny([['goodsreceipts', 'edit'], ['goodsreceipts', 'delete']]);
 
         return $this->ok($this->purchases->serializeGr($this->purchases->cancelReceipt($goodsReceipt)));
+    }
+
+    public function showLandedCost(GoodsReceipt $goodsReceipt): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('goodsreceipts', 'view');
+        $this->landedCosts->assertEnabled();
+
+        $row = \App\Models\GoodsReceiptLandedCost::query()
+            ->where('goods_receipt_id', $goodsReceipt->id)
+            ->first();
+
+        return $this->ok($row ? $this->landedCosts->serialize($row) : null);
+    }
+
+    public function upsertLandedCost(Request $request, GoodsReceipt $goodsReceipt): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('goodsreceipts', 'edit');
+
+        $data = $request->validate([
+            'freight' => ['nullable', 'integer', 'min:0'],
+            'customs' => ['nullable', 'integer', 'min:0'],
+            'insurance' => ['nullable', 'integer', 'min:0'],
+            'other' => ['nullable', 'integer', 'min:0'],
+            'allocation_method' => ['nullable', 'string', 'in:value,qty'],
+        ]);
+
+        $row = $this->landedCosts->upsert($goodsReceipt, $data);
+
+        return $this->ok($this->landedCosts->serialize($row));
     }
 }

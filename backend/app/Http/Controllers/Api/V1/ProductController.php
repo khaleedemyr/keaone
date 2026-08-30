@@ -74,29 +74,56 @@ class ProductController extends Controller
 
         if ($request->boolean('for_purchase')) {
             $query->where(function ($q) {
-                $q->whereNull('category_id')
+                $q->where('is_procurement_item', true)
+                    ->orWhere('is_fixed_asset_item', true)
+                    ->orWhereNull('category_id')
                     ->orWhereHas('category', fn ($c) => $c->where('is_raw_material', true));
             });
         }
 
+        $supplierIdForCost = $request->integer('supplier_id') ?: null;
+        $preferredVendors = app(\App\Services\PreferredVendorService::class);
+        $supplierPrices = app(\App\Services\SupplierProductPriceService::class);
+
         if ($request->boolean('for_select')) {
             $this->applyActiveStatus($query, $request);
             $items = $query
-                ->with(['productUnits.unitMaster', 'unitMaster'])
+                ->with(['productUnits.unitMaster', 'unitMaster', 'category:id,preferred_supplier_id'])
                 ->limit(500)
                 ->get();
 
             $units = app(\App\Services\ProductUnitService::class);
 
-            return $this->ok($items->map(fn (Product $product) => [
-                'id' => $product->id,
-                'name' => $product->name,
-                'sku' => $product->sku,
-                'unit' => $product->unit,
-                'unit_id' => $product->unit_id,
-                'is_active' => $product->is_active,
-                'units' => $units->serialize($product),
-            ])->values());
+            return $this->ok($items->map(function (Product $product) use ($units, $preferredVendors, $supplierPrices, $supplierIdForCost) {
+                $resolvedPreferred = $preferredVendors->resolveForProduct($product);
+                $payload = [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'unit' => $product->unit,
+                    'unit_id' => $product->unit_id,
+                    'is_active' => $product->is_active,
+                    'is_procurement_item' => (bool) $product->is_procurement_item,
+                    'is_fixed_asset_item' => (bool) $product->is_fixed_asset_item,
+                    'preferred_supplier_id' => $resolvedPreferred,
+                    'units' => $units->serialize($product),
+                ];
+
+                if ($supplierIdForCost) {
+                    $small = collect($units->serialize($product))->firstWhere('level', 'small');
+                    $unitCost = $supplierPrices->resolveUnitCost(
+                        $supplierIdForCost,
+                        (int) $product->id,
+                        $small['level'] ?? 'small',
+                        $small['unit'] ?? null,
+                    );
+                    if ($unitCost !== null && $unitCost > 0) {
+                        $payload['suggested_unit_cost'] = $unitCost;
+                    }
+                }
+
+                return $payload;
+            })->values());
         }
 
         $query->with($this->listRelations())->withCount('bomItems');
@@ -389,7 +416,11 @@ class ProductController extends Controller
             ],
             'channel_prices.*.sell_price' => ['required', 'integer', 'min:0'],
             'track_stock' => ['sometimes', 'boolean'],
+            'is_procurement_item' => ['sometimes', 'boolean'],
+            'is_fixed_asset_item' => ['sometimes', 'boolean'],
+            'preferred_supplier_id' => ['nullable', 'integer'],
             'min_stock' => ['sometimes', 'integer', 'min:0'],
+            'reorder_qty' => ['sometimes', 'integer', 'min:0'],
             'custom_fields' => ['nullable', 'array'],
             'is_active' => ['sometimes', 'boolean'],
             'choice_ids' => ['nullable', 'array'],
@@ -425,6 +456,22 @@ class ProductController extends Controller
 
         if (($data['type'] ?? null) === 'service') {
             $data['track_stock'] = false;
+        }
+
+        if (! empty($data['is_fixed_asset_item'])) {
+            $data['track_stock'] = false;
+            $data['is_procurement_item'] = false;
+        } elseif (! empty($data['is_procurement_item'])) {
+            $data['track_stock'] = false;
+            $data['is_fixed_asset_item'] = false;
+        }
+
+        if (array_key_exists('preferred_supplier_id', $data)) {
+            app(\App\Services\PreferredVendorService::class)
+                ->assertSupplier($data['preferred_supplier_id'] ? (int) $data['preferred_supplier_id'] : null);
+            if (! $data['preferred_supplier_id']) {
+                $data['preferred_supplier_id'] = null;
+            }
         }
 
         if (array_key_exists('sub_category_id', $data) && $data['sub_category_id']) {
@@ -714,7 +761,7 @@ class ProductController extends Controller
      */
     private function relationList(): array
     {
-        return ['category', 'subCategory', 'itemType', 'unitMaster', 'productUnits.unitMaster', 'images', 'outletPrices', 'channelPrices.priceChannel', 'choices.choiceType', 'bomItems.component', 'bomItems.unitMaster'];
+        return ['category', 'subCategory', 'itemType', 'unitMaster', 'productUnits.unitMaster', 'images', 'outletPrices', 'channelPrices.priceChannel', 'choices.choiceType', 'bomItems.component', 'bomItems.unitMaster', 'preferredSupplier:id,name'];
     }
 
     private function withRelations(Product $product): Product
@@ -798,6 +845,9 @@ class ProductController extends Controller
                 ]]
                 : [],
             'min_stock' => $product->min_stock,
+            'reorder_qty' => (int) ($product->reorder_qty ?? 0),
+            'is_procurement_item' => (bool) $product->is_procurement_item,
+            'is_fixed_asset_item' => (bool) $product->is_fixed_asset_item,
             'is_active' => $product->is_active,
             'stock_qty' => $qty,
             'has_bom' => (int) ($product->bom_items_count ?? 0) > 0,
@@ -893,7 +943,14 @@ class ProductController extends Controller
                 ->filter(fn (array $row) => $row['url'])
                 ->values(),
             'track_stock' => $product->track_stock,
+            'is_procurement_item' => (bool) $product->is_procurement_item,
+            'is_fixed_asset_item' => (bool) $product->is_fixed_asset_item,
+            'preferred_supplier_id' => $product->preferred_supplier_id
+                ? (int) $product->preferred_supplier_id
+                : app(\App\Services\PreferredVendorService::class)->resolveForProduct($product),
+            'preferred_supplier' => $product->preferredSupplier?->only(['id', 'name']),
             'min_stock' => $product->min_stock,
+            'reorder_qty' => (int) ($product->reorder_qty ?? 0),
             'custom_fields' => $product->custom_fields,
             'is_active' => $product->is_active,
             'stock_qty' => $qty,

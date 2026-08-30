@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Api\V1\ActivityLogController;
 use App\Http\Controllers\Api\V1\ApprovalController;
+use App\Http\Controllers\Api\V1\ApprovalDelegationController;
+use App\Http\Controllers\Api\V1\ApprovalMatrixController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\CalendarController;
@@ -39,9 +41,30 @@ use App\Http\Controllers\Api\V1\SaleController;
 use App\Http\Controllers\Api\V1\GoodsReceiptController;
 use App\Http\Controllers\Api\V1\PublicCompanyInviteController;
 use App\Http\Controllers\Api\V1\PublicPurchaseOrderController;
+use App\Http\Controllers\Api\V1\PublicVendorPortalController;
 use App\Http\Controllers\Api\V1\PublicPurchaseRequisitionController;
 use App\Http\Controllers\Api\V1\PurchaseOrderController;
 use App\Http\Controllers\Api\V1\PurchaseRequisitionController;
+use App\Http\Controllers\Api\V1\ProcurementAttachmentController;
+use App\Http\Controllers\Api\V1\ProcurementDashboardController;
+use App\Http\Controllers\Api\V1\ProcurementReportController;
+use App\Http\Controllers\Api\V1\ProcurementContractController;
+use App\Http\Controllers\Api\V1\ProcurementPlanController;
+use App\Http\Controllers\Api\V1\ProcurementPlanningController;
+use App\Http\Controllers\Api\V1\VendorAdjustmentNoteController;
+use App\Http\Controllers\Api\V1\PurchaseDeliveryScheduleController;
+use App\Http\Controllers\Api\V1\PurchaseReturnController;
+use App\Http\Controllers\Api\V1\VendorPaymentBatchController;
+use App\Http\Controllers\Api\V1\VendorPrepaymentController;
+use App\Http\Controllers\Api\V1\GlAccountController;
+use App\Http\Controllers\Api\V1\GlJournalController;
+use App\Http\Controllers\Api\V1\BudgetController;
+use App\Http\Controllers\Api\V1\AssetController;
+use App\Http\Controllers\Api\V1\RfqController;
+use App\Http\Controllers\Api\V1\SupplierProductPriceController;
+use App\Http\Controllers\Api\V1\VendorWithholdingController;
+use App\Http\Controllers\Api\V1\VendorInvoiceController;
+use App\Http\Controllers\Api\V1\MatchExceptionController;
 use App\Http\Controllers\Api\V1\StockController;
 use App\Http\Controllers\Api\V1\SubCategoryController;
 use App\Http\Controllers\Api\V1\SupplierController;
@@ -64,6 +87,10 @@ Route::prefix('v1')->group(function () {
     Route::get('marketing/blog', [MarketingBlogController::class, 'index']);
     Route::get('marketing/blog/{slug}', [MarketingBlogController::class, 'show']);
     Route::get('public/purchase-orders/{shareToken}', [PublicPurchaseOrderController::class, 'show']);
+    Route::get('public/vendor-portal/{portalToken}', [PublicVendorPortalController::class, 'show']);
+    Route::get('public/vendor-portal/{portalToken}/purchase-orders', [PublicVendorPortalController::class, 'purchaseOrders']);
+    Route::post('public/vendor-portal/{portalToken}/purchase-orders/{shareToken}/confirm', [PublicVendorPortalController::class, 'confirmPurchaseOrder']);
+    Route::post('public/vendor-portal/{portalToken}/purchase-orders/{shareToken}/invoices', [PublicVendorPortalController::class, 'storeInvoice']);
     Route::get('public/purchase-requisitions/{shareToken}', [PublicPurchaseRequisitionController::class, 'show']);
     Route::get('public/invites/{token}', [PublicCompanyInviteController::class, 'show']);
 
@@ -269,11 +296,21 @@ Route::prefix('v1')->group(function () {
             Route::put('customers/{contact}', [CustomerController::class, 'update']);
             Route::delete('customers/{contact}', [CustomerController::class, 'destroy']);
 
-            Route::get('suppliers', [SupplierController::class, 'index']);
+            Route::get('suppliers/compliance-alerts', [SupplierController::class, 'complianceAlerts']);
             Route::get('suppliers/top', [SupplierController::class, 'top']);
+            Route::get('suppliers', [SupplierController::class, 'index']);
             Route::post('suppliers', [SupplierController::class, 'store']);
+            Route::get('suppliers/{contact}', [SupplierController::class, 'show']);
             Route::put('suppliers/{contact}', [SupplierController::class, 'update']);
             Route::delete('suppliers/{contact}', [SupplierController::class, 'destroy']);
+            Route::post('suppliers/{contact}/suspend', [SupplierController::class, 'suspend']);
+            Route::post('suppliers/{contact}/blacklist', [SupplierController::class, 'blacklist']);
+            Route::post('suppliers/{contact}/reactivate', [SupplierController::class, 'reactivate']);
+            Route::post('suppliers/{contact}/approve-onboarding', [SupplierController::class, 'approveOnboarding']);
+            Route::post('suppliers/{contact}/portal-token', [SupplierController::class, 'portalToken']);
+            Route::post('suppliers/{contact}/documents/{type}', [SupplierController::class, 'storeDocument']);
+            Route::get('suppliers/{contact}/documents/{type}', [SupplierController::class, 'showDocument']);
+            Route::delete('suppliers/{contact}/documents/{type}', [SupplierController::class, 'destroyDocument']);
 
             Route::get('sales', [SaleController::class, 'index']);
             Route::post('sales', [SaleController::class, 'store']);
@@ -304,8 +341,29 @@ Route::prefix('v1')->group(function () {
 
             Route::get('approvals/pending', [ApprovalController::class, 'index']);
 
+            Route::get('approval-matrix', [ApprovalMatrixController::class, 'index']);
+            Route::post('approval-matrix', [ApprovalMatrixController::class, 'store']);
+            Route::get('approval-matrix/{approvalMatrixRule}', [ApprovalMatrixController::class, 'show']);
+            Route::put('approval-matrix/{approvalMatrixRule}', [ApprovalMatrixController::class, 'update']);
+            Route::delete('approval-matrix/{approvalMatrixRule}', [ApprovalMatrixController::class, 'destroy']);
+
+            Route::get('approval-delegations', [ApprovalDelegationController::class, 'index']);
+            Route::post('approval-delegations', [ApprovalDelegationController::class, 'store']);
+            Route::get('approval-delegations/{approvalDelegation}', [ApprovalDelegationController::class, 'show']);
+            Route::put('approval-delegations/{approvalDelegation}', [ApprovalDelegationController::class, 'update']);
+            Route::delete('approval-delegations/{approvalDelegation}', [ApprovalDelegationController::class, 'destroy']);
+
+            Route::get('procurement/dashboard', [ProcurementDashboardController::class, 'show']);
+            Route::get('procurement/reports', [ProcurementReportController::class, 'show']);
+            Route::get('procurement/delivery-schedules', [PurchaseDeliveryScheduleController::class, 'index']);
+            Route::get('procurement/attachments', [ProcurementAttachmentController::class, 'index']);
+            Route::post('procurement/attachments', [ProcurementAttachmentController::class, 'store']);
+            Route::get('procurement/attachments/{procurementAttachment}/file', [ProcurementAttachmentController::class, 'file']);
+            Route::delete('procurement/attachments/{procurementAttachment}', [ProcurementAttachmentController::class, 'destroy']);
+
             Route::get('purchase-requisitions', [PurchaseRequisitionController::class, 'index']);
             Route::post('purchase-requisitions', [PurchaseRequisitionController::class, 'store']);
+            Route::get('purchase-requisitions/{purchaseRequisition}/field-audits', [PurchaseRequisitionController::class, 'fieldAudits']);
             Route::get('purchase-requisitions/{purchaseRequisition}', [PurchaseRequisitionController::class, 'show']);
             Route::put('purchase-requisitions/{purchaseRequisition}', [PurchaseRequisitionController::class, 'update']);
             Route::post('purchase-requisitions/{purchaseRequisition}/submit', [PurchaseRequisitionController::class, 'submit']);
@@ -315,22 +373,155 @@ Route::prefix('v1')->group(function () {
             Route::post('purchase-requisitions/{purchaseRequisition}/share', [PurchaseRequisitionController::class, 'share']);
 
             Route::get('purchase-orders', [PurchaseOrderController::class, 'index']);
+            Route::get('purchase-orders/lookup', [PurchaseOrderController::class, 'lookup']);
             Route::post('purchase-orders', [PurchaseOrderController::class, 'store']);
+            Route::get('purchase-orders/{purchaseOrder}/field-audits', [PurchaseOrderController::class, 'fieldAudits']);
             Route::get('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'show']);
             Route::put('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'update']);
             Route::post('purchase-orders/{purchaseOrder}/order', [PurchaseOrderController::class, 'markOrdered']);
             Route::post('purchase-orders/{purchaseOrder}/submit', [PurchaseOrderController::class, 'submit']);
             Route::post('purchase-orders/{purchaseOrder}/approve', [PurchaseOrderController::class, 'approve']);
             Route::post('purchase-orders/{purchaseOrder}/reject', [PurchaseOrderController::class, 'reject']);
+            Route::post('purchase-orders/{purchaseOrder}/close', [PurchaseOrderController::class, 'close']);
             Route::post('purchase-orders/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel']);
             Route::post('purchase-orders/{purchaseOrder}/share', [PurchaseOrderController::class, 'share']);
+            Route::get('purchase-orders/{purchaseOrder}/delivery-schedules', [PurchaseDeliveryScheduleController::class, 'forOrder']);
+            Route::post('purchase-orders/{purchaseOrder}/delivery-schedules', [PurchaseDeliveryScheduleController::class, 'store']);
+            Route::put('purchase-orders/{purchaseOrder}/delivery-schedules/{deliverySchedule}', [PurchaseDeliveryScheduleController::class, 'update']);
+            Route::post('purchase-orders/{purchaseOrder}/delivery-schedules/{deliverySchedule}/fulfill', [PurchaseDeliveryScheduleController::class, 'fulfill']);
+            Route::post('purchase-orders/{purchaseOrder}/delivery-schedules/{deliverySchedule}/cancel', [PurchaseDeliveryScheduleController::class, 'cancel']);
+            Route::delete('purchase-orders/{purchaseOrder}/delivery-schedules/{deliverySchedule}', [PurchaseDeliveryScheduleController::class, 'destroy']);
 
             Route::get('goods-receipts', [GoodsReceiptController::class, 'index']);
             Route::post('goods-receipts', [GoodsReceiptController::class, 'store']);
             Route::get('goods-receipts/{goodsReceipt}', [GoodsReceiptController::class, 'show']);
             Route::put('goods-receipts/{goodsReceipt}', [GoodsReceiptController::class, 'update']);
             Route::post('goods-receipts/{goodsReceipt}/confirm', [GoodsReceiptController::class, 'confirm']);
+            Route::post('goods-receipts/{goodsReceipt}/void', [GoodsReceiptController::class, 'void']);
             Route::post('goods-receipts/{goodsReceipt}/cancel', [GoodsReceiptController::class, 'cancel']);
+            Route::get('goods-receipts/{goodsReceipt}/landed-cost', [GoodsReceiptController::class, 'showLandedCost']);
+            Route::put('goods-receipts/{goodsReceipt}/landed-cost', [GoodsReceiptController::class, 'upsertLandedCost']);
+
+            Route::get('purchase-returns', [PurchaseReturnController::class, 'index']);
+            Route::post('purchase-returns', [PurchaseReturnController::class, 'store']);
+            Route::get('purchase-returns/{purchaseReturn}', [PurchaseReturnController::class, 'show']);
+            Route::put('purchase-returns/{purchaseReturn}', [PurchaseReturnController::class, 'update']);
+            Route::post('purchase-returns/{purchaseReturn}/submit', [PurchaseReturnController::class, 'submit']);
+            Route::post('purchase-returns/{purchaseReturn}/approve', [PurchaseReturnController::class, 'approve']);
+            Route::post('purchase-returns/{purchaseReturn}/reject', [PurchaseReturnController::class, 'reject']);
+            Route::post('purchase-returns/{purchaseReturn}/confirm', [PurchaseReturnController::class, 'confirm']);
+            Route::post('purchase-returns/{purchaseReturn}/cancel', [PurchaseReturnController::class, 'cancel']);
+
+            Route::get('vendor-adjustment-notes', [VendorAdjustmentNoteController::class, 'index']);
+            Route::post('vendor-adjustment-notes', [VendorAdjustmentNoteController::class, 'store']);
+            Route::get('vendor-adjustment-notes/{vendorAdjustmentNote}', [VendorAdjustmentNoteController::class, 'show']);
+            Route::put('vendor-adjustment-notes/{vendorAdjustmentNote}', [VendorAdjustmentNoteController::class, 'update']);
+            Route::post('vendor-adjustment-notes/{vendorAdjustmentNote}/confirm', [VendorAdjustmentNoteController::class, 'confirm']);
+            Route::post('vendor-adjustment-notes/{vendorAdjustmentNote}/cancel', [VendorAdjustmentNoteController::class, 'cancel']);
+
+            Route::get('vendor-invoices', [VendorInvoiceController::class, 'index']);
+            Route::post('vendor-invoices', [VendorInvoiceController::class, 'store']);
+            Route::get('vendor-invoices/{vendorInvoice}', [VendorInvoiceController::class, 'show']);
+            Route::put('vendor-invoices/{vendorInvoice}', [VendorInvoiceController::class, 'update']);
+            Route::post('vendor-invoices/{vendorInvoice}/submit', [VendorInvoiceController::class, 'submit']);
+            Route::post('vendor-invoices/{vendorInvoice}/approve', [VendorInvoiceController::class, 'approve']);
+            Route::post('vendor-invoices/{vendorInvoice}/reject', [VendorInvoiceController::class, 'reject']);
+            Route::post('vendor-invoices/{vendorInvoice}/confirm', [VendorInvoiceController::class, 'confirm']);
+            Route::post('vendor-invoices/{vendorInvoice}/cancel', [VendorInvoiceController::class, 'cancel']);
+            Route::post('vendor-invoices/{vendorInvoice}/match', [VendorInvoiceController::class, 'match']);
+
+            Route::get('vendor-payment-batches', [VendorPaymentBatchController::class, 'index']);
+            Route::post('vendor-payment-batches', [VendorPaymentBatchController::class, 'store']);
+            Route::get('vendor-payment-batches/{vendorPaymentBatch}', [VendorPaymentBatchController::class, 'show']);
+            Route::put('vendor-payment-batches/{vendorPaymentBatch}', [VendorPaymentBatchController::class, 'update']);
+            Route::post('vendor-payment-batches/{vendorPaymentBatch}/submit', [VendorPaymentBatchController::class, 'submit']);
+            Route::post('vendor-payment-batches/{vendorPaymentBatch}/approve', [VendorPaymentBatchController::class, 'approve']);
+            Route::post('vendor-payment-batches/{vendorPaymentBatch}/reject', [VendorPaymentBatchController::class, 'reject']);
+            Route::post('vendor-payment-batches/{vendorPaymentBatch}/pay', [VendorPaymentBatchController::class, 'pay']);
+            Route::post('vendor-payment-batches/{vendorPaymentBatch}/cancel', [VendorPaymentBatchController::class, 'cancel']);
+
+            Route::get('vendor-prepayments', [VendorPrepaymentController::class, 'index']);
+            Route::post('vendor-prepayments', [VendorPrepaymentController::class, 'store']);
+            Route::get('vendor-prepayments/{vendorPrepayment}', [VendorPrepaymentController::class, 'show']);
+            Route::put('vendor-prepayments/{vendorPrepayment}', [VendorPrepaymentController::class, 'update']);
+            Route::post('vendor-prepayments/{vendorPrepayment}/submit', [VendorPrepaymentController::class, 'submit']);
+            Route::post('vendor-prepayments/{vendorPrepayment}/approve', [VendorPrepaymentController::class, 'approve']);
+            Route::post('vendor-prepayments/{vendorPrepayment}/reject', [VendorPrepaymentController::class, 'reject']);
+            Route::post('vendor-prepayments/{vendorPrepayment}/pay', [VendorPrepaymentController::class, 'pay']);
+            Route::post('vendor-prepayments/{vendorPrepayment}/apply', [VendorPrepaymentController::class, 'apply']);
+            Route::post('vendor-prepayments/{vendorPrepayment}/cancel', [VendorPrepaymentController::class, 'cancel']);
+
+            Route::get('vendor-withholding', [VendorWithholdingController::class, 'index']);
+            Route::post('vendor-withholding/{vendorWithholdingRecord}/remit', [VendorWithholdingController::class, 'remit']);
+
+            Route::get('gl-accounts', [GlAccountController::class, 'index']);
+            Route::post('gl-accounts', [GlAccountController::class, 'store']);
+            Route::put('gl-accounts/{glAccount}', [GlAccountController::class, 'update']);
+            Route::delete('gl-accounts/{glAccount}', [GlAccountController::class, 'destroy']);
+
+            Route::get('gl-journals', [GlJournalController::class, 'index']);
+            Route::get('gl-journals/{glJournalEntry}', [GlJournalController::class, 'show']);
+
+            Route::get('budgets', [BudgetController::class, 'index']);
+            Route::post('budgets', [BudgetController::class, 'store']);
+            Route::get('budgets/{budget}', [BudgetController::class, 'show']);
+            Route::put('budgets/{budget}', [BudgetController::class, 'update']);
+            Route::delete('budgets/{budget}', [BudgetController::class, 'destroy']);
+            Route::post('budgets/{budget}/activate', [BudgetController::class, 'activate']);
+            Route::post('budgets/{budget}/close', [BudgetController::class, 'close']);
+            Route::get('budgets/{budget}/commitments', [BudgetController::class, 'commitments']);
+
+            Route::get('assets', [AssetController::class, 'index']);
+            Route::get('assets/{asset}', [AssetController::class, 'show']);
+            Route::put('assets/{asset}', [AssetController::class, 'update']);
+
+            Route::get('rfqs', [RfqController::class, 'index']);
+            Route::post('rfqs', [RfqController::class, 'store']);
+            Route::get('rfqs/{rfq}', [RfqController::class, 'show']);
+            Route::put('rfqs/{rfq}', [RfqController::class, 'update']);
+            Route::delete('rfqs/{rfq}', [RfqController::class, 'destroy']);
+            Route::post('rfqs/{rfq}/send', [RfqController::class, 'send']);
+            Route::post('rfqs/{rfq}/close', [RfqController::class, 'close']);
+            Route::post('rfqs/{rfq}/cancel', [RfqController::class, 'cancel']);
+            Route::get('rfqs/{rfq}/compare', [RfqController::class, 'compare']);
+            Route::put('rfqs/{rfq}/quotes/{supplierId}', [RfqController::class, 'upsertQuote']);
+            Route::post('rfqs/{rfq}/quotes/{vendorQuote}/submit', [RfqController::class, 'submitQuote']);
+            Route::post('rfqs/{rfq}/select-winner', [RfqController::class, 'selectWinner']);
+            Route::post('rfqs/{rfq}/create-pr', [RfqController::class, 'createPr']);
+
+            Route::get('procurement-contracts', [ProcurementContractController::class, 'index']);
+            Route::post('procurement-contracts', [ProcurementContractController::class, 'store']);
+            Route::get('procurement-contracts/{procurementContract}', [ProcurementContractController::class, 'show']);
+            Route::put('procurement-contracts/{procurementContract}', [ProcurementContractController::class, 'update']);
+            Route::delete('procurement-contracts/{procurementContract}', [ProcurementContractController::class, 'destroy']);
+            Route::post('procurement-contracts/{procurementContract}/activate', [ProcurementContractController::class, 'activate']);
+            Route::post('procurement-contracts/{procurementContract}/close', [ProcurementContractController::class, 'close']);
+            Route::post('procurement-contracts/{procurementContract}/cancel', [ProcurementContractController::class, 'cancel']);
+            Route::post('procurement-contracts/{procurementContract}/release-po', [ProcurementContractController::class, 'releasePo']);
+
+            Route::get('procurement-plans', [ProcurementPlanController::class, 'index']);
+            Route::post('procurement-plans', [ProcurementPlanController::class, 'store']);
+            Route::get('procurement-plans/{procurementPlan}', [ProcurementPlanController::class, 'show']);
+            Route::put('procurement-plans/{procurementPlan}', [ProcurementPlanController::class, 'update']);
+            Route::delete('procurement-plans/{procurementPlan}', [ProcurementPlanController::class, 'destroy']);
+            Route::post('procurement-plans/{procurementPlan}/activate', [ProcurementPlanController::class, 'activate']);
+            Route::post('procurement-plans/{procurementPlan}/close', [ProcurementPlanController::class, 'close']);
+
+            Route::get('procurement-planning/auto-reorder/preview', [ProcurementPlanningController::class, 'autoReorderPreview']);
+            Route::post('procurement-planning/auto-reorder/run', [ProcurementPlanningController::class, 'autoReorderRun']);
+            Route::get('procurement-planning/demand/forecasts', [ProcurementPlanningController::class, 'demandForecasts']);
+            Route::post('procurement-planning/demand/generate', [ProcurementPlanningController::class, 'demandGenerate']);
+            Route::post('procurement-planning/demand/suggest-pr', [ProcurementPlanningController::class, 'demandSuggestPr']);
+
+            Route::get('supplier-product-prices/lookup', [SupplierProductPriceController::class, 'lookup']);
+            Route::get('supplier-product-prices', [SupplierProductPriceController::class, 'index']);
+            Route::post('supplier-product-prices', [SupplierProductPriceController::class, 'store']);
+            Route::get('supplier-product-prices/{supplierProductPrice}', [SupplierProductPriceController::class, 'show']);
+            Route::put('supplier-product-prices/{supplierProductPrice}', [SupplierProductPriceController::class, 'update']);
+            Route::delete('supplier-product-prices/{supplierProductPrice}', [SupplierProductPriceController::class, 'destroy']);
+
+            Route::get('match-exceptions', [MatchExceptionController::class, 'index']);
+            Route::post('match-exceptions/{matchException}/waive', [MatchExceptionController::class, 'waive']);
 
             Route::get('reports/today', [ReportController::class, 'today']);
             Route::get('reports/summary', [ReportController::class, 'summary']);

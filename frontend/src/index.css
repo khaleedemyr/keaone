@@ -134,6 +134,14 @@ body {
   padding-right: 0.875rem;
 }
 
+.field-block {
+  @apply block text-sm;
+}
+
+.field-block > span {
+  @apply mb-1.5 block text-muted;
+}
+
 .field.field-icon-left {
   padding-left: 2.75rem;
 }
@@ -695,7 +703,7 @@ html.light .os-icon-label {
 
 .os-app-nav-mobile-trigger {
   display: flex;
-  width: 100%;
+    width: 100%;
   align-items: center;
   gap: 0.55rem;
   border: 1px solid var(--line);
@@ -762,7 +770,7 @@ html.light .os-icon-label {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
   padding: 0.85rem 1rem;
 }
 

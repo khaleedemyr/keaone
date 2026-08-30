@@ -35,6 +35,18 @@ return [
         'sales' => ['retention' => false, 'column' => 'created_at'],
         'sale_items' => ['retention' => false, 'column' => 'created_at'],
         'payments' => ['retention' => false, 'column' => 'created_at'],
+        'goods_receipts' => ['retention' => false, 'column' => 'created_at'],
+        'goods_receipt_items' => ['retention' => false, 'column' => 'created_at'],
+        'purchase_returns' => ['retention' => false, 'column' => 'created_at'],
+        'purchase_return_items' => ['retention' => false, 'column' => 'created_at'],
+        'purchase_return_approvals' => ['retention' => false, 'column' => 'created_at'],
+        'vendor_adjustment_notes' => ['retention' => false, 'column' => 'created_at'],
+        'vendor_adjustment_note_items' => ['retention' => false, 'column' => 'created_at'],
+        'vendor_invoices' => ['retention' => false, 'column' => 'created_at'],
+        'vendor_invoice_items' => ['retention' => false, 'column' => 'created_at'],
+        'match_exceptions' => ['retention' => false, 'column' => 'created_at'],
+        'purchase_order_delivery_schedules' => ['retention' => false, 'column' => 'created_at'],
+        'procurement_attachments' => ['retention' => false, 'column' => 'created_at'],
     ],
 
 ];

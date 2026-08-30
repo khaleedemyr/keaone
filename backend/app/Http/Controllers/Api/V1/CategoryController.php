@@ -26,10 +26,10 @@ class CategoryController extends Controller
         $this->applyActiveStatus($query, $request);
 
         if ($request->boolean('for_select')) {
-            return $this->ok($query->limit(200)->get());
+            return $this->ok($query->with('preferredSupplier:id,name')->limit(200)->get());
         }
 
-        $page = $query->paginate($this->perPage($request));
+        $page = $query->with('preferredSupplier:id,name')->paginate($this->perPage($request));
 
         return $this->ok($page->items(), $this->pageMeta($page));
     }
@@ -44,14 +44,23 @@ class CategoryController extends Controller
             'is_active' => ['sometimes', 'boolean'],
             'show_pos' => ['sometimes', 'boolean'],
             'is_raw_material' => ['sometimes', 'boolean'],
+            'procurement_match_mode' => ['sometimes', 'string', 'in:three_way,two_way'],
+            'preferred_supplier_id' => ['nullable', 'integer'],
         ]);
 
         $data['show_pos'] = array_key_exists('show_pos', $data) ? (bool) $data['show_pos'] : true;
         $data['is_raw_material'] = array_key_exists('is_raw_material', $data) ? (bool) $data['is_raw_material'] : false;
+        $data['procurement_match_mode'] = $data['procurement_match_mode'] ?? 'three_way';
+
+        if (array_key_exists('preferred_supplier_id', $data)) {
+            app(\App\Services\PreferredVendorService::class)
+                ->assertSupplier($data['preferred_supplier_id'] ? (int) $data['preferred_supplier_id'] : null);
+            $data['preferred_supplier_id'] = $data['preferred_supplier_id'] ?: null;
+        }
 
         $category = Category::query()->create($data);
 
-        return $this->ok($category, [], 201);
+        return $this->ok($category->load('preferredSupplier:id,name'), [], 201);
     }
 
     public function update(Request $request, Category $category): JsonResponse
@@ -64,11 +73,19 @@ class CategoryController extends Controller
             'is_active' => ['sometimes', 'boolean'],
             'show_pos' => ['sometimes', 'boolean'],
             'is_raw_material' => ['sometimes', 'boolean'],
+            'procurement_match_mode' => ['sometimes', 'string', 'in:three_way,two_way'],
+            'preferred_supplier_id' => ['nullable', 'integer'],
         ]);
+
+        if (array_key_exists('preferred_supplier_id', $data)) {
+            app(\App\Services\PreferredVendorService::class)
+                ->assertSupplier($data['preferred_supplier_id'] ? (int) $data['preferred_supplier_id'] : null);
+            $data['preferred_supplier_id'] = $data['preferred_supplier_id'] ?: null;
+        }
 
         $category->update($data);
 
-        return $this->ok($category->fresh());
+        return $this->ok($category->fresh()->load('preferredSupplier:id,name'));
     }
 
     public function destroy(Category $category): JsonResponse

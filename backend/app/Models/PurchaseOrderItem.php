@@ -15,6 +15,7 @@ class PurchaseOrderItem extends Model
         'purchase_order_id',
         'product_id',
         'purchase_requisition_item_id',
+        'procurement_contract_item_id',
         'qty',
         'qty_received',
         'unit_cost',

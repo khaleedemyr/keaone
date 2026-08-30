@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\PurchaseOrder;
+use App\Services\ProcurementFieldAuditService;
 use App\Services\PurchaseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ class PurchaseOrderController extends Controller
         $this->ensureCan('purchaseorders', 'view');
 
         $query = PurchaseOrder::query()
-            ->with(['supplier:id,name', 'warehouse:id,name', 'user:id,name', 'approvals.user:id,name'])
+            ->with(['supplier:id,name', 'warehouse:id,name', 'outlet:id,name', 'department:id,name,code', 'user:id,name', 'approvals.user:id,name'])
             ->orderByDesc('id');
 
         if ($status = $request->string('status')->toString()) {
@@ -38,12 +39,53 @@ class PurchaseOrderController extends Controller
             $query->whereDate('created_at', '<=', $to);
         }
 
+        if ($departmentId = $request->integer('department_id')) {
+            $query->where('department_id', $departmentId);
+        }
+        if ($outletId = $request->integer('outlet_id')) {
+            $query->where('outlet_id', $outletId);
+        }
+        if ($supplierId = $request->integer('supplier_id')) {
+            $query->where('supplier_id', $supplierId);
+        }
+
         $page = $query->paginate($this->perPage($request, 20));
 
         return $this->ok(
             $page->getCollection()->map(fn (PurchaseOrder $po) => $this->purchases->serializePo($po))->values(),
             $this->pageMeta($page),
         );
+    }
+
+    public function lookup(Request $request): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('goodsreceipts', 'create');
+
+        $id = $request->integer('id');
+        $number = trim($request->string('number')->toString());
+
+        abort_if(! $id && $number === '', 422, 'Nomor PO wajib diisi.');
+
+        $query = PurchaseOrder::query();
+        if ($id) {
+            $query->whereKey($id);
+        } else {
+            $query->where(function ($q) use ($number) {
+                $q->where('number', $number)
+                    ->orWhereRaw('LOWER(number) = ?', [strtolower($number)]);
+            });
+        }
+
+        $po = $query->first();
+        abort_if(! $po, 404, 'PO tidak ditemukan.');
+        abort_if(
+            ! in_array($po->status, ['ordered', 'partial'], true),
+            422,
+            'PO belum bisa diterima (status: '.$po->status.').',
+        );
+
+        return $this->ok($this->purchases->serializePo($po));
     }
 
     public function store(Request $request): JsonResponse
@@ -57,6 +99,8 @@ class PurchaseOrderController extends Controller
             'supplier_id' => ['required', 'integer'],
             'purchase_requisition_id' => ['nullable', 'integer'],
             'warehouse_id' => ['nullable', 'integer'],
+            'outlet_id' => ['nullable', 'integer'],
+            'department_id' => ['nullable', 'integer'],
             'expected_at' => ['nullable', 'date'],
             'note' => ['nullable', 'string'],
             'items' => ['sometimes', 'array', 'min:1'],
@@ -93,6 +137,8 @@ class PurchaseOrderController extends Controller
         $data = $request->validate([
             'supplier_id' => ['sometimes', 'integer'],
             'warehouse_id' => ['nullable', 'integer'],
+            'outlet_id' => ['nullable', 'integer'],
+            'department_id' => ['nullable', 'integer'],
             'expected_at' => ['nullable', 'date'],
             'note' => ['nullable', 'string'],
             'items' => ['sometimes', 'array', 'min:1'],
@@ -155,6 +201,20 @@ class PurchaseOrderController extends Controller
         return $this->ok($this->purchases->serializePo($this->purchases->orderPurchaseOrder($purchaseOrder)));
     }
 
+    public function close(Request $request, PurchaseOrder $purchaseOrder): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaseorders', 'edit');
+
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        return $this->ok($this->purchases->serializePo(
+            $this->purchases->closeOrder($purchaseOrder, $request->user(), $data['reason'] ?? null),
+        ));
+    }
+
     public function cancel(PurchaseOrder $purchaseOrder): JsonResponse
     {
         $this->ensureModule('purchase');
@@ -175,5 +235,17 @@ class PurchaseOrderController extends Controller
         return $this->ok([
             'share_token' => $token,
         ]);
+    }
+
+    public function fieldAudits(PurchaseOrder $purchaseOrder, ProcurementFieldAuditService $audits): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaseorders', 'view');
+
+        return $this->ok($audits->listForDocument(
+            (int) $purchaseOrder->company_id,
+            'po',
+            (int) $purchaseOrder->id,
+        ));
     }
 }

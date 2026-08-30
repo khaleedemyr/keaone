@@ -12,7 +12,7 @@ class JobLevelController extends Controller
     public function index(Request $request): JsonResponse
     {
         if ($request->boolean('for_select')) {
-            $this->ensureCanAny(['joblevels', 'users']);
+            $this->ensureCanAny(['joblevels', 'users', 'approvalmatrix']);
         } else {
             $this->ensureCan('joblevels', 'view');
         }

@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('notifications:prune')->dailyAt('03:45');
         $schedule->command('chat:prune')->weeklyOn(0, '04:00');
         $schedule->command('partitions:ensure')->monthlyOn(1, '02:00');
+        $schedule->command('procurement:escalate-approvals')->hourly();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);

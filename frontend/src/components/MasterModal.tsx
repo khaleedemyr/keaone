@@ -70,6 +70,9 @@ export function MasterModal({
   wide,
   size,
   defaultMaximized,
+  mobileFullscreen,
+  submitLabel,
+  submitDisabled,
 }: {
   open: boolean
   title: string
@@ -83,10 +86,23 @@ export function MasterModal({
   wide?: boolean
   size?: 'md' | 'lg' | 'xl' | '2xl'
   defaultMaximized?: boolean
+  /** On narrow viewports, expand to full screen (better for mobile forms). */
+  mobileFullscreen?: boolean
+  submitLabel?: string
+  submitDisabled?: boolean
 }) {
   const { t } = useI18n()
   const [maximized, setMaximized] = useState(false)
   const [minimized, setMinimized] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)')
+    const update = () => setIsMobile(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
   const width = maximized
     ? 'max-w-[min(1200px,96vw)]'
     : size === '2xl'
@@ -101,11 +117,11 @@ export function MasterModal({
     if (!open) {
       setMaximized(false)
       setMinimized(false)
-    } else if (defaultMaximized) {
+    } else if (defaultMaximized || (mobileFullscreen && isMobile)) {
       setMaximized(true)
       setMinimized(false)
     }
-  }, [open, defaultMaximized])
+  }, [open, defaultMaximized, mobileFullscreen, isMobile])
 
   if (typeof document === 'undefined') return null
 
@@ -113,9 +129,9 @@ export function MasterModal({
     <AnimatePresence>
       {open ? (
         <motion.div
-          className={`fixed inset-0 z-[80] flex bg-black/70 p-4 backdrop-blur-sm ${
-            minimized ? 'items-end justify-start' : 'items-center justify-center'
-          }`}
+          className={`fixed inset-0 z-[80] flex bg-black/70 backdrop-blur-sm ${
+            mobileFullscreen ? 'max-md:p-0 max-md:items-stretch max-md:justify-stretch' : 'p-4'
+          } ${minimized ? 'items-end justify-start' : mobileFullscreen ? 'items-center justify-center max-md:items-stretch' : 'items-center justify-center'}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -128,12 +144,16 @@ export function MasterModal({
             onInvalidCapture={onInvalid}
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className={`glass flex w-full flex-col overflow-hidden rounded-3xl ${width} ${
+            className={`glass flex w-full flex-col overflow-hidden ${mobileFullscreen ? 'max-md:h-full max-md:max-h-full max-md:rounded-none max-md:max-w-full' : 'rounded-3xl'} ${width} ${
               minimized
                 ? 'max-h-14'
                 : maximized
-                  ? 'h-[min(92vh,900px)] max-h-[92vh]'
-                  : 'max-h-[min(90vh,720px)]'
+                  ? mobileFullscreen
+                    ? 'max-md:h-full max-md:max-h-full h-[min(92vh,900px)] max-h-[92vh]'
+                    : 'h-[min(92vh,900px)] max-h-[92vh]'
+                  : mobileFullscreen
+                    ? 'max-md:h-full max-md:max-h-full max-h-[min(90vh,720px)]'
+                    : 'max-h-[min(90vh,720px)]'
             }`}
           >
             <div
@@ -181,8 +201,8 @@ export function MasterModal({
                   <button type="button" className="btn-ghost" onClick={onClose}>
                     {t('cancel')}
                   </button>
-                  <button type="submit" disabled={saving} className="btn-primary">
-                    {t('save')}
+                  <button type="submit" disabled={saving || submitDisabled} className="btn-primary">
+                    {submitLabel ?? t('save')}
                   </button>
                 </div>
               </>

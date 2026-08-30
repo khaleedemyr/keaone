@@ -22,6 +22,7 @@ type Section =
   | 'customers'
   | 'stock'
   | 'stockcard'
+  | 'glaccounts'
 
 const Products = lazy(() => import('../pages/Products'))
 const Categories = lazy(() => import('../pages/Categories'))
@@ -38,6 +39,7 @@ const Warehouses = lazy(() => import('../pages/Warehouses'))
 const Parties = lazy(() => import('../pages/Parties'))
 const StockPage = lazy(() => import('../pages/Stock'))
 const StockCardPage = lazy(() => import('../pages/StockCard'))
+const GlAccounts = lazy(() => import('../pages/GlAccounts'))
 
 export const MASTER_NAV_GROUPS: { id: string; label: MsgKey; items: { id: Section; label: MsgKey }[] }[] = [
   {
@@ -77,6 +79,11 @@ export const MASTER_NAV_GROUPS: { id: string; label: MsgKey; items: { id: Sectio
       { id: 'stockcard', label: 'navStockCard' },
       { id: 'warehouses', label: 'navWarehouses' },
     ],
+  },
+  {
+    id: 'finance',
+    label: 'masterGroupFinance',
+    items: [{ id: 'glaccounts', label: 'navGlAccounts' }],
   },
   {
     id: 'partners',
@@ -147,6 +154,7 @@ export default function MasterApp() {
           initialWarehouseId={cardFocus?.warehouseId}
         />
       ) : null}
+      {current === 'glaccounts' ? <GlAccounts /> : null}
       {current === 'suppliers' ? (
         <Parties
           menu="suppliers"

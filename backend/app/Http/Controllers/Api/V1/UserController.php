@@ -39,6 +39,8 @@ class UserController extends Controller
                 'purchaserequisitions',
                 'purchaseorders',
                 'goodsreceipts',
+                'approvalmatrix',
+                'approvaldelegations',
             ]);
         } else {
             $this->ensureCan('users', 'view');
@@ -64,6 +66,9 @@ class UserController extends Controller
                             ->orWhere('email', 'like', "%{$search}%")
                             ->orWhere('username', 'like', "%{$search}%")
                             ->orWhere('national_id', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('position', function ($inner) use ($search) {
+                        $inner->where('name', 'like', "%{$search}%");
                     });
             });
         }

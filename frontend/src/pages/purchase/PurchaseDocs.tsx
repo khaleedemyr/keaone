@@ -1,20 +1,42 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent, KeyboardEvent } from 'react'
+import type { FormEvent } from 'react'
 import { api, apiMessage } from '../../api/client'
 import { logMasterForm } from '../../api/activity'
 import { formatRupiah } from '../../lib/money'
-import type { ApiOk, Member, Party, Product, ProductUnitLevel, Warehouse } from '../../types'
+import type { ApiOk, Member, Outlet, Party, Product, ProductUnitLevel, Warehouse } from '../../types'
 import { PageEnter } from '../../components/motion'
 import { useFeedback } from '../../components/feedback'
 import { PageHeader } from '../../components/ui'
 import { MasterFilters, MasterPager, useListQuery } from '../../components/MasterListBar'
 import { MasterModal } from '../../components/MasterModal'
 import { SearchSelect } from '../../components/SearchSelect'
+import { AutocompleteSelect } from '../../components/AutocompleteSelect'
 import { ApprovedPrPoBoard } from './ApprovedPrPoBoard'
 import { PoDetailModal } from './PoDetailModal'
 import { PrDetailModal } from './PrDetailModal'
 import { runPrPdfExport, runPrWhatsAppShare, type PrDetailRecord } from './prDocumentActions'
 import { PoTotalsSummary } from './PoTotalsSummary'
+import { docKindToAttachmentType, ProcurementAttachmentsPanel } from './ProcurementAttachmentsPanel'
+import { ProcurementCostCenterFields } from './ProcurementCostCenterFields'
+import { PoGrScanField } from './PoGrScanField'
+import {
+  emptyLandedCostDraft,
+  GrLandedCostPanel,
+  hasLandedCostInput,
+  landedCostFromApi,
+  landedCostPayload,
+  type LandedCostDraft,
+  type LandedCostRow,
+} from './GrLandedCostPanel'
+import { PurchaseLineEditor } from './PurchaseLineEditor'
+import {
+  buildProductOptions,
+  emptyPurchaseLine,
+  ensureTrailingEmptyPurchaseLine,
+  purchaseLineUuid,
+  type PurchaseLineDraft,
+} from './purchaseLineUtils'
+import { approvalRowLabel, buildApproverMemberOptions } from './approverOptions'
 import { useSupplierSelect } from './useSupplierSelect'
 import { useAccess } from '../../access'
 import { useAuth } from '../../auth'
@@ -22,48 +44,11 @@ import { useI18n, type MsgKey } from '../../i18n'
 
 export type PurchaseDocKind = 'pr' | 'po' | 'gr' | 'direct'
 
-type LineDraft = {
-  key: string
-  product_id: number
-  name: string
-  qty: number
-  unit: string
-  unit_level: ProductUnitLevel
-  unit_cost: number
-  purchase_order_item_id?: number
-  purchase_requisition_item_id?: number
-}
-
-type LineCol = 'product' | 'qty' | 'unit' | 'cost'
-
-function emptyLine(): LineDraft {
-  return {
-    key: uuid(),
-    product_id: 0,
-    name: '',
-    qty: 1,
-    unit: '',
-    unit_level: 'small',
-    unit_cost: 0,
-  }
-}
-
-function focusLineCell(rowKey: string, col: LineCol) {
-  window.requestAnimationFrame(() => {
-    const root = document.querySelector(`[data-line="${rowKey}"][data-col="${col}"]`)
-    if (!root) return
-    const target =
-      (root as HTMLElement).matches('input,select,button')
-        ? (root as HTMLElement)
-        : (root.querySelector('input,select,button') as HTMLElement | null)
-    target?.focus()
-  })
-}
-
 type ApprovalDraft = {
   key: string
   user_id: number
   name: string
+  position?: string | null
 }
 
 type DocRow = {
@@ -75,6 +60,8 @@ type DocRow = {
   needed_at?: string | null
   supplier?: { id: number; name: string } | null
   warehouse?: { id: number; name: string } | null
+  outlet?: { id: number; name: string } | null
+  department?: { id: number; name: string; code?: string | null } | null
   purchase_order?: { id: number; number: string } | null
   requisition?: { id: number; number: string } | null
   user?: { id: number; name: string } | null
@@ -90,7 +77,7 @@ type DocRow = {
     id: number
     level: number
     user_id: number
-    user?: { id: number; name: string } | null
+    user?: { id: number; name: string; position?: string | null } | null
     status: string
     is_current?: boolean
   }>
@@ -103,7 +90,49 @@ type DocRow = {
     unit_level?: ProductUnitLevel | null
     unit_cost?: number
     qty_remaining?: number
+    purchase_order_item_id?: number
   }>
+}
+
+function grLineFromPoItem(item: NonNullable<DocRow['items']>[number]): PurchaseLineDraft {
+  const remaining = item.qty_remaining ?? item.qty
+  return {
+    key: purchaseLineUuid(),
+    product_id: item.product_id,
+    name: item.name_snapshot,
+    po_qty: item.qty,
+    po_qty_remaining: remaining,
+    qty: 0,
+    unit: item.unit ?? '',
+    unit_level: (item.unit_level as ProductUnitLevel) || 'small',
+    unit_cost: item.unit_cost ?? 0,
+    purchase_order_item_id: item.id,
+  }
+}
+
+async function enrichGrLinesFromPo(
+  items: PurchaseLineDraft[],
+  purchaseOrderId: string,
+): Promise<PurchaseLineDraft[]> {
+  if (!purchaseOrderId) return items
+  try {
+    const { data } = await api.get<ApiOk<DocRow>>(`/purchase-orders/${purchaseOrderId}`)
+    const poItems = data.data.items ?? []
+    return items.map((line) => {
+      const poItemId = line.purchase_order_item_id
+      if (!poItemId) return line
+      const poItem = poItems.find((item) => item.id === poItemId)
+      if (!poItem) return line
+      const remaining = poItem.qty_remaining ?? poItem.qty
+      return {
+        ...line,
+        po_qty: poItem.qty,
+        po_qty_remaining: remaining + line.qty,
+      }
+    })
+  } catch {
+    return items
+  }
 }
 
 const ENDPOINTS: Record<PurchaseDocKind, string> = {
@@ -135,38 +164,7 @@ const SUBTITLE: Record<PurchaseDocKind, MsgKey> = {
 }
 
 function uuid() {
-  return crypto.randomUUID()
-}
-
-function productUnitOptions(product?: Product | null) {
-  if (product?.units && product.units.length > 0) {
-    return product.units.map((u) => ({
-      level: u.level,
-      label: u.label,
-      factor_to_base: u.factor_to_base,
-    }))
-  }
-  const label = product?.unit || 'pcs'
-  return [{ level: 'small' as const, label, factor_to_base: 1 }]
-}
-
-function parseQtyInput(raw: string) {
-  const digits = raw.replace(/[^\d]/g, '')
-  if (digits === '') return 0
-  return Number.parseInt(digits, 10) || 0
-}
-
-function parseCostInput(raw: string) {
-  const cleaned = raw.replace(/[^\d.]/g, '')
-  if (cleaned === '' || cleaned === '.') return 0
-  const n = Number(cleaned)
-  return Number.isFinite(n) ? n : 0
-}
-
-function defaultUnitPick(product: Product) {
-  const options = productUnitOptions(product)
-  const small = options.find((o) => o.level === 'small') ?? options[0]
-  return { unit: small.label, unit_level: small.level as ProductUnitLevel }
+  return purchaseLineUuid()
 }
 
 export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
@@ -180,7 +178,12 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
   const canEdit = can(menu, 'edit')
   const prNeedApproval = Boolean(me?.settings?.pr_need_approval)
   const poNeedApproval = Boolean(me?.settings?.po_need_approval)
+  const grReversalEnabled = Boolean(me?.settings?.gr_reversal_enabled)
+  const landedCostEnabled = me?.settings?.procurement_landed_cost_enabled === true
+  const costCenterEnabled = me?.settings?.procurement_cost_center_enabled !== false
+  const showCostCenter = costCenterEnabled && (kind === 'pr' || kind === 'po')
   const docNeedApproval = (kind === 'pr' && prNeedApproval) || (kind === 'po' && poNeedApproval)
+  const approvalMatrixMode = me?.settings?.procurement_approval_mode === 'matrix'
   const purchaseFlow = (me?.settings?.purchase_flow ?? 'direct') as 'strict_pr_po_gr' | 'po_gr' | 'direct'
   const poFromPrBoard = kind === 'po' && purchaseFlow === 'strict_pr_po_gr'
 
@@ -195,23 +198,29 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
   const [members, setMembers] = useState<Member[]>([])
   const [prs, setPrs] = useState<DocRow[]>([])
   const [pos, setPos] = useState<DocRow[]>([])
+  const [departments, setDepartments] = useState<Array<{ id: number; name: string; code?: string | null }>>([])
+  const [outlets, setOutlets] = useState<Outlet[]>([])
+  const [multiOutlet, setMultiOutlet] = useState(false)
 
   const [warehouseId, setWarehouseId] = useState('')
+  const [departmentId, setDepartmentId] = useState('')
+  const [outletId, setOutletId] = useState('')
   const [supplierId, setSupplierId] = useState('')
   const [prId, setPrId] = useState('')
   const [poId, setPoId] = useState('')
   const [note, setNote] = useState('')
   const [neededAt, setNeededAt] = useState('')
   const [expectedAt, setExpectedAt] = useState('')
-  const [lines, setLines] = useState<LineDraft[]>([emptyLine()])
+  const [lines, setLines] = useState<PurchaseLineDraft[]>([emptyPurchaseLine()])
   const [approvers, setApprovers] = useState<ApprovalDraft[]>([])
-  const [approverPick, setApproverPick] = useState('')
-  const [focusHint, setFocusHint] = useState<{ key: string; col: LineCol } | null>(null)
   const [detailPoId, setDetailPoId] = useState<number | null>(null)
   const [detailPrId, setDetailPrId] = useState<number | null>(null)
   const [prActionId, setPrActionId] = useState<number | null>(null)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [filterDepartmentId, setFilterDepartmentId] = useState('')
+  const [landedCost, setLandedCost] = useState<LandedCostDraft>(emptyLandedCostDraft())
+  const [landedCostAppliedAt, setLandedCostAppliedAt] = useState<string | null>(null)
 
   const { options: supplierOptions } = useSupplierSelect(suppliers)
 
@@ -232,33 +241,20 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
   const needsSupplier = kind === 'po' || kind === 'direct' || kind === 'gr'
   const needsCost = kind !== 'pr'
 
-  const productOptions = useMemo(
-    () =>
-      products.map((p) => ({
-        value: String(p.id),
-        label: p.name,
-        keywords: `${p.sku ?? ''} ${p.barcode ?? ''}`,
-      })),
-    [products],
+  const selectedPo = useMemo(
+    () => pos.find((po) => String(po.id) === poId) ?? null,
+    [pos, poId],
   )
+
+  const productOptions = useMemo(() => buildProductOptions(products), [products])
 
   const memberOptions = useMemo(
-    () =>
-      members
-        .filter((m) => m.is_active && !approvers.some((a) => a.user_id === m.id))
-        .map((m) => ({
-          value: String(m.id),
-          label: `${m.name}${m.role ? ` · ${m.role}` : ''}`,
-          keywords: `${m.email ?? ''} ${m.username ?? ''}`,
-        })),
+    () => buildApproverMemberOptions(
+      members,
+      approvers.map((row) => row.user_id),
+    ),
     [members, approvers],
   )
-
-  useEffect(() => {
-    if (!focusHint) return
-    focusLineCell(focusHint.key, focusHint.col)
-    setFocusHint(null)
-  }, [focusHint, lines])
 
   const statusOptions = useMemo(() => {
     const base = [{ value: 'all', label: t('filterAll') }]
@@ -282,6 +278,7 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
         { value: 'ordered', label: t('purchaseStatusOrdered') },
         { value: 'partial', label: t('purchaseStatusPartial') },
         { value: 'received', label: t('purchaseStatusReceived') },
+        { value: 'closed', label: t('procurementPoStatusClosed') },
         { value: 'cancelled', label: t('purchaseStatusCancelled') },
       ]
     }
@@ -289,6 +286,7 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
       ...base,
       { value: 'draft', label: t('purchaseStatusDraft') },
       { value: 'confirmed', label: t('purchaseStatusConfirmed') },
+      { value: 'voided', label: t('procurementGrStatusVoided') },
       { value: 'cancelled', label: t('purchaseStatusCancelled') },
     ]
   }, [kind, t])
@@ -304,6 +302,7 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
           direct_only: kind === 'direct' ? 1 : undefined,
           from: (kind === 'pr' || kind === 'po') && dateFrom ? dateFrom : undefined,
           to: (kind === 'pr' || kind === 'po') && dateTo ? dateTo : undefined,
+          department_id: showCostCenter && filterDepartmentId ? Number(filterDepartmentId) : undefined,
         },
       })
       setRows(data.data)
@@ -316,22 +315,31 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
   useEffect(() => {
     const handle = window.setTimeout(() => void load(), 200)
     return () => window.clearTimeout(handle)
-  }, [list.search, list.status, list.page, list.perPage, kind, dateFrom, dateTo])
+  }, [list.search, list.status, list.page, list.perPage, kind, dateFrom, dateTo, filterDepartmentId, showCostCenter])
 
   useEffect(() => {
     setDateFrom('')
     setDateTo('')
+    setFilterDepartmentId('')
     list.setPage(1)
   }, [kind])
 
   useEffect(() => {
     void api
       .get<ApiOk<Product[]>>('/products', {
-        params: { for_select: 1, for_purchase: 1, status: 'active' },
+        params: {
+          for_select: 1,
+          for_purchase: 1,
+          status: 'active',
+          supplier_id: kind === 'po' && supplierId ? Number(supplierId) : undefined,
+        },
         silent: true,
       })
       .then(({ data }) => setProducts(data.data))
       .catch(() => {})
+  }, [kind, supplierId])
+
+  useEffect(() => {
     void api
       .get<ApiOk<Warehouse[]>>('/warehouses', { params: { for_select: 1, status: 'active', per_page: 100 }, silent: true })
       .then(({ data }) => setWarehouses(data.data))
@@ -360,7 +368,24 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
         .then(({ data }) => setPos(data.data.filter((row) => row.status === 'ordered' || row.status === 'partial')))
         .catch(() => {})
     }
-  }, [kind, needsSupplier, docNeedApproval])
+    if (showCostCenter) {
+      void api
+        .get<ApiOk<Array<{ id: number; name: string; code?: string | null }>>>('/departments', {
+          params: { for_select: 1, status: 'active', per_page: 200 },
+          silent: true,
+        })
+        .then(({ data }) => setDepartments(data.data))
+        .catch(() => {})
+      void api
+        .get<ApiOk<Outlet[]>>('/outlets', { params: { for_select: 1, status: 'active', per_page: 100 }, silent: true })
+        .then(({ data }) => {
+          const rows = (data.data ?? []).filter((o) => o.is_active !== false)
+          setOutlets(rows)
+          setMultiOutlet(rows.length > 1)
+        })
+        .catch(() => {})
+    }
+  }, [kind, needsSupplier, docNeedApproval, showCostCenter])
 
   function resetForm() {
     setEditing(null)
@@ -368,13 +393,16 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
     setSupplierId('')
     setPrId('')
     setPoId('')
+    setDepartmentId('')
+    setOutletId(me?.outlet?.id ? String(me.outlet.id) : '')
     setNote('')
     setNeededAt('')
     setExpectedAt('')
-    setLines([emptyLine()])
+    setLines([emptyPurchaseLine()])
     setApprovers([])
-    setApproverPick('')
     setError('')
+    setLandedCost(emptyLandedCostDraft())
+    setLandedCostAppliedAt(null)
   }
 
   function openCreate() {
@@ -383,72 +411,6 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
     if (kind === 'pr' || kind === 'po' || kind === 'gr') {
       logMasterForm(kind, 'create')
     }
-  }
-
-  function ensureTrailingEmpty(rows: LineDraft[]) {
-    if (rows.length === 0) return [emptyLine()]
-    const last = rows[rows.length - 1]
-    if (last.product_id > 0) return [...rows, emptyLine()]
-    return rows
-  }
-
-  function setProductOnLine(rowKey: string, productId: string) {
-    const id = Number(productId)
-    const product = products.find((p) => p.id === id)
-    setLines((current) => {
-      const next = current.map((item) => {
-        if (item.key !== rowKey) return item
-        if (!product) {
-          return { ...item, product_id: 0, name: '', unit: '', unit_level: 'small' as ProductUnitLevel }
-        }
-        const pick = defaultUnitPick(product)
-        return {
-          ...item,
-          product_id: product.id,
-          name: product.name,
-          unit: pick.unit,
-          unit_level: pick.unit_level,
-        }
-      })
-      return ensureTrailingEmpty(next)
-    })
-    if (product) setFocusHint({ key: rowKey, col: 'qty' })
-  }
-
-  function advanceFrom(rowKey: string, col: LineCol) {
-    if (col === 'product') {
-      setFocusHint({ key: rowKey, col: 'qty' })
-      return
-    }
-    if (col === 'qty') {
-      setFocusHint({ key: rowKey, col: 'unit' })
-      return
-    }
-    if (col === 'unit' && needsCost) {
-      setFocusHint({ key: rowKey, col: 'cost' })
-      return
-    }
-    // last column → new row
-    let nextKey = ''
-    setLines((current) => {
-      const idx = current.findIndex((item) => item.key === rowKey)
-      const row = current[idx]
-      if (row && row.product_id === 0) return current
-      if (idx >= 0 && idx < current.length - 1) {
-        nextKey = current[idx + 1].key
-        return current
-      }
-      const blank = emptyLine()
-      nextKey = blank.key
-      return [...current, blank]
-    })
-    if (nextKey) setFocusHint({ key: nextKey, col: 'product' })
-  }
-
-  function onLineEnter(event: KeyboardEvent, rowKey: string, col: LineCol) {
-    if (event.key !== 'Enter') return
-    event.preventDefault()
-    advanceFrom(rowKey, col)
   }
 
   async function openEdit(row: DocRow) {
@@ -460,6 +422,8 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
       setSupplierId(doc.supplier?.id?.toString() ?? '')
       setPrId(doc.requisition?.id?.toString() ?? '')
       setPoId(doc.purchase_order?.id?.toString() ?? '')
+      setDepartmentId(doc.department?.id?.toString() ?? '')
+      setOutletId(doc.outlet?.id?.toString() ?? me?.outlet?.id?.toString() ?? '')
       setNote(doc.note ?? '')
       setNeededAt(doc.needed_at ?? '')
       setApprovers(
@@ -470,22 +434,44 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
             key: uuid(),
             user_id: row.user_id,
             name: row.user?.name ?? `#${row.user_id}`,
+            position: row.user?.position ?? null,
           })),
       )
-      setApproverPick('')
       setLines(
-        ensureTrailingEmpty(
-          (doc.items ?? []).map((item) => ({
-            key: uuid(),
-            product_id: item.product_id,
-            name: item.name_snapshot,
-            qty: item.qty,
-            unit: item.unit ?? '',
-            unit_level: (item.unit_level as ProductUnitLevel) || 'small',
-            unit_cost: item.unit_cost ?? 0,
-          })),
+        ensureTrailingEmptyPurchaseLine(
+          await (async () => {
+            const docPoId = doc.purchase_order?.id?.toString() ?? ''
+            let mappedLines = (doc.items ?? []).map((item) => ({
+              key: uuid(),
+              product_id: item.product_id,
+              name: item.name_snapshot,
+              qty: item.qty,
+              unit: item.unit ?? '',
+              unit_level: (item.unit_level as ProductUnitLevel) || 'small',
+              unit_cost: item.unit_cost ?? 0,
+              purchase_order_item_id: item.purchase_order_item_id,
+            }))
+            if (kind === 'gr' && docPoId) {
+              mappedLines = await enrichGrLinesFromPo(mappedLines, docPoId)
+            }
+            return mappedLines
+          })(),
         ),
       )
+      if (kind === 'gr' && landedCostEnabled) {
+        try {
+          const landedRes = await api.get<ApiOk<LandedCostRow | null>>(`/goods-receipts/${doc.id}/landed-cost`, { silent: true })
+          const row = landedRes.data.data
+          setLandedCost(landedCostFromApi(row ?? undefined))
+          setLandedCostAppliedAt(row?.applied_at ?? null)
+        } catch {
+          setLandedCost(emptyLandedCostDraft())
+          setLandedCostAppliedAt(null)
+        }
+      } else {
+        setLandedCost(emptyLandedCostDraft())
+        setLandedCostAppliedAt(null)
+      }
       setOpen(true)
       if (kind === 'pr' || kind === 'po' || kind === 'gr') {
         logMasterForm(kind, 'edit', doc.number)
@@ -502,7 +488,19 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
       setError(t('purchaseNeedItems'))
       return
     }
-    if (docNeedApproval && approvers.length === 0) {
+    if (kind === 'gr') {
+      const over = filled.find(
+        (line) =>
+          line.purchase_order_item_id &&
+          line.po_qty_remaining != null &&
+          line.qty > line.po_qty_remaining,
+      )
+      if (over) {
+        setError(t('purchaseReceiveQtyExceedsPo'))
+        return
+      }
+    }
+    if (docNeedApproval && !approvalMatrixMode && approvers.length === 0) {
       setError(t('purchaseNeedApprovers'))
       return
     }
@@ -517,12 +515,19 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
       purchase_order_item_id: line.purchase_order_item_id,
       purchase_requisition_item_id: line.purchase_requisition_item_id,
     }))
-    const approvalPayload = docNeedApproval
+    const approvalPayload = docNeedApproval && !approvalMatrixMode
       ? { approvals: approvers.map((row) => ({ user_id: row.user_id })) }
       : kind === 'pr' || kind === 'po'
         ? { approvals: [] }
         : {}
+    const costCenterPayload = showCostCenter
+      ? {
+          department_id: departmentId ? Number(departmentId) : null,
+          outlet_id: multiOutlet && outletId ? Number(outletId) : undefined,
+        }
+      : {}
     try {
+      let savedId = editing?.id
       if (editing) {
         await api.put(`${ENDPOINTS[kind]}/${editing.id}`, {
           warehouse_id: warehouseId ? Number(warehouseId) : undefined,
@@ -532,9 +537,10 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
           expected_at: expectedAt || undefined,
           items,
           ...approvalPayload,
+          ...costCenterPayload,
         })
       } else {
-        await api.post(ENDPOINTS[kind], {
+        const { data: created } = await api.post<ApiOk<{ id: number }>>(ENDPOINTS[kind], {
           client_uuid: uuid(),
           warehouse_id: warehouseId ? Number(warehouseId) : undefined,
           supplier_id: supplierId ? Number(supplierId) : undefined,
@@ -545,7 +551,12 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
           expected_at: expectedAt || undefined,
           items: kind === 'po' && prId && items.length === 0 ? undefined : items,
           ...approvalPayload,
+          ...costCenterPayload,
         })
+        savedId = created.data.id
+      }
+      if (kind === 'gr' && landedCostEnabled && savedId && !landedCostAppliedAt && (hasLandedCostInput(landedCost) || editing)) {
+        await api.put(`/goods-receipts/${savedId}/landed-cost`, landedCostPayload(landedCost))
       }
       setOpen(false)
       await load()
@@ -560,12 +571,34 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
   async function runAction(row: DocRow, action: string) {
     const ok = await feedback.confirm({
       title: t('purchaseActionConfirm'),
-      message: `${row.number} · ${action}`,
-      tone: action === 'cancel' || action === 'reject' ? 'danger' : 'default',
+      message: `${row.number} · ${
+        action === 'void'
+          ? t('procurementGrVoid')
+          : action === 'close'
+            ? t('procurementPoClose')
+            : action === 'submit'
+            ? t('purchaseSubmit')
+            : action === 'approve'
+              ? t('purchaseApprove')
+              : action === 'reject'
+                ? t('purchaseReject')
+                : action === 'order'
+                  ? t('purchaseMarkOrdered')
+                  : action === 'confirm'
+                    ? t('purchaseConfirm')
+                    : t('purchaseCancel')
+      }`,
+      tone: action === 'cancel' || action === 'reject' || action === 'void' || action === 'close' ? 'danger' : 'default',
     })
     if (!ok) return
     try {
-      await api.post(`${ENDPOINTS[kind]}/${row.id}/${action}`)
+      if (action === 'void') {
+        await api.post(`${ENDPOINTS[kind]}/${row.id}/void`, {})
+      } else if (action === 'close') {
+        await api.post(`${ENDPOINTS[kind]}/${row.id}/close`, {})
+      } else {
+        await api.post(`${ENDPOINTS[kind]}/${row.id}/${action}`)
+      }
       await load()
       feedback.success(t('saved'))
     } catch (err) {
@@ -579,22 +612,14 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
     try {
       const { data } = await api.get<ApiOk<DocRow>>(`/purchase-orders/${id}`)
       const doc = data.data
+      setPos((current) => (current.some((row) => row.id === doc.id) ? current : [doc, ...current]))
       setSupplierId(doc.supplier?.id?.toString() ?? '')
       setWarehouseId(doc.warehouse?.id?.toString() ?? '')
       setLines(
-        ensureTrailingEmpty(
+        ensureTrailingEmptyPurchaseLine(
           (doc.items ?? [])
             .filter((item) => (item.qty_remaining ?? item.qty) > 0)
-            .map((item) => ({
-              key: uuid(),
-              product_id: item.product_id,
-              name: item.name_snapshot,
-              qty: item.qty_remaining ?? item.qty,
-              unit: item.unit ?? '',
-              unit_level: (item.unit_level as ProductUnitLevel) || 'small',
-              unit_cost: item.unit_cost ?? 0,
-              purchase_order_item_id: item.id,
-            })),
+            .map((item) => grLineFromPoItem(item)),
         ),
       )
     } catch (err) {
@@ -609,8 +634,10 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
       const { data } = await api.get<ApiOk<DocRow>>(`/purchase-requisitions/${id}`)
       const doc = data.data
       setWarehouseId(doc.warehouse?.id?.toString() ?? '')
+      setDepartmentId(doc.department?.id?.toString() ?? '')
+      setOutletId(doc.outlet?.id?.toString() ?? '')
       setLines(
-        ensureTrailingEmpty(
+        ensureTrailingEmptyPurchaseLine(
           (doc.items ?? []).map((item) => ({
             key: uuid(),
             product_id: item.product_id,
@@ -638,7 +665,9 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
       ordered: 'purchaseStatusOrdered',
       partial: 'purchaseStatusPartial',
       received: 'purchaseStatusReceived',
+      closed: 'procurementPoStatusClosed',
       confirmed: 'purchaseStatusConfirmed',
+      voided: 'procurementGrStatusVoided',
     }
     return t(map[status] ?? 'purchaseStatusDraft')
   }
@@ -666,10 +695,14 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
         return ['approve', 'reject']
       }
       if (row.status === 'approved') return ['order', 'cancel']
-      if (row.status === 'ordered') return ['cancel']
+      if (row.status === 'ordered') return ['close', 'cancel']
+      if (row.status === 'partial') return ['close']
       return []
     }
     if (row.status === 'draft') return ['confirm', 'cancel']
+    if ((kind === 'gr' || kind === 'direct') && row.status === 'confirmed' && grReversalEnabled) {
+      return ['void']
+    }
     return []
   }
 
@@ -713,11 +746,17 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
     const id = Number(userId)
     const member = members.find((m) => m.id === id)
     if (!member || approvers.some((a) => a.user_id === id)) {
-      setApproverPick('')
       return
     }
-    setApprovers((current) => [...current, { key: uuid(), user_id: member.id, name: member.name }])
-    setApproverPick('')
+    setApprovers((current) => [
+      ...current,
+      {
+        key: uuid(),
+        user_id: member.id,
+        name: member.name,
+        position: member.position?.name ?? null,
+      },
+    ])
   }
 
   function moveApprover(index: number, dir: -1 | 1) {
@@ -775,6 +814,28 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
               }
             : undefined
         }
+        extra={
+          showCostCenter ? (
+            <label className="block min-w-[10rem] text-xs text-muted">
+              {t('navDepartments')}
+              <select
+                className="field !mt-1"
+                value={filterDepartmentId}
+                onChange={(e) => {
+                  list.setPage(1)
+                  setFilterDepartmentId(e.target.value)
+                }}
+              >
+                <option value="">{t('filterAll')}</option>
+                {departments.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.code ? `${row.name} (${row.code})` : row.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null
+        }
       />
 
       <div className="mt-4 overflow-auto rounded-2xl border border-line">
@@ -788,6 +849,7 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
                 <th className="px-3 py-2">{t('purchaseCreatedBy')}</th>
               ) : null}
               {needsSupplier ? <th className="px-3 py-2">{t('navSuppliers')}</th> : null}
+              {showCostCenter ? <th className="px-3 py-2">{t('navDepartments')}</th> : null}
               <th className="px-3 py-2">{t('navWarehouses')}</th>
               {needsCost ? <th className="px-3 py-2">{t('purchaseTotal')}</th> : null}
               <th className="px-3 py-2" />
@@ -832,6 +894,9 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
                   <td className="px-3 py-2">{row.user?.name ?? '—'}</td>
                 ) : null}
                 {needsSupplier ? <td className="px-3 py-2">{row.supplier?.name ?? '—'}</td> : null}
+                {showCostCenter ? (
+                  <td className="px-3 py-2">{row.department?.name ?? '—'}</td>
+                ) : null}
                 <td className="px-3 py-2">{row.warehouse?.name ?? '—'}</td>
                 {needsCost ? (
                   <td className="px-3 py-2">{formatRupiah(row.total ?? 0, locale)}</td>
@@ -878,7 +943,7 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
                         ) : null}
                       </>
                     ) : null}
-                    {row.status === 'draft' || row.status === 'rejected' ? (
+                    {canEdit && (row.status === 'draft' || row.status === 'rejected') ? (
                       <button type="button" className="btn-ghost !px-2 !text-xs" onClick={() => void openEdit(row)}>
                         {t('edit')}
                       </button>
@@ -901,7 +966,11 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
                                   ? 'purchaseMarkOrdered'
                                   : action === 'confirm'
                                     ? 'purchaseConfirm'
-                                    : 'purchaseCancel',
+                                    : action === 'void'
+                                      ? 'procurementGrVoid'
+                                      : action === 'close'
+                                        ? 'procurementPoClose'
+                                        : 'purchaseCancel',
                         )}
                       </button>
                     ))}
@@ -927,9 +996,11 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
         error={error}
         saving={saving}
         size="xl"
+        mobileFullscreen
         defaultMaximized={kind === 'po' && !editing}
         onClose={() => setOpen(false)}
         onSubmit={(e) => void onSubmit(e)}
+        submitLabel={editing ? t('save') : t('purchaseAdd')}
       >
           {kind === 'po' ? (
             <label className="block text-sm text-muted">
@@ -946,17 +1017,25 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
           ) : null}
 
           {kind === 'gr' ? (
-            <label className="block text-sm text-muted">
-              {t('purchaseFromPo')}
-              <select className="field" value={poId} onChange={(e) => void fillFromPo(e.target.value)} disabled={Boolean(editing)}>
-                <option value="">{t('purchaseSelectPo')}</option>
-                {pos.map((po) => (
-                  <option key={po.id} value={po.id}>
-                    {po.number} · {po.supplier?.name ?? ''}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <>
+              {!editing ? (
+                <PoGrScanField
+                  selectedPoNumber={selectedPo?.number}
+                  onPoLoaded={(id) => fillFromPo(id)}
+                />
+              ) : null}
+              <label className="block text-sm text-muted">
+                {t('purchaseFromPo')}
+                <select className="field" value={poId} onChange={(e) => void fillFromPo(e.target.value)} disabled={Boolean(editing)}>
+                  <option value="">{t('purchaseSelectPo')}</option>
+                  {pos.map((po) => (
+                    <option key={po.id} value={po.id}>
+                      {po.number} · {po.supplier?.name ?? ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
           ) : null}
 
           <label className="block text-sm text-muted">
@@ -970,6 +1049,18 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
               ))}
             </select>
           </label>
+
+          {showCostCenter ? (
+            <ProcurementCostCenterFields
+              departments={departments}
+              outlets={outlets}
+              multiOutlet={multiOutlet}
+              departmentId={departmentId}
+              outletId={outletId}
+              onDepartmentChange={setDepartmentId}
+              onOutletChange={setOutletId}
+            />
+          ) : null}
 
           {needsSupplier ? (
             <label className="block text-sm text-muted">
@@ -1009,198 +1100,99 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
           {docNeedApproval ? (
             <div className="rounded-2xl border border-line p-3">
               <div className="mb-1 text-sm font-medium text-fg">{t('purchaseApprovers')}</div>
-              <div className="mb-2 text-[11px] text-muted">{t('purchaseApproversHint')}</div>
-              <div className="mb-2 flex gap-2">
-                <div className="min-w-0 flex-1">
-                  <SearchSelect
-                    className="!mt-0"
-                    value={approverPick}
-                    onChange={(value) => {
-                      setApproverPick(value)
-                      if (value) addApprover(value)
-                    }}
-                    options={memberOptions}
-                    placeholder={t('purchaseSearchApprover')}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                {approvers.map((row, index) => (
-                  <div key={row.key} className="flex items-center gap-2 rounded-xl border border-line px-2 py-1.5 text-sm">
-                    <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-muted">
-                      {t('purchaseApprovalLevel', { n: String(index + 1) })}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-fg">{row.name}</span>
-                    <button
-                      type="button"
-                      className="btn-ghost !px-2 !text-xs"
-                      disabled={index === 0}
-                      onClick={() => moveApprover(index, -1)}
-                      title={t('purchaseMoveUp')}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost !px-2 !text-xs"
-                      disabled={index === approvers.length - 1}
-                      onClick={() => moveApprover(index, 1)}
-                      title={t('purchaseMoveDown')}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost !px-2"
-                      onClick={() => setApprovers((current) => current.filter((item) => item.key !== row.key))}
-                    >
-                      ×
-                    </button>
+              {approvalMatrixMode ? (
+                <p className="text-sm text-muted">{t('procurementApprovalMatrixHint')}</p>
+              ) : (
+                <>
+                  <div className="mb-2 text-[11px] text-muted">{t('purchaseApproversHint')}</div>
+                  <div className="mb-2 flex gap-2">
+                    <div className="min-w-0 flex-1">
+                      <AutocompleteSelect
+                        key={`${open ? 'open' : 'closed'}-${editing?.id ?? 'new'}`}
+                        className="!mt-0"
+                        options={memberOptions}
+                        placeholder={t('purchaseSearchApprover')}
+                        onSelect={addApprover}
+                      />
+                    </div>
                   </div>
-                ))}
-                {approvers.length === 0 ? (
-                  <div className="px-1 py-2 text-xs text-muted">{t('purchaseApproversEmpty')}</div>
-                ) : null}
-              </div>
+                  <div className="space-y-1.5">
+                    {approvers.map((row, index) => (
+                      <div key={row.key} className="flex items-center gap-2 rounded-xl border border-line px-2 py-1.5 text-sm">
+                        <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-muted">
+                          {t('purchaseApprovalLevel', { n: String(index + 1) })}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-fg">{approvalRowLabel(row)}</span>
+                        <button
+                          type="button"
+                          className="btn-ghost !px-2 !text-xs"
+                          disabled={index === 0}
+                          onClick={() => moveApprover(index, -1)}
+                          title={t('purchaseMoveUp')}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost !px-2 !text-xs"
+                          disabled={index === approvers.length - 1}
+                          onClick={() => moveApprover(index, 1)}
+                          title={t('purchaseMoveDown')}
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost !px-2"
+                          onClick={() => setApprovers((current) => current.filter((item) => item.key !== row.key))}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {approvers.length === 0 ? (
+                      <div className="px-1 py-2 text-xs text-muted">{t('purchaseApproversEmpty')}</div>
+                    ) : null}
+                  </div>
+                </>
+              )}
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-line p-3">
-            <div className="mb-1 flex items-baseline justify-between gap-2">
-              <div className="text-sm font-medium text-fg">{t('purchaseItems')}</div>
-              <div className="text-[11px] text-muted">{t('purchaseGridHint')}</div>
-            </div>
-            <div
-              className={`mb-1 grid gap-2 text-[10px] uppercase tracking-wide text-muted ${
-                needsCost ? 'grid-cols-[minmax(0,1.6fr)_72px_88px_110px_auto]' : 'grid-cols-[minmax(0,1.6fr)_72px_88px_auto]'
-              }`}
-            >
-              <span>{t('product')}</span>
-              <span>{t('stockQty')}</span>
-              <span>{t('unit')}</span>
-              {needsCost ? <span>{t('purchaseUnitCost')}</span> : null}
-              <span />
-            </div>
-            <div className="space-y-1.5">
-              {lines.map((line, index) => {
-                const product = products.find((p) => p.id === line.product_id)
-                const options = productUnitOptions(product)
-                const known = options.some((o) => o.level === line.unit_level || o.label === line.unit)
-                return (
-                  <div
-                    key={line.key}
-                    className={`grid items-center gap-2 text-sm ${
-                      needsCost
-                        ? 'grid-cols-[minmax(0,1.6fr)_72px_88px_110px_auto]'
-                        : 'grid-cols-[minmax(0,1.6fr)_72px_88px_auto]'
-                    }`}
-                  >
-                    <div data-line={line.key} data-col="product">
-                      <SearchSelect
-                        className="!mt-0"
-                        value={line.product_id ? String(line.product_id) : ''}
-                        onChange={(value) => setProductOnLine(line.key, value)}
-                        onCommit={() => setFocusHint({ key: line.key, col: 'qty' })}
-                        options={productOptions}
-                        placeholder={t('purchasePickProduct')}
-                        allowEmpty
-                        emptyLabel={t('purchasePickProduct')}
-                        autoFocus={index === 0 && !editing}
-                      />
-                    </div>
-                    <input
-                      data-line={line.key}
-                      data-col="qty"
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="off"
-                      className="field !mt-0 tabular-nums"
-                      value={line.qty > 0 ? String(line.qty) : ''}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) =>
-                        setLines((current) =>
-                          current.map((item) =>
-                            item.key === line.key ? { ...item, qty: parseQtyInput(e.target.value) } : item,
-                          ),
-                        )
-                      }
-                      onKeyDown={(e) => onLineEnter(e, line.key, 'qty')}
-                    />
-                    <select
-                      data-line={line.key}
-                      data-col="unit"
-                      className="field !mt-0"
-                      value={line.unit_level}
-                      disabled={!line.product_id}
-                      onChange={(e) => {
-                        const level = e.target.value as ProductUnitLevel
-                        const picked = options.find((o) => o.level === level)
-                        setLines((current) =>
-                          current.map((item) =>
-                            item.key === line.key
-                              ? {
-                                  ...item,
-                                  unit_level: level,
-                                  unit: picked?.label || item.unit,
-                                }
-                              : item,
-                          ),
-                        )
-                      }}
-                      onKeyDown={(e) => onLineEnter(e, line.key, 'unit')}
-                    >
-                      {!known ? (
-                        <option value={line.unit_level}>{line.unit || t('purchaseSelectUnit')}</option>
-                      ) : null}
-                      {options.map((opt) => (
-                        <option key={opt.level} value={opt.level}>
-                          {opt.label}
-                          {opt.factor_to_base > 1 ? ` (=${opt.factor_to_base})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    {needsCost ? (
-                      <input
-                        data-line={line.key}
-                        data-col="cost"
-                        type="text"
-                        inputMode="decimal"
-                        autoComplete="off"
-                        className="field !mt-0 tabular-nums"
-                        value={line.unit_cost > 0 ? String(line.unit_cost) : ''}
-                        disabled={!line.product_id}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) =>
-                          setLines((current) =>
-                            current.map((item) =>
-                              item.key === line.key ? { ...item, unit_cost: parseCostInput(e.target.value) } : item,
-                            ),
-                          )
-                        }
-                        onKeyDown={(e) => onLineEnter(e, line.key, 'cost')}
-                      />
-                    ) : null}
-                    <button
-                      type="button"
-                      className="btn-ghost !px-2"
-                      disabled={lines.length <= 1 && line.product_id === 0}
-                      onClick={() =>
-                        setLines((current) => {
-                          const next = current.filter((item) => item.key !== line.key)
-                          return next.length === 0 ? [emptyLine()] : ensureTrailingEmpty(next)
-                        })
-                      }
-                    >
-                      ×
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+          <PurchaseLineEditor
+            lines={lines}
+            setLines={setLines}
+            products={products}
+            productOptions={productOptions}
+            needsCost={needsCost}
+            grFromPo={kind === 'gr' && Boolean(poId)}
+            autoFocusFirst={!editing}
+            onProductSelected={(product) => {
+              if (kind === 'po' && !supplierId && product.preferred_supplier_id) {
+                setSupplierId(String(product.preferred_supplier_id))
+              }
+            }}
+          />
 
           {kind === 'po' ? (
             <PoTotalsSummary subtotal={linesSubtotal} supplier={selectedSupplier} locale={locale} t={t} />
+          ) : null}
+
+          {kind === 'gr' && landedCostEnabled && (!editing || editing.status === 'draft') ? (
+            <GrLandedCostPanel
+              draft={landedCost}
+              appliedAt={landedCostAppliedAt}
+              readOnly={Boolean(landedCostAppliedAt)}
+              locale={locale}
+              onChange={setLandedCost}
+            />
+          ) : null}
+
+          {editing && (kind === 'pr' || kind === 'po' || kind === 'gr') ? (
+            <ProcurementAttachmentsPanel
+              documentType={docKindToAttachmentType(kind)}
+              documentId={editing.id}
+            />
           ) : null}
       </MasterModal>
 

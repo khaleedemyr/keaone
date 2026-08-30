@@ -8,9 +8,12 @@ import { formatRupiah } from '../../lib/money'
 import { useAuth } from '../../auth'
 import { useI18n } from '../../i18n'
 import type { ApiOk } from '../../types'
+import { buildPoQrPayload } from './poScan'
 import { ensurePoShareToken, poPublicUrl, poWhatsAppUrl } from './poShare'
 import { formatPaymentTermLabel } from './poTotals'
 import { PoDetailView, type PoDetailViewData } from './PoDetailView'
+import { PoDeliverySchedulePanel } from './PoDeliverySchedulePanel'
+import { ProcurementAttachmentsPanel } from './ProcurementAttachmentsPanel'
 
 type PoDetail = PoDetailViewData & {
   id: number
@@ -57,7 +60,7 @@ export function PoDetailModal({
       .then(async ({ data }) => {
         const row = data.data
         setPo(row)
-        const qr = await QRCode.toDataURL(row.number, { margin: 1, width: 160 })
+        const qr = await QRCode.toDataURL(buildPoQrPayload(row), { margin: 1, width: 160 })
         setQrDataUrl(qr)
       })
       .catch((err) => feedback.error(apiMessage(err, t('loadFailed'))))
@@ -171,6 +174,7 @@ export function PoDetailModal({
       {loading ? (
         <p className="font-sans text-sm text-muted">{t('loading')}</p>
       ) : po ? (
+        <>
         <PoDetailView
           po={po}
           locale={locale}
@@ -212,6 +216,19 @@ export function PoDetailModal({
             ) : null
           }
         />
+        <PoDeliverySchedulePanel
+          poId={po.id}
+          poStatus={po.status}
+          items={(po.items ?? []).map((item) => ({
+            id: item.id ?? 0,
+            name_snapshot: item.name_snapshot ?? item.name ?? undefined,
+            product: item.product ?? null,
+            qty: item.qty,
+            qty_received: (item as { qty_received?: number }).qty_received ?? 0,
+          }))}
+        />
+        <ProcurementAttachmentsPanel documentType="purchase_order" documentId={po.id} />
+        </>
       ) : (
         <p className="font-sans text-sm text-muted">{t('purchaseEmpty')}</p>
       )}

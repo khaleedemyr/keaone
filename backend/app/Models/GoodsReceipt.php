@@ -22,6 +22,9 @@ class GoodsReceipt extends Model
         'client_uuid',
         'status',
         'received_at',
+        'voided_by',
+        'voided_at',
+        'void_reason',
         'subtotal',
         'tax',
         'total',
@@ -32,6 +35,7 @@ class GoodsReceipt extends Model
     {
         return [
             'received_at' => 'datetime',
+            'voided_at' => 'datetime',
             'subtotal' => 'integer',
             'tax' => 'integer',
             'total' => 'integer',

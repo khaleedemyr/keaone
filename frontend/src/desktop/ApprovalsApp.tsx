@@ -108,11 +108,19 @@ export default function ApprovalsApp() {
 
   async function act(row: ApprovalItem, action: 'approve' | 'reject') {
     if (!canAct) return
-    if (row.type !== 'purchase_requisition' && row.type !== 'purchase_order') return
+    const isPr = row.type === 'purchase_requisition'
+    const isPo = row.type === 'purchase_order'
+    const isReturn = row.type === 'purchase_return'
+    const isInvoice = row.type === 'vendor_invoice'
+    const isPaymentBatch = row.type === 'vendor_payment_batch'
+    const isPrepayment = row.type === 'vendor_prepayment'
+    const isSimpleApprove =
+      isReturn || isInvoice || isPaymentBatch || isPrepayment
+    if (!isPr && !isPo && !isSimpleApprove) return
     const key = `${row.type}:${row.id}`
     const lines = drafts[key] ?? draftsFromRow(row)
 
-    if (action === 'approve') {
+    if (action === 'approve' && (isPr || isPo)) {
       if (lines.length === 0 || lines.some((line) => line.qty < 1)) {
         feedback.error(t('approvalsNeedOneItem'))
         return
@@ -128,14 +136,22 @@ export default function ApprovalsApp() {
 
     setBusyId(key)
     try {
-      const endpoint =
-        row.type === 'purchase_order'
-          ? `/purchase-orders/${row.id}`
-          : `/purchase-requisitions/${row.id}`
+      const endpoint = isPo
+        ? `/purchase-orders/${row.id}`
+        : isReturn
+          ? `/purchase-returns/${row.id}`
+          : isInvoice
+            ? `/vendor-invoices/${row.id}`
+            : isPaymentBatch
+              ? `/vendor-payment-batches/${row.id}`
+              : isPrepayment
+                ? `/vendor-prepayments/${row.id}`
+                : `/purchase-requisitions/${row.id}`
       if (action === 'approve') {
-        await api.post(`${endpoint}/approve`, {
-          items: lines.map((line) => ({ id: line.id, qty: line.qty })),
-        })
+        await api.post(
+          `${endpoint}/approve`,
+          isPr || isPo ? { items: lines.map((line) => ({ id: line.id, qty: line.qty })) } : {},
+        )
       } else {
         await api.post(`${endpoint}/reject`)
       }
@@ -151,6 +167,10 @@ export default function ApprovalsApp() {
   function kindLabel(type: string) {
     if (type === 'purchase_requisition') return t('approvalsKindPr')
     if (type === 'purchase_order') return t('approvalsKindPo')
+    if (type === 'purchase_return') return t('approvalsKindReturn')
+    if (type === 'vendor_invoice') return t('approvalsKindInvoice')
+    if (type === 'vendor_payment_batch') return t('approvalsKindPaymentBatch')
+    if (type === 'vendor_prepayment') return t('approvalsKindPrepayment')
     return type
   }
 
@@ -174,7 +194,8 @@ export default function ApprovalsApp() {
               const key = `${row.type}:${row.id}`
               const busy = busyId === key
               const lines = drafts[key] ?? draftsFromRow(row)
-              const editable = canAct && Boolean(row.can_approve)
+              const canApprove = canAct && Boolean(row.can_approve)
+              const editable = canApprove && row.type !== 'purchase_return' && row.type !== 'vendor_invoice' && row.type !== 'vendor_payment_batch' && row.type !== 'vendor_prepayment'
               return (
                 <article key={key} className="glass rounded-3xl p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -195,7 +216,7 @@ export default function ApprovalsApp() {
                         <p className="mt-2 text-sm text-fg">{row.payload.note}</p>
                       ) : null}
                     </div>
-                    {editable ? (
+                    {canApprove ? (
                       <div className="flex shrink-0 gap-2">
                         <button
                           type="button"

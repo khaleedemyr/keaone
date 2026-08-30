@@ -51,7 +51,11 @@ class ActivityLogger
         }
         if ($path === 'company/settings' && is_array($request->input('settings'))) {
             $keys = array_keys($request->input('settings'));
-            if ($keys !== [] && array_diff($keys, ['pos_mode']) === []) {
+            $procurementKeys = config('procurement.settings_keys', []);
+            if ($keys !== [] && array_diff($keys, $procurementKeys) === []) {
+                $described['menu_key'] = 'purchasesettings';
+                $described['summary'] = 'Ubah pengaturan procurement';
+            } elseif ($keys !== [] && array_diff($keys, ['pos_mode']) === []) {
                 $described['menu_key'] = 'possettings';
                 $described['summary'] = 'Ubah mode kasir';
             } elseif (in_array('receipt_layout', $keys, true)) {
@@ -116,7 +120,7 @@ class ActivityLogger
                 'account' => 'Membuka profil & tampilan',
                 'billing' => 'Membuka menu billing',
                 'logs' => 'Membuka log aktivitas',
-                'products' => 'Membuka menu produk',
+                'products' => 'Membuka menu item',
                 'categories' => 'Membuka menu kategori',
                 'subcategories' => 'Membuka menu sub kategori',
                 'units' => 'Membuka menu satuan',
@@ -132,6 +136,19 @@ class ActivityLogger
                 'purchase:pr' => 'Membuka permintaan pembelian',
                 'purchase:po' => 'Membuka pesanan pembelian',
                 'purchase:gr' => 'Membuka penerimaan barang',
+                'procurement:dashboard' => 'Membuka dasbor procurement',
+                'procurement:pr' => 'Membuka permintaan pembelian',
+                'procurement:po' => 'Membuka pesanan pembelian',
+                'procurement:gr' => 'Membuka penerimaan barang',
+                'procurement:direct' => 'Membuka pembelian langsung',
+                'procurement:return' => 'Membuka retur pembelian',
+                'procurement:adjustments' => 'Membuka nota debit/kredit',
+                'procurement:delivery' => 'Membuka jadwal pengiriman',
+                'procurement:invoices' => 'Membuka tagihan supplier',
+                'procurement:match' => 'Membuka three-way match',
+                'procurement:payments' => 'Membuka batch pembayaran supplier',
+                'procurement:prepayments' => 'Membuka uang muka supplier',
+                'procurement:settings' => 'Membuka pengaturan procurement',
                 'plans' => 'Membuka paket langganan',
                 'invoices' => 'Membuka faktur platform',
                 'types' => 'Membuka jenis usaha',
@@ -143,7 +160,17 @@ class ActivityLogger
                 'pr' => 'Lihat PR',
                 'po' => 'Lihat PO',
                 'gr' => 'Lihat penerimaan barang',
-                'product' => 'Lihat produk',
+                'purchasereturn' => 'Lihat retur pembelian',
+                'vendoradjustment' => 'Lihat nota debit/kredit',
+                'vendorinvoice' => 'Lihat tagihan supplier',
+                'vendorpaymentbatch' => 'Lihat batch pembayaran supplier',
+                'vendorprepayment' => 'Lihat uang muka supplier',
+                'vendorwithholding' => 'Lihat potong PPh supplier',
+                'procurementbudgets' => 'Lihat anggaran procurement',
+                'fixedassets' => 'Lihat aset tetap',
+                'rfqs' => 'Lihat RFQ',
+                'supplierpricelists' => 'Lihat daftar harga supplier',
+                'product' => 'Lihat item',
                 'sale' => 'Lihat penjualan',
                 'contact' => 'Lihat kontak',
                 'user' => 'Lihat pengguna',
@@ -158,8 +185,22 @@ class ActivityLogger
                 'po:edit' => 'Buka form ubah PO',
                 'gr:create' => 'Buka form buat penerimaan barang',
                 'gr:edit' => 'Buka form ubah penerimaan barang',
-                'product:create' => 'Buka form buat produk',
-                'product:edit' => 'Buka form ubah produk',
+                'purchasereturn:create' => 'Buka form buat retur pembelian',
+                'purchasereturn:edit' => 'Buka form ubah retur pembelian',
+                'vendoradjustment:create' => 'Buka form buat nota debit/kredit',
+                'vendoradjustment:edit' => 'Buka form ubah nota debit/kredit',
+                'vendorinvoice:create' => 'Buka form buat tagihan supplier',
+                'vendorinvoice:edit' => 'Buka form ubah tagihan supplier',
+                'vendorpaymentbatch:create' => 'Buka form buat batch pembayaran supplier',
+                'vendorpaymentbatch:edit' => 'Buka form ubah batch pembayaran supplier',
+                'vendorprepayment:create' => 'Buka form buat uang muka supplier',
+                'vendorprepayment:edit' => 'Buka form ubah uang muka supplier',
+                'rfq:create' => 'Buka form buat RFQ',
+                'rfq:edit' => 'Buka form ubah RFQ',
+                'supplierpricelist:create' => 'Buka form buat harga supplier',
+                'supplierpricelist:edit' => 'Buka form ubah harga supplier',
+                'product:create' => 'Buka form buat item',
+                'product:edit' => 'Buka form ubah item',
                 'category:create' => 'Buka form buat kategori',
                 'category:edit' => 'Buka form ubah kategori',
                 'subcategory:create' => 'Buka form buat sub kategori',
@@ -222,7 +263,7 @@ class ActivityLogger
         }
 
         return (bool) preg_match(
-            '#^(purchase-requisitions|purchase-orders|goods-receipts|products|sales|contacts|users|roles|outlets|dining-layouts|platform/(blog-posts|companies))/\d+$#',
+            '#^(purchase-requisitions|purchase-orders|goods-receipts|purchase-returns|vendor-adjustment-notes|vendor-invoices|vendor-payment-batches|vendor-prepayments|products|sales|contacts|users|roles|outlets|dining-layouts|platform/(blog-posts|companies))/\d+$#',
             $path,
         );
     }
@@ -291,13 +332,49 @@ class ActivityLogger
 
         $part = explode('/', $path)[0] ?: 'settings';
 
+        if ($part === 'procurement') {
+            return self::procurementMenuKey($path);
+        }
+
         return match ($part) {
             'choice-types' => 'choicetypes',
             'item-types' => 'itemtypes',
             'price-channels' => 'pricechannels',
             'dining-tables' => 'cafetables',
             'dining-layouts' => 'cafetables',
+            'purchase-requisitions' => 'purchaserequisitions',
+            'purchase-orders' => 'purchaseorders',
+            'goods-receipts' => 'goodsreceipts',
+            'purchase-returns' => 'purchasereturns',
+            'vendor-adjustment-notes' => 'vendoradjustmentnotes',
+            'vendor-invoices' => 'vendorinvoices',
+            'vendor-payment-batches' => 'vendorpaymentbatches',
+            'vendor-prepayments' => 'vendorprepayments',
+            'vendor-withholding' => 'vendorwithholding',
+            'gl-accounts' => 'glaccounts',
+            'gl-journals' => 'gljournals',
+            'budgets' => 'procurementbudgets',
+            'procurement-contracts' => 'procurementcontracts',
+            'approval-matrix' => 'approvalmatrix',
+            'approval-delegations' => 'approvaldelegations',
+            'procurement-plans' => 'procurementplans',
+            'assets' => 'fixedassets',
+            'rfqs' => 'rfqs',
+            'supplier-product-prices' => 'supplierpricelists',
+            'match-exceptions' => 'matchexceptions',
             default => $part,
+        };
+    }
+
+    private static function procurementMenuKey(string $path): string
+    {
+        $sub = explode('/', $path)[1] ?? '';
+
+        return match ($sub) {
+            'dashboard' => 'procurementdashboard',
+            'delivery-schedules' => 'deliveryschedules',
+            'attachments' => 'procurementdashboard',
+            default => 'procurementdashboard',
         };
     }
 
@@ -321,14 +398,32 @@ class ActivityLogger
             };
         }
 
-        if (str_starts_with($target, 'purchase:')) {
-            $section = substr($target, 9);
+        if (str_starts_with($target, 'purchase:') || str_starts_with($target, 'procurement:')) {
+            $prefixLen = str_starts_with($target, 'procurement:') ? 12 : 9;
+            $section = substr($target, $prefixLen);
 
             return match ($section) {
+                'dashboard' => 'procurementdashboard',
                 'pr' => 'purchaserequisitions',
                 'po' => 'purchaseorders',
-                'gr' => 'goodsreceipts',
-                default => 'purchaserequisitions',
+                'gr', 'direct' => 'goodsreceipts',
+                'return' => 'purchasereturns',
+                'adjustments' => 'vendoradjustmentnotes',
+                'delivery' => 'deliveryschedules',
+                'invoices' => 'vendorinvoices',
+                'match' => 'matchexceptions',
+                'payments' => 'vendorpaymentbatches',
+                'prepayments' => 'vendorprepayments',
+                'withholding' => 'vendorwithholding',
+                'journals' => 'gljournals',
+                'budgets' => 'procurementbudgets',
+                'contracts' => 'procurementcontracts',
+                'plans' => 'procurementplans',
+                'assets' => 'fixedassets',
+                'rfqs' => 'rfqs',
+                'vendorpricelists' => 'supplierpricelists',
+                'settings' => 'purchasesettings',
+                default => 'procurementdashboard',
             };
         }
 
@@ -339,6 +434,11 @@ class ActivityLogger
                 'pr' => 'purchaserequisitions',
                 'po' => 'purchaseorders',
                 'gr' => 'goodsreceipts',
+                'purchasereturn' => 'purchasereturns',
+                'vendoradjustment' => 'vendoradjustmentnotes',
+                'vendorinvoice' => 'vendorinvoices',
+                'vendorpaymentbatch' => 'vendorpaymentbatches',
+                'vendorprepayment' => 'vendorprepayments',
                 'product' => 'products',
                 'category' => 'categories',
                 'subcategory' => 'subcategories',
@@ -585,6 +685,8 @@ class ActivityLogger
             'ordered_at' => 'Tanggal pesan',
             'is_active' => 'Status aktif',
             'track_stock' => 'Lacak stok',
+            'is_procurement_item' => 'Item procurement',
+            'is_fixed_asset_item' => 'Aset tetap',
             'min_stock' => 'Stok minimum',
             'category_id' => 'Kategori',
             'sub_category_id' => 'Sub kategori',
@@ -608,6 +710,15 @@ class ActivityLogger
             'entity' => 'Entitas',
             'show_pos' => 'Tampil di POS',
             'is_raw_material' => 'Bahan baku',
+            'vendor_ref' => 'Ref supplier',
+            'invoice_date' => 'Tanggal tagihan',
+            'due_date' => 'Jatuh tempo',
+            'match_status' => 'Status match',
+            'payment_status' => 'Status pembayaran',
+            'payment_method' => 'Metode pembayaran',
+            'reason' => 'Alasan',
+            'amount_applied' => 'Jumlah dialokasikan',
+            'procurement_match_mode' => 'Mode match procurement',
             'is_taxable' => 'Kena pajak',
             'is_default' => 'Default',
             'username' => 'Username',
@@ -627,7 +738,7 @@ class ActivityLogger
             return '—';
         }
 
-        if ($field === 'is_active' || $field === 'track_stock') {
+        if ($field === 'is_active' || $field === 'track_stock' || $field === 'is_procurement_item' || $field === 'is_fixed_asset_item') {
             return filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 'Ya' : 'Tidak';
         }
 
@@ -801,12 +912,23 @@ class ActivityLogger
             ['POST', 'suppliers', 'suppliers', 'create', 'Tambah pemasok'],
             ['PUT', 'suppliers/*', 'suppliers', 'edit', 'Ubah pemasok'],
             ['DELETE', 'suppliers/*', 'suppliers', 'edit', 'Nonaktifkan pemasok'],
-            ['POST', 'products', 'products', 'create', 'Tambah produk'],
-            ['POST', 'products/*/images/*/primary', 'products', 'edit', 'Atur foto utama produk'],
-            ['POST', 'products/*/images', 'products', 'edit', 'Unggah foto produk'],
-            ['DELETE', 'products/*/images/*', 'products', 'edit', 'Hapus foto produk'],
-            ['PUT', 'products/*', 'products', 'edit', 'Ubah produk'],
-            ['DELETE', 'products/*', 'products', 'edit', 'Nonaktifkan produk'],
+            ['GET', 'suppliers/compliance-alerts', 'suppliers', 'view', 'Lihat alert compliance pemasok'],
+            ['GET', 'suppliers/*', 'suppliers', 'view', 'Lihat detail pemasok'],
+            ['POST', 'suppliers/*/suspend', 'suppliers', 'edit', 'Suspend pemasok'],
+            ['POST', 'suppliers/*/blacklist', 'suppliers', 'edit', 'Blacklist pemasok'],
+            ['POST', 'suppliers/*/reactivate', 'suppliers', 'edit', 'Aktifkan kembali pemasok'],
+            ['POST', 'suppliers/*/approve-onboarding', 'suppliers', 'edit', 'Setujui onboarding pemasok'],
+            ['POST', 'suppliers/*/portal-token', 'suppliers', 'edit', 'Buat token portal pemasok'],
+            ['POST', 'suppliers/*/documents/*', 'suppliers', 'edit', 'Unggah dokumen pemasok'],
+            ['DELETE', 'suppliers/*/documents/*', 'suppliers', 'edit', 'Hapus dokumen pemasok'],
+            ['POST', 'public/vendor-portal/*/purchase-orders/*/confirm', 'suppliers', 'view', 'Konfirmasi PO via portal vendor'],
+            ['POST', 'public/vendor-portal/*/purchase-orders/*/invoices', 'suppliers', 'view', 'Upload invoice via portal vendor'],
+            ['POST', 'products', 'products', 'create', 'Tambah item'],
+            ['POST', 'products/*/images/*/primary', 'products', 'edit', 'Atur foto utama item'],
+            ['POST', 'products/*/images', 'products', 'edit', 'Unggah foto item'],
+            ['DELETE', 'products/*/images/*', 'products', 'edit', 'Hapus foto item'],
+            ['PUT', 'products/*', 'products', 'edit', 'Ubah item'],
+            ['DELETE', 'products/*', 'products', 'edit', 'Nonaktifkan item'],
             ['POST', 'contacts', 'contacts', 'create', 'Tambah kontak'],
             ['PUT', 'contacts/*', 'contacts', 'edit', 'Ubah kontak'],
             ['POST', 'sales', 'pos', 'create', 'Buat penjualan'],
@@ -823,7 +945,7 @@ class ActivityLogger
             ['GET', 'purchase-requisitions/*', 'purchaserequisitions', 'view', 'Lihat PR'],
             ['GET', 'purchase-orders/*', 'purchaseorders', 'view', 'Lihat PO'],
             ['GET', 'goods-receipts/*', 'goodsreceipts', 'view', 'Lihat penerimaan barang'],
-            ['GET', 'products/*', 'products', 'view', 'Lihat produk'],
+            ['GET', 'products/*', 'products', 'view', 'Lihat item'],
 
             ['POST', 'purchase-requisitions', 'purchaserequisitions', 'create', 'Buat PR'],
             ['PUT', 'purchase-requisitions/*', 'purchaserequisitions', 'edit', 'Ubah PR'],
@@ -845,7 +967,154 @@ class ActivityLogger
             ['POST', 'goods-receipts', 'goodsreceipts', 'create', 'Buat penerimaan barang'],
             ['PUT', 'goods-receipts/*', 'goodsreceipts', 'edit', 'Ubah penerimaan barang'],
             ['POST', 'goods-receipts/*/confirm', 'goodsreceipts', 'edit', 'Konfirmasi penerimaan barang'],
+            ['POST', 'goods-receipts/*/void', 'goodsreceipts', 'edit', 'Batalkan (void) penerimaan barang'],
             ['POST', 'goods-receipts/*/cancel', 'goodsreceipts', 'delete', 'Batalkan penerimaan barang'],
+
+            ['POST', 'purchase-orders/*/close', 'purchaseorders', 'edit', 'Tutup PO'],
+
+            ['GET', 'procurement/dashboard', 'procurementdashboard', 'view', 'Lihat dasbor procurement'],
+            ['GET', 'procurement/reports', 'procurementreports', 'view', 'Lihat laporan procurement'],
+            ['GET', 'procurement/delivery-schedules', 'deliveryschedules', 'view', 'Lihat jadwal pengiriman'],
+            ['GET', 'purchase-returns/*', 'purchasereturns', 'view', 'Lihat retur pembelian'],
+            ['GET', 'vendor-adjustment-notes/*', 'vendoradjustmentnotes', 'view', 'Lihat nota debit/kredit'],
+            ['GET', 'vendor-invoices/*', 'vendorinvoices', 'view', 'Lihat tagihan supplier'],
+            ['GET', 'vendor-payment-batches/*', 'vendorpaymentbatches', 'view', 'Lihat batch pembayaran supplier'],
+            ['GET', 'vendor-prepayments/*', 'vendorprepayments', 'view', 'Lihat uang muka supplier'],
+
+            ['POST', 'purchase-returns', 'purchasereturns', 'create', 'Buat retur pembelian'],
+            ['PUT', 'purchase-returns/*', 'purchasereturns', 'edit', 'Ubah retur pembelian'],
+            ['POST', 'purchase-returns/*/submit', 'purchasereturns', 'edit', 'Ajukan retur pembelian'],
+            ['POST', 'purchase-returns/*/approve', 'purchasereturns', 'edit', 'Setujui retur pembelian'],
+            ['POST', 'purchase-returns/*/reject', 'purchasereturns', 'edit', 'Tolak retur pembelian'],
+            ['POST', 'purchase-returns/*/confirm', 'purchasereturns', 'edit', 'Konfirmasi retur pembelian'],
+            ['POST', 'purchase-returns/*/cancel', 'purchasereturns', 'delete', 'Batalkan retur pembelian'],
+
+            ['POST', 'vendor-adjustment-notes', 'vendoradjustmentnotes', 'create', 'Buat nota debit/kredit'],
+            ['PUT', 'vendor-adjustment-notes/*', 'vendoradjustmentnotes', 'edit', 'Ubah nota debit/kredit'],
+            ['POST', 'vendor-adjustment-notes/*/confirm', 'vendoradjustmentnotes', 'edit', 'Konfirmasi nota debit/kredit'],
+            ['POST', 'vendor-adjustment-notes/*/cancel', 'vendoradjustmentnotes', 'delete', 'Batalkan nota debit/kredit'],
+
+            ['POST', 'purchase-orders/*/delivery-schedules', 'deliveryschedules', 'create', 'Tambah jadwal pengiriman'],
+            ['PUT', 'purchase-orders/*/delivery-schedules/*', 'deliveryschedules', 'edit', 'Ubah jadwal pengiriman'],
+            ['POST', 'purchase-orders/*/delivery-schedules/*/fulfill', 'deliveryschedules', 'edit', 'Tandai jadwal pengiriman selesai'],
+            ['POST', 'purchase-orders/*/delivery-schedules/*/cancel', 'deliveryschedules', 'edit', 'Batalkan jadwal pengiriman'],
+            ['DELETE', 'purchase-orders/*/delivery-schedules/*', 'deliveryschedules', 'delete', 'Hapus jadwal pengiriman'],
+
+            ['POST', 'vendor-invoices', 'vendorinvoices', 'create', 'Buat tagihan supplier'],
+            ['PUT', 'vendor-invoices/*', 'vendorinvoices', 'edit', 'Ubah tagihan supplier'],
+            ['POST', 'vendor-invoices/*/submit', 'vendorinvoices', 'edit', 'Ajukan tagihan supplier'],
+            ['POST', 'vendor-invoices/*/approve', 'vendorinvoices', 'edit', 'Setujui tagihan supplier'],
+            ['POST', 'vendor-invoices/*/reject', 'vendorinvoices', 'edit', 'Tolak tagihan supplier'],
+            ['POST', 'vendor-invoices/*/confirm', 'vendorinvoices', 'edit', 'Konfirmasi tagihan supplier'],
+            ['POST', 'vendor-invoices/*/cancel', 'vendorinvoices', 'delete', 'Batalkan tagihan supplier'],
+            ['POST', 'vendor-invoices/*/match', 'vendorinvoices', 'edit', 'Jalankan three-way match'],
+
+            ['POST', 'match-exceptions/*/waive', 'matchexceptions', 'edit', 'Waive exception match'],
+
+            ['POST', 'vendor-payment-batches', 'vendorpaymentbatches', 'create', 'Buat batch pembayaran supplier'],
+            ['PUT', 'vendor-payment-batches/*', 'vendorpaymentbatches', 'edit', 'Ubah batch pembayaran supplier'],
+            ['POST', 'vendor-payment-batches/*/submit', 'vendorpaymentbatches', 'edit', 'Ajukan batch pembayaran supplier'],
+            ['POST', 'vendor-payment-batches/*/approve', 'vendorpaymentbatches', 'edit', 'Setujui batch pembayaran supplier'],
+            ['POST', 'vendor-payment-batches/*/reject', 'vendorpaymentbatches', 'edit', 'Tolak batch pembayaran supplier'],
+            ['POST', 'vendor-payment-batches/*/pay', 'vendorpaymentbatches', 'edit', 'Bayar batch supplier'],
+            ['POST', 'vendor-payment-batches/*/cancel', 'vendorpaymentbatches', 'delete', 'Batalkan batch pembayaran supplier'],
+
+            ['POST', 'vendor-prepayments', 'vendorprepayments', 'create', 'Buat uang muka supplier'],
+            ['PUT', 'vendor-prepayments/*', 'vendorprepayments', 'edit', 'Ubah uang muka supplier'],
+            ['POST', 'vendor-prepayments/*/submit', 'vendorprepayments', 'edit', 'Ajukan uang muka supplier'],
+            ['POST', 'vendor-prepayments/*/approve', 'vendorprepayments', 'edit', 'Setujui uang muka supplier'],
+            ['POST', 'vendor-prepayments/*/reject', 'vendorprepayments', 'edit', 'Tolak uang muka supplier'],
+            ['POST', 'vendor-prepayments/*/pay', 'vendorprepayments', 'edit', 'Bayar uang muka supplier'],
+            ['POST', 'vendor-prepayments/*/apply', 'vendorprepayments', 'edit', 'Alokasikan uang muka ke invoice'],
+            ['POST', 'vendor-prepayments/*/cancel', 'vendorprepayments', 'delete', 'Batalkan uang muka supplier'],
+
+            ['GET', 'vendor-withholding', 'vendorwithholding', 'view', 'Lihat potong PPh supplier'],
+            ['POST', 'vendor-withholding/*/remit', 'vendorwithholding', 'edit', 'Tandai PPh disetor'],
+
+            ['GET', 'gl-accounts', 'glaccounts', 'view', 'Lihat akun GL'],
+            ['POST', 'gl-accounts', 'glaccounts', 'create', 'Buat akun GL'],
+            ['PUT', 'gl-accounts/*', 'glaccounts', 'edit', 'Ubah akun GL'],
+            ['DELETE', 'gl-accounts/*', 'glaccounts', 'delete', 'Nonaktifkan akun GL'],
+            ['GET', 'gl-journals', 'gljournals', 'view', 'Lihat jurnal GL'],
+            ['GET', 'gl-journals/*', 'gljournals', 'view', 'Detail jurnal GL'],
+
+            ['GET', 'budgets', 'procurementbudgets', 'view', 'Lihat anggaran procurement'],
+            ['POST', 'budgets', 'procurementbudgets', 'create', 'Buat anggaran procurement'],
+            ['PUT', 'budgets/*', 'procurementbudgets', 'edit', 'Ubah anggaran procurement'],
+            ['DELETE', 'budgets/*', 'procurementbudgets', 'delete', 'Hapus anggaran procurement'],
+            ['POST', 'budgets/*/activate', 'procurementbudgets', 'edit', 'Aktifkan anggaran procurement'],
+            ['POST', 'budgets/*/close', 'procurementbudgets', 'edit', 'Tutup anggaran procurement'],
+            ['GET', 'budgets/*/commitments', 'procurementbudgets', 'view', 'Lihat komitmen anggaran'],
+
+            ['GET', 'procurement-contracts', 'procurementcontracts', 'view', 'Lihat kontrak procurement'],
+            ['POST', 'procurement-contracts', 'procurementcontracts', 'create', 'Buat kontrak procurement'],
+            ['GET', 'procurement-contracts/*', 'procurementcontracts', 'view', 'Detail kontrak procurement'],
+            ['PUT', 'procurement-contracts/*', 'procurementcontracts', 'edit', 'Ubah kontrak procurement'],
+            ['DELETE', 'procurement-contracts/*', 'procurementcontracts', 'delete', 'Hapus kontrak procurement'],
+            ['POST', 'procurement-contracts/*/activate', 'procurementcontracts', 'edit', 'Aktifkan kontrak procurement'],
+            ['POST', 'procurement-contracts/*/close', 'procurementcontracts', 'edit', 'Tutup kontrak procurement'],
+            ['POST', 'procurement-contracts/*/cancel', 'procurementcontracts', 'edit', 'Batalkan kontrak procurement'],
+            ['POST', 'procurement-contracts/*/release-po', 'procurementcontracts', 'edit', 'Release PO dari kontrak'],
+
+            ['GET', 'procurement-plans', 'procurementplans', 'view', 'Lihat rencana procurement'],
+            ['POST', 'procurement-plans', 'procurementplans', 'create', 'Buat rencana procurement'],
+            ['GET', 'procurement-plans/*', 'procurementplans', 'view', 'Detail rencana procurement'],
+            ['PUT', 'procurement-plans/*', 'procurementplans', 'edit', 'Ubah rencana procurement'],
+            ['DELETE', 'procurement-plans/*', 'procurementplans', 'delete', 'Hapus rencana procurement'],
+            ['POST', 'procurement-plans/*/activate', 'procurementplans', 'edit', 'Aktifkan rencana procurement'],
+            ['POST', 'procurement-plans/*/close', 'procurementplans', 'edit', 'Tutup rencana procurement'],
+
+            ['GET', 'approval-matrix', 'approvalmatrix', 'view', 'Lihat matrix approval'],
+            ['POST', 'approval-matrix', 'approvalmatrix', 'create', 'Buat aturan matrix approval'],
+            ['GET', 'approval-matrix/*', 'approvalmatrix', 'view', 'Detail matrix approval'],
+            ['PUT', 'approval-matrix/*', 'approvalmatrix', 'edit', 'Ubah matrix approval'],
+            ['DELETE', 'approval-matrix/*', 'approvalmatrix', 'delete', 'Hapus matrix approval'],
+
+            ['GET', 'approval-delegations', 'approvaldelegations', 'view', 'Lihat delegasi approval'],
+            ['POST', 'approval-delegations', 'approvaldelegations', 'create', 'Buat delegasi approval'],
+            ['GET', 'approval-delegations/*', 'approvaldelegations', 'view', 'Detail delegasi approval'],
+            ['PUT', 'approval-delegations/*', 'approvaldelegations', 'edit', 'Ubah delegasi approval'],
+            ['DELETE', 'approval-delegations/*', 'approvaldelegations', 'delete', 'Hapus delegasi approval'],
+
+            ['GET', 'purchase-requisitions/*/field-audits', 'purchaserequisitions', 'view', 'Audit field PR'],
+            ['GET', 'purchase-orders/*/field-audits', 'purchaseorders', 'view', 'Audit field PO'],
+
+            ['GET', 'procurement-planning/auto-reorder/preview', 'procurementdashboard', 'view', 'Preview auto-reorder'],
+            ['POST', 'procurement-planning/auto-reorder/run', 'procurementdashboard', 'edit', 'Jalankan auto-reorder'],
+            ['GET', 'procurement-planning/demand/forecasts', 'procurementdashboard', 'view', 'Lihat forecast demand'],
+            ['POST', 'procurement-planning/demand/generate', 'procurementdashboard', 'edit', 'Generate forecast demand'],
+            ['POST', 'procurement-planning/demand/suggest-pr', 'procurementdashboard', 'edit', 'Buat PR dari forecast'],
+
+            ['GET', 'goods-receipts/*/landed-cost', 'goodsreceipts', 'view', 'Lihat landed cost GR'],
+            ['PUT', 'goods-receipts/*/landed-cost', 'goodsreceipts', 'edit', 'Ubah landed cost GR'],
+
+            ['GET', 'rfqs', 'rfqs', 'view', 'Lihat RFQ'],
+            ['POST', 'rfqs', 'rfqs', 'create', 'Buat RFQ'],
+            ['GET', 'rfqs/*', 'rfqs', 'view', 'Detail RFQ'],
+            ['PUT', 'rfqs/*', 'rfqs', 'edit', 'Ubah RFQ'],
+            ['DELETE', 'rfqs/*', 'rfqs', 'delete', 'Hapus RFQ'],
+            ['POST', 'rfqs/*/send', 'rfqs', 'edit', 'Kirim RFQ'],
+            ['POST', 'rfqs/*/close', 'rfqs', 'edit', 'Tutup RFQ'],
+            ['POST', 'rfqs/*/cancel', 'rfqs', 'edit', 'Batalkan RFQ'],
+            ['GET', 'rfqs/*/compare', 'rfqs', 'view', 'Banding quote RFQ'],
+            ['PUT', 'rfqs/*/quotes/*', 'rfqs', 'edit', 'Input quote supplier'],
+            ['POST', 'rfqs/*/quotes/*/submit', 'rfqs', 'edit', 'Ajukan quote supplier'],
+            ['POST', 'rfqs/*/select-winner', 'rfqs', 'edit', 'Pilih pemenang quote'],
+            ['POST', 'rfqs/*/create-pr', 'rfqs', 'edit', 'Buat PR dari RFQ'],
+
+            ['GET', 'assets', 'fixedassets', 'view', 'Lihat aset tetap'],
+            ['GET', 'assets/*', 'fixedassets', 'view', 'Detail aset tetap'],
+            ['PUT', 'assets/*', 'fixedassets', 'edit', 'Ubah aset tetap'],
+
+            ['GET', 'supplier-product-prices', 'supplierpricelists', 'view', 'Lihat daftar harga supplier'],
+            ['POST', 'supplier-product-prices', 'supplierpricelists', 'create', 'Buat harga supplier'],
+            ['GET', 'supplier-product-prices/*', 'supplierpricelists', 'view', 'Detail harga supplier'],
+            ['PUT', 'supplier-product-prices/*', 'supplierpricelists', 'edit', 'Ubah harga supplier'],
+            ['DELETE', 'supplier-product-prices/*', 'supplierpricelists', 'delete', 'Hapus harga supplier'],
+            ['GET', 'supplier-product-prices/lookup', 'supplierpricelists', 'view', 'Lookup harga supplier'],
+
+            ['POST', 'procurement/attachments', 'procurementdashboard', 'create', 'Unggah lampiran procurement'],
+            ['DELETE', 'procurement/attachments/*', 'procurementdashboard', 'delete', 'Hapus lampiran procurement'],
         ];
     }
 }

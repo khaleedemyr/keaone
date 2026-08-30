@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\ModuleCatalog;
+use App\Support\ProcurementSettings;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -71,17 +72,13 @@ class Company extends Model
 
     public function defaultSettings(): array
     {
-        return [
+        return array_merge([
             'tax_percent' => 0,
             'allow_credit' => true,
             'receipt_width' => 80,
             'receipt_footer' => 'Terima kasih',
             'pos_mode' => 'retail',
-            'purchase_flow' => 'direct',
-            'purchase_update_cost' => true,
-            'pr_need_approval' => false,
-            'po_need_approval' => false,
-        ];
+        ], ProcurementSettings::defaults());
     }
 
     /**

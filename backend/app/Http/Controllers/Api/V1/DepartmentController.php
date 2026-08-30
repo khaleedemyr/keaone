@@ -14,7 +14,13 @@ class DepartmentController extends Controller
     public function index(Request $request): JsonResponse
     {
         if ($request->boolean('for_select')) {
-            $this->ensureCanAny(['departments', 'users']);
+            $this->ensureCanAny([
+                'departments',
+                'users',
+                'purchaserequisitions',
+                'purchaseorders',
+                'approvalmatrix',
+            ]);
         } else {
             $this->ensureCan('departments', 'view');
         }

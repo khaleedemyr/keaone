@@ -14,7 +14,10 @@ class PurchaseRequisition extends Model
     protected $fillable = [
         'company_id',
         'outlet_id',
+        'department_id',
         'warehouse_id',
+        'rfq_id',
+        'vendor_quote_id',
         'user_id',
         'number',
         'client_uuid',
@@ -69,6 +72,21 @@ class PurchaseRequisition extends Model
     public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    public function rfq(): BelongsTo
+    {
+        return $this->belongsTo(Rfq::class);
+    }
+
+    public function vendorQuote(): BelongsTo
+    {
+        return $this->belongsTo(VendorQuote::class);
     }
 
     public function company(): BelongsTo

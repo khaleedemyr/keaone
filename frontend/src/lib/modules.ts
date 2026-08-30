@@ -41,7 +41,26 @@ export function moduleForMenu(menu: string): ModuleKey | null {
   if (
     menu === 'purchaserequisitions' ||
     menu === 'purchaseorders' ||
-    menu === 'goodsreceipts'
+    menu === 'goodsreceipts' ||
+    menu === 'purchasereturns' ||
+    menu === 'vendoradjustmentnotes' ||
+    menu === 'deliveryschedules' ||
+    menu === 'vendorinvoices' ||
+    menu === 'matchexceptions' ||
+    menu === 'vendorpaymentbatches' ||
+    menu === 'vendorprepayments' ||
+    menu === 'vendorwithholding' ||
+    menu === 'glaccounts' ||
+    menu === 'gljournals' ||
+    menu === 'procurementbudgets' ||
+    menu === 'procurementcontracts' ||
+    menu === 'procurementplans' ||
+    menu === 'fixedassets' ||
+    menu === 'rfqs' ||
+    menu === 'supplierpricelists' ||
+    menu === 'procurementdashboard' ||
+    menu === 'procurementreports' ||
+    menu === 'purchasesettings'
   ) {
     return 'purchase'
   }

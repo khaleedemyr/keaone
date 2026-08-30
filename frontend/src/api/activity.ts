@@ -35,6 +35,13 @@ export type MasterFormEntity =
   | 'pr'
   | 'po'
   | 'gr'
+  | 'purchasereturn'
+  | 'vendoradjustment'
+  | 'vendorinvoice'
+  | 'vendorpaymentbatch'
+  | 'vendorprepayment'
+  | 'rfq'
+  | 'supplierpricelist'
 
 export function logActivity(kind: ActivityKind, target: string, ref?: string) {
   if (typeof localStorage === 'undefined' || !sessionGet(TOKEN_KEY)) return

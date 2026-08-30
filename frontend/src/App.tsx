@@ -14,6 +14,7 @@ import Register from './pages/Register'
 import PublicPoPage from './pages/PublicPoPage'
 import PublicPrPage from './pages/PublicPrPage'
 import PublicInvitePage from './pages/PublicInvitePage'
+import PublicVendorPortalPage from './pages/PublicVendorPortalPage'
 import { useUiSkin } from './uiSkin'
 import { MasterTableLabels } from './components/MasterTableLabels'
 
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/po/:token" element={<PublicPoPage />} />
           <Route path="/pr/:token" element={<PublicPrPage />} />
           <Route path="/invite/:token" element={<PublicInvitePage />} />
+          <Route path="/vendor-portal/:token" element={<PublicVendorPortalPage />} />
           <Route path="/platform" element={<Navigate to="/app" replace />} />
           <Route
             path="/app"

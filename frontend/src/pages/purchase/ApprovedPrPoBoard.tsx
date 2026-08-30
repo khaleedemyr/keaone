@@ -5,8 +5,10 @@ import { formatDate, formatRupiah } from '../../lib/money'
 import type { ApiOk, Member, Outlet, Party } from '../../types'
 import { MasterModal } from '../../components/MasterModal'
 import { SearchSelect } from '../../components/SearchSelect'
+import { AutocompleteSelect } from '../../components/AutocompleteSelect'
 import { useSupplierSelect } from './useSupplierSelect'
 import { PoTotalsSummary } from './PoTotalsSummary'
+import { approvalRowLabel, buildApproverMemberOptions } from './approverOptions'
 import { useFeedback } from '../../components/feedback'
 import { useAccess } from '../../access'
 import { useAuth } from '../../auth'
@@ -57,6 +59,7 @@ type ApprovalDraft = {
   key: string
   user_id: number
   name: string
+  position?: string | null
 }
 
 function uuid() {
@@ -111,21 +114,16 @@ export function ApprovedPrPoBoard({ onCreated }: { onCreated?: () => void }) {
   const [sameSupplier, setSameSupplier] = useState(true)
   const [sharedSupplierId, setSharedSupplierId] = useState('')
   const [approvers, setApprovers] = useState<ApprovalDraft[]>([])
-  const [approverPick, setApproverPick] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const { options: supplierOptions } = useSupplierSelect(suppliers)
 
   const memberOptions = useMemo(
-    () =>
-      members
-        .filter((m) => m.is_active && !approvers.some((a) => a.user_id === m.id))
-        .map((m) => ({
-          value: String(m.id),
-          label: `${m.name}${m.role ? ` · ${m.role}` : ''}`,
-          keywords: `${m.email ?? ''} ${m.username ?? ''}`,
-        })),
+    () => buildApproverMemberOptions(
+      members,
+      approvers.map((row) => row.user_id),
+    ),
     [members, approvers],
   )
 
@@ -183,7 +181,6 @@ export function ApprovedPrPoBoard({ onCreated }: { onCreated?: () => void }) {
     setSameSupplier(true)
     setSharedSupplierId('')
     setApprovers([])
-    setApproverPick('')
     setLines(
       (pr.items ?? []).map((item) => ({
         id: item.id,
@@ -210,7 +207,6 @@ export function ApprovedPrPoBoard({ onCreated }: { onCreated?: () => void }) {
     setSharedSupplierId('')
     setSameSupplier(true)
     setApprovers([])
-    setApproverPick('')
   }
 
   function patchLine(id: number, patch: Partial<LineEdit>) {
@@ -237,11 +233,17 @@ export function ApprovedPrPoBoard({ onCreated }: { onCreated?: () => void }) {
     const id = Number(userId)
     const member = members.find((m) => m.id === id)
     if (!member || approvers.some((a) => a.user_id === id)) {
-      setApproverPick('')
       return
     }
-    setApprovers((current) => [...current, { key: uuid(), user_id: member.id, name: member.name }])
-    setApproverPick('')
+    setApprovers((current) => [
+      ...current,
+      {
+        key: uuid(),
+        user_id: member.id,
+        name: member.name,
+        position: member.position?.name ?? null,
+      },
+    ])
   }
 
   function moveApprover(index: number, dir: -1 | 1) {
@@ -465,15 +467,12 @@ export function ApprovedPrPoBoard({ onCreated }: { onCreated?: () => void }) {
                 <div className="mb-2 text-[11px] text-muted">{t('purchaseApproversHint')}</div>
                 <div className="mb-2 flex gap-2">
                   <div className="min-w-0 flex-1">
-                    <SearchSelect
+                    <AutocompleteSelect
+                      key={active?.id ?? 'new'}
                       className="!mt-0"
-                      value={approverPick}
-                      onChange={(value) => {
-                        setApproverPick(value)
-                        if (value) addApprover(value)
-                      }}
                       options={memberOptions}
                       placeholder={t('purchaseSearchApprover')}
+                      onSelect={addApprover}
                     />
                   </div>
                 </div>
@@ -483,7 +482,7 @@ export function ApprovedPrPoBoard({ onCreated }: { onCreated?: () => void }) {
                       <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-muted">
                         {t('purchaseApprovalLevel', { n: String(index + 1) })}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-fg">{row.name}</span>
+                      <span className="min-w-0 flex-1 truncate text-fg">{approvalRowLabel(row)}</span>
                       <button
                         type="button"
                         className="btn-ghost !px-2 !text-xs"

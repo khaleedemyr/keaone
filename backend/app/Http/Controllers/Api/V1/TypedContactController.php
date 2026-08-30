@@ -77,7 +77,15 @@ abstract class TypedContactController extends Controller
 
     private function validated(Request $request, bool $update = false): array
     {
-        $data = $request->validate(Contact::profileRules($update));
+        $rules = Contact::profileRules($update);
+        if (method_exists($this, 'extraRules')) {
+            $rules = array_merge($rules, $this->extraRules($update));
+        }
+
+        $data = $request->validate($rules);
+        if (method_exists($this, 'afterValidate')) {
+            $this->afterValidate($data, $update);
+        }
         if (array_key_exists('custom_fields', $data) || ! $update) {
             $data['custom_fields'] = app(CustomFieldService::class)
                 ->normalize($this->contactType(), $data['custom_fields'] ?? []);

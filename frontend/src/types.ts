@@ -190,8 +190,52 @@ export type Settings = {
   pos_mode?: PosMode
   purchase_flow?: 'strict_pr_po_gr' | 'po_gr' | 'direct'
   purchase_update_cost?: boolean
+  po_auto_close_on_full_receive?: boolean
   pr_need_approval?: boolean
   po_need_approval?: boolean
+  return_enabled?: boolean
+  return_need_approval?: boolean
+  gr_reversal_enabled?: boolean
+  vendor_adjustment_enabled?: boolean
+  delivery_schedule_enabled?: boolean
+  procurement_attachments_enabled?: boolean
+  procurement_cost_center_enabled?: boolean
+  vendor_invoice_enabled?: boolean
+  vendor_invoice_need_approval?: boolean
+  vendor_payment_batch_need_approval?: boolean
+  vendor_prepayment_need_approval?: boolean
+  procurement_match_enabled?: boolean
+  procurement_two_way_match_enabled?: boolean
+  vendor_payment_batch_enabled?: boolean
+  vendor_prepayment_enabled?: boolean
+  procurement_withholding_tax_enabled?: boolean
+  procurement_gl_posting_enabled?: boolean
+  procurement_budget_check_enabled?: boolean
+  procurement_rfq_enabled?: boolean
+  procurement_vendor_price_list_enabled?: boolean
+  procurement_contract_enabled?: boolean
+  procurement_auto_reorder_enabled?: boolean
+  procurement_demand_planning_enabled?: boolean
+  procurement_annual_plan_enabled?: boolean
+  procurement_landed_cost_enabled?: boolean
+  procurement_approval_mode?: 'manual' | 'matrix'
+  procurement_approval_parallel_enabled?: boolean
+  procurement_approval_delegation_enabled?: boolean
+  procurement_approval_escalation_enabled?: boolean
+  procurement_approval_sla_days?: number
+  procurement_sod_creator_approver?: boolean
+  procurement_sod_approver_receiver?: boolean
+  procurement_field_audit_enabled?: boolean
+  gl_procurement_inventory_account_id?: number | null
+  gl_procurement_grni_account_id?: number | null
+  gl_procurement_ap_account_id?: number | null
+  gl_procurement_vat_input_account_id?: number | null
+  gl_procurement_cash_account_id?: number | null
+  gl_procurement_bank_account_id?: number | null
+  gl_procurement_wht_payable_account_id?: number | null
+  gl_procurement_expense_account_id?: number | null
+  procurement_match_qty_tolerance?: number
+  procurement_match_price_tolerance?: number
   receipt_layout?: import('./lib/receiptLayout').ReceiptLayout
 }
 
@@ -259,6 +303,18 @@ export type Category = {
   is_active: boolean
   show_pos?: boolean
   is_raw_material?: boolean
+  procurement_match_mode?: 'three_way' | 'two_way'
+  preferred_supplier_id?: number | null
+  preferred_supplier?: { id: number; name: string } | null
+}
+
+export type GlAccount = {
+  id: number
+  code: string
+  name: string
+  account_type: string
+  is_active: boolean
+  is_system?: boolean
 }
 
 export type Unit = {
@@ -482,8 +538,15 @@ export type Party = {
   payment_days: number | null
   is_taxable?: boolean
   tax_percent?: number | null
+  withholding_tax_enabled?: boolean
+  withholding_tax_type?: string | null
+  withholding_tax_rate?: number | null
+  withholding_tax_base?: string | null
   custom_fields?: Record<string, string | number | boolean | null> | null
   is_active: boolean
+  vendor_tier?: string | null
+  onboarding_status?: string | null
+  vendor_status?: string | null
 }
 
 export type ProductImage = {
@@ -557,7 +620,14 @@ export type Product = {
   channel_prices?: ProductChannelPrice[]
   images: ProductImage[]
   track_stock: boolean
+  is_procurement_item?: boolean
+  is_fixed_asset_item?: boolean
+  preferred_supplier_id?: number | null
+  preferred_supplier?: { id: number; name: string } | null
+  suggested_unit_cost?: number
+  cost_price?: number
   min_stock: number
+  reorder_qty?: number
   is_active: boolean
   stock_qty: number
   choice_ids?: number[]
@@ -637,6 +707,67 @@ export type EngineeringGrandTotal = {
 }
 
 export type SalesReportKind = 'summary' | 'products' | 'cashiers' | 'methods' | 'channels' | 'daily'
+
+export type ProcurementReportKind =
+  | 'spend'
+  | 'cycle_time'
+  | 'vendor_performance'
+  | 'budget_actual'
+  | 'open_po_aging'
+  | 'price_variance'
+  | 'abc'
+
+export type ProcurementReportRow = {
+  id?: number | null
+  rank?: number
+  name?: string | null
+  amount?: number
+  share_percent?: number
+  cumulative_percent?: number
+  class?: string
+  po_id?: number
+  po_number?: string | null
+  supplier_name?: string | null
+  pr_number?: string | null
+  pr_to_po_days?: number | null
+  po_to_gr_days?: number | null
+  gr_to_invoice_days?: number | null
+  total_days?: number | null
+  order_count?: number
+  on_time_percent?: number | null
+  quality_score?: number | null
+  overall_score?: number | null
+  avg_price_variance_percent?: number | null
+  department_name?: string | null
+  outlet_name?: string | null
+  allocated?: number
+  committed?: number
+  actual?: number
+  variance?: number
+  ordered_at?: string | null
+  age_days?: number
+  total?: number
+  status?: string
+  product_name?: string | null
+  po_unit_cost?: number | null
+  gr_unit_cost?: number | null
+  variance_percent?: number | null
+  source?: string
+}
+
+export type ProcurementReport = {
+  kind: ProcurementReportKind
+  from?: string
+  to?: string
+  group_by?: string
+  total?: number
+  rows?: ProcurementReportRow[]
+  trend?: Array<{ period: string; amount: number }>
+  summary?: Record<string, number | null>
+  buckets?: Array<{ label: string; count: number; total: number }>
+  budget?: { id: number; name: string; fiscal_year: number; period_start?: string; period_end?: string } | null
+  totals?: { allocated: number; committed: number; actual: number; variance: number }
+}
 
 export type SalesReportMethod = { count: number; amount: number }
 

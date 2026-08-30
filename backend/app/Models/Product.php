@@ -29,7 +29,11 @@ class Product extends Model
         'cost_price',
         'prices',
         'track_stock',
+        'is_procurement_item',
+        'is_fixed_asset_item',
+        'preferred_supplier_id',
         'min_stock',
+        'reorder_qty',
         'custom_fields',
         'is_active',
     ];
@@ -41,7 +45,10 @@ class Product extends Model
             'cost_price' => 'integer',
             'prices' => 'array',
             'track_stock' => 'boolean',
+            'is_procurement_item' => 'boolean',
+            'is_fixed_asset_item' => 'boolean',
             'min_stock' => 'integer',
+            'reorder_qty' => 'integer',
             'custom_fields' => 'array',
             'is_active' => 'boolean',
         ];
@@ -55,6 +62,11 @@ class Product extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class);
+    }
+
+    public function preferredSupplier(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class, 'preferred_supplier_id');
     }
 
     public function subCategory(): BelongsTo

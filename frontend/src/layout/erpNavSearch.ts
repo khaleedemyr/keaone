@@ -2,7 +2,7 @@ import type { AppId } from '../desktop/DesktopContext'
 import { MASTER_NAV_GROUPS } from '../desktop/MasterApp'
 import { HR_NAV_ITEMS } from '../desktop/HrApp'
 import { SALES_NAV_ITEMS } from '../desktop/SalesApp'
-import { getPurchaseNavDefs } from '../desktop/PurchaseApp'
+import { PROCUREMENT_NAV_GROUPS } from '../desktop/PurchaseApp'
 import type { MsgKey } from '../i18n'
 import { moduleForMenu } from '../lib/modules'
 import type { Settings, UserPreferences } from '../types'
@@ -95,9 +95,19 @@ export function buildErpSearchEntries(
 
     if (appId === 'purchase') {
       const flow = (settings?.purchase_flow ?? 'direct') as 'strict_pr_po_gr' | 'po_gr' | 'direct'
-      for (const item of getPurchaseNavDefs(flow)) {
-        if (!can(item.menu, 'view')) continue
-        pushEntry(entries, appId, appLabel, item.id, t(item.label))
+      const returnEnabled = settings?.return_enabled !== false
+      const adjustmentEnabled = settings?.vendor_adjustment_enabled !== false
+      const deliveryEnabled = settings?.delivery_schedule_enabled !== false
+      const rfqEnabled = settings?.procurement_rfq_enabled === true
+      const priceListEnabled = settings?.procurement_vendor_price_list_enabled === true
+      const ctx = { flow, returnEnabled, adjustmentEnabled, deliveryEnabled, rfqEnabled, priceListEnabled }
+      for (const group of PROCUREMENT_NAV_GROUPS) {
+        const groupLabel = t(group.label)
+        for (const item of group.items) {
+          if (item.visible && !item.visible(ctx)) continue
+          if (!can(item.menu, 'view')) continue
+          pushEntry(entries, appId, appLabel, item.id, t(item.label), groupLabel)
+        }
       }
       continue
     }

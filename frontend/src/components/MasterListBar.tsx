@@ -5,9 +5,9 @@ export const MASTER_PER_PAGE = [10, 20, 50, 100] as const
 
 export type StatusOption = { value: string; label: string }
 
-export function useListQuery(initialPerPage = 20) {
+export function useListQuery(initialPerPage = 20, initialStatus = 'all') {
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('all')
+  const [status, setStatus] = useState(initialStatus)
   const [page, setPage] = useState(1)
   const [lastPage, setLastPage] = useState(1)
   const [total, setTotal] = useState(0)

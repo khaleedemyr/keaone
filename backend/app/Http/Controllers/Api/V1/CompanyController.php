@@ -54,7 +54,7 @@ class CompanyController extends Controller
 
     public function updateSettings(Request $request): JsonResponse
     {
-        $data = $request->validate([
+        $data = $request->validate(array_merge([
             'modules' => ['sometimes', 'array'],
             'settings' => ['sometimes', 'array'],
             'settings.tax_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
@@ -63,19 +63,15 @@ class CompanyController extends Controller
             'settings.receipt_footer' => ['nullable', 'string'],
             'settings.receipt_layout' => ['sometimes', 'array'],
             'settings.pos_mode' => ['sometimes', Rule::in(['retail', 'restaurant', 'cafe'])],
-            'settings.purchase_flow' => ['sometimes', Rule::in(['strict_pr_po_gr', 'po_gr', 'direct'])],
-            'settings.purchase_update_cost' => ['sometimes', 'boolean'],
-            'settings.pr_need_approval' => ['sometimes', 'boolean'],
-            'settings.po_need_approval' => ['sometimes', 'boolean'],
-        ]);
+        ], $this->procurementSettingsValidationRules()));
 
         $settingsInput = $data['settings'] ?? [];
         $posKeys = ['pos_mode'];
-        $purchaseKeys = ['purchase_flow', 'purchase_update_cost', 'pr_need_approval', 'po_need_approval'];
+        $procurementKeys = config('procurement.settings_keys', []);
         $incoming = array_keys($settingsInput);
         $hasPos = array_intersect($incoming, $posKeys) !== [];
-        $hasPurchase = array_intersect($incoming, $purchaseKeys) !== [];
-        $hasOps = array_diff($incoming, array_merge($posKeys, $purchaseKeys)) !== [];
+        $hasProcurement = array_intersect($incoming, $procurementKeys) !== [];
+        $hasOps = array_diff($incoming, array_merge($posKeys, $procurementKeys)) !== [];
 
         if (isset($data['modules'])) {
             $this->ensureCan('modules', 'edit');
@@ -83,13 +79,13 @@ class CompanyController extends Controller
         if ($hasPos) {
             $this->ensureCan('possettings', 'edit');
         }
-        if ($hasPurchase) {
+        if ($hasProcurement) {
             $this->ensureCanAny(['purchasesettings', 'ops', 'settings']);
         }
         if ($hasOps) {
             $this->ensureCan('ops', 'edit');
         }
-        if (! isset($data['modules']) && ! $hasPos && ! $hasOps && ! $hasPurchase) {
+        if (! isset($data['modules']) && ! $hasPos && ! $hasOps && ! $hasProcurement) {
             $this->ensureCan('ops', 'edit');
         }
 
@@ -194,6 +190,28 @@ class CompanyController extends Controller
         $company->forceFill(['logo_path' => null])->save();
 
         return $this->ok($this->serialize($company->fresh()));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function procurementSettingsValidationRules(): array
+    {
+        $rules = [];
+
+        foreach (config('procurement.settings_keys', []) as $key) {
+            if ($key === 'purchase_flow') {
+                $rules["settings.{$key}"] = ['sometimes', Rule::in(['strict_pr_po_gr', 'po_gr', 'direct'])];
+            } elseif (str_ends_with($key, '_tolerance')) {
+                $rules["settings.{$key}"] = ['sometimes', 'integer', 'min:0', 'max:100'];
+            } elseif (str_starts_with($key, 'gl_procurement_')) {
+                $rules["settings.{$key}"] = ['sometimes', 'nullable', 'integer'];
+            } else {
+                $rules["settings.{$key}"] = ['sometimes', 'boolean'];
+            }
+        }
+
+        return $rules;
     }
 
     private function serialize(Company $company): array

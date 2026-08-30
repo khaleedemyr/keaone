@@ -26,6 +26,8 @@ export type PoDetailViewData = {
     payment_days?: number | null
   } | null
   warehouse?: { name: string } | null
+  outlet?: { name: string } | null
+  department?: { name: string; code?: string | null } | null
   items?: Array<{
     id?: number
     name_snapshot?: string | null
@@ -80,6 +82,13 @@ export function PoDetailView({
         <MetaField label={t('purchaseCreatedBy')} value={po.user?.name ?? '—'} />
         <MetaField label={t('navSuppliers')} value={po.supplier?.name ?? '—'} />
         <MetaField label={t('navWarehouses')} value={po.warehouse?.name ?? '—'} />
+        {po.department?.name ? (
+          <MetaField
+            label={t('navDepartments')}
+            value={po.department.code ? `${po.department.name} (${po.department.code})` : po.department.name}
+          />
+        ) : null}
+        {po.outlet?.name ? <MetaField label={t('navOutlets')} value={po.outlet.name} /> : null}
         <MetaField label={t('paymentTerm')} value={topLabel} />
         <MetaField label={t('purchaseExpectedAt')} value={po.expected_at ?? '—'} />
         <MetaField label={t('purchaseNote')} value={po.note?.trim() ? po.note : '—'} />

@@ -19,6 +19,9 @@ class PurchaseRequisitionApproval extends Model
         'acted_by',
         'acted_at',
         'note',
+        'pending_since',
+        'delegated_from_user_id',
+        'escalated_at',
     ];
 
     protected function casts(): array
@@ -26,6 +29,8 @@ class PurchaseRequisitionApproval extends Model
         return [
             'level' => 'integer',
             'acted_at' => 'datetime',
+            'pending_since' => 'datetime',
+            'escalated_at' => 'datetime',
         ];
     }
 

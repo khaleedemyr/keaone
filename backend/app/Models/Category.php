@@ -19,6 +19,8 @@ class Category extends Model
         'is_active',
         'show_pos',
         'is_raw_material',
+        'procurement_match_mode',
+        'preferred_supplier_id',
     ];
 
     protected function casts(): array
@@ -34,6 +36,11 @@ class Category extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function preferredSupplier(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class, 'preferred_supplier_id');
     }
 
     public function products(): HasMany

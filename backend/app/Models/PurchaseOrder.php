@@ -14,16 +14,22 @@ class PurchaseOrder extends Model
     protected $fillable = [
         'company_id',
         'outlet_id',
+        'department_id',
         'warehouse_id',
         'user_id',
         'supplier_id',
         'purchase_requisition_id',
+        'procurement_contract_id',
         'number',
         'client_uuid',
         'share_token',
         'status',
         'ordered_at',
         'expected_at',
+        'closed_by',
+        'closed_at',
+        'close_reason',
+        'vendor_confirmed_at',
         'subtotal',
         'tax_percent',
         'tax',
@@ -41,12 +47,14 @@ class PurchaseOrder extends Model
         return [
             'ordered_at' => 'date',
             'expected_at' => 'date',
+            'closed_at' => 'datetime',
             'subtotal' => 'integer',
             'tax_percent' => 'float',
             'tax' => 'integer',
             'total' => 'integer',
             'payment_days' => 'integer',
             'approved_at' => 'datetime',
+            'vendor_confirmed_at' => 'datetime',
             'current_approval_level' => 'integer',
         ];
     }
@@ -54,6 +62,11 @@ class PurchaseOrder extends Model
     public function items(): HasMany
     {
         return $this->hasMany(PurchaseOrderItem::class);
+    }
+
+    public function deliverySchedules(): HasMany
+    {
+        return $this->hasMany(PurchaseOrderDeliverySchedule::class);
     }
 
     public function approvals(): HasMany
@@ -89,6 +102,11 @@ class PurchaseOrder extends Model
     public function outlet(): BelongsTo
     {
         return $this->belongsTo(Outlet::class);
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
     }
 
     public function company(): BelongsTo

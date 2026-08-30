@@ -3,6 +3,7 @@ import autoTable, { type RowInput } from 'jspdf-autotable'
 import QRCode from 'qrcode'
 
 export type PoExportRow = {
+  id?: number
   number: string
   status: string
   supplier?: { name?: string; phone?: string | null } | null
@@ -137,7 +138,8 @@ export async function exportPoPdf(
   const companyName = options.companyName ?? '—'
   const statusText = options.statusLabel ?? po.status
 
-  const qrDataUrl = await QRCode.toDataURL(po.number, {
+  const qrPayload = po.id ? `keaone:po:${po.id}:${po.number}` : po.number
+  const qrDataUrl = await QRCode.toDataURL(qrPayload, {
     margin: 1,
     width: 240,
     color: { dark: '#0f172a', light: '#ffffff' },

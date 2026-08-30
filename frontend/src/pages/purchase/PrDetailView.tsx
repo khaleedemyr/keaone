@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { formatRupiah } from '../../lib/money'
 import { DocHeader, DocItemsTable, DocTh, MetaField } from './purchaseDocShared'
+import { approvalRowLabel } from './approverOptions'
 
 export type PrDetailViewData = {
   number: string
@@ -13,10 +14,11 @@ export type PrDetailViewData = {
   approved_at?: string | null
   warehouse?: { name: string } | null
   outlet?: { name: string } | null
+  department?: { name: string; code?: string | null } | null
   approvals?: Array<{
     id: number
     level: number
-    user?: { name: string } | null
+    user?: { name: string; position?: string | null } | null
     status: string
     acted_at?: string | null
     is_current?: boolean
@@ -79,6 +81,12 @@ export function PrDetailView({
       <dl className="mt-5 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
         <MetaField label={t('purchaseCreatedBy')} value={pr.user?.name ?? '—'} />
         <MetaField label={t('navWarehouses')} value={pr.warehouse?.name ?? '—'} />
+        {pr.department?.name ? (
+          <MetaField
+            label={t('navDepartments')}
+            value={pr.department.code ? `${pr.department.name} (${pr.department.code})` : pr.department.name}
+          />
+        ) : null}
         {pr.outlet?.name ? <MetaField label={t('navOutlets')} value={pr.outlet.name} /> : null}
         <MetaField label={t('purchaseNeededAt')} value={pr.needed_at ?? '—'} />
         <MetaField label={t('purchaseNote')} value={pr.note?.trim() ? pr.note : '—'} />
@@ -102,7 +110,8 @@ export function PrDetailView({
                 className="flex flex-wrap items-center justify-between gap-2 border-b border-line/60 pb-2 text-sm last:border-0 last:pb-0"
               >
                 <span className="font-medium text-fg">
-                  {t('purchaseApprovalLevel', { n: String(step.level) })} · {step.user?.name ?? '—'}
+                  {t('purchaseApprovalLevel', { n: String(step.level) })} ·{' '}
+                  {step.user ? approvalRowLabel({ name: step.user.name, position: step.user.position ?? null }) : '—'}
                 </span>
                 <span className="text-xs text-muted">{approvalStatusLabel(step.status, t)}</span>
               </li>
