@@ -104,8 +104,19 @@ class CompanyController extends Controller
             $company->modules = $next;
         }
 
-        if (isset($data['settings'])) {
-            $merged = array_merge($company->defaultSettings(), $company->settings ?? [], $data['settings']);
+        if (isset($data['settings']) || $request->has('settings')) {
+            $settingsPatch = $request->input('settings', []);
+            if (! is_array($settingsPatch)) {
+                $settingsPatch = [];
+            }
+
+            $allowedKeys = array_merge(
+                ['tax_percent', 'allow_credit', 'receipt_width', 'receipt_footer', 'receipt_layout', 'pos_mode'],
+                config('procurement.settings_keys', []),
+            );
+            $settingsPatch = array_intersect_key($settingsPatch, array_flip($allowedKeys));
+
+            $merged = array_merge($company->defaultSettings(), $company->settings ?? [], $settingsPatch);
             if (isset($data['settings']['receipt_layout'])) {
                 $merged['receipt_layout'] = ReceiptLayout::normalize($data['settings']['receipt_layout'], $merged);
                 $merged['receipt_width'] = $merged['receipt_layout']['width'];
@@ -202,6 +213,10 @@ class CompanyController extends Controller
         foreach (config('procurement.settings_keys', []) as $key) {
             if ($key === 'purchase_flow') {
                 $rules["settings.{$key}"] = ['sometimes', Rule::in(['strict_pr_po_gr', 'po_gr', 'direct'])];
+            } elseif ($key === 'procurement_approval_mode') {
+                $rules["settings.{$key}"] = ['sometimes', Rule::in(['manual', 'matrix'])];
+            } elseif ($key === 'procurement_approval_sla_days') {
+                $rules["settings.{$key}"] = ['sometimes', 'integer', 'min:1', 'max:365'];
             } elseif (str_ends_with($key, '_tolerance')) {
                 $rules["settings.{$key}"] = ['sometimes', 'integer', 'min:0', 'max:100'];
             } elseif (str_starts_with($key, 'gl_procurement_')) {

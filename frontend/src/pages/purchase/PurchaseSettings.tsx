@@ -180,16 +180,26 @@ export default function PurchaseSettings() {
   const [glAccounts, setGlAccounts] = useState<GlAccount[]>([])
 
   useEffect(() => {
+    let cancelled = false
     void api
       .get<ApiOk<{ settings: Settings }>>('/company/settings')
       .then(({ data }) => {
-        setForm(settingsToForm(data.data.settings))
+        if (!cancelled) setForm(settingsToForm(data.data.settings))
       })
-      .catch((err) => feedback.error(apiMessage(err, t('loadFailed'))))
+      .catch((err) => {
+        if (!cancelled) feedback.error(apiMessage(err, t('loadFailed')))
+      })
     void api
       .get<ApiOk<GlAccount[]>>('/gl-accounts', { params: { for_select: 1, status: 'active' }, silent: true })
-      .then(({ data }) => setGlAccounts(data.data ?? []))
-      .catch(() => setGlAccounts([]))
+      .then(({ data }) => {
+        if (!cancelled) setGlAccounts(data.data ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setGlAccounts([])
+      })
+    return () => {
+      cancelled = true
+    }
   }, [feedback, t])
 
   async function onSubmit(event: FormEvent) {
