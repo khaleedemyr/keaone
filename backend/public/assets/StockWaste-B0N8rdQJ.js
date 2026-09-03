@@ -1,0 +1,1 @@
+import{ht as e}from"./ui-D8eWfMFR.js";import t from"./StockAdjustments-DXdjmeLC.js";var n=e();function r(){return(0,n.jsx)(t,{mode:`waste`})}export{r as default};

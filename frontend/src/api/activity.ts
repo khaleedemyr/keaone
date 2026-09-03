@@ -42,6 +42,11 @@ export type MasterFormEntity =
   | 'vendorprepayment'
   | 'rfq'
   | 'supplierpricelist'
+  | 'stocktransfer'
+  | 'stockopname'
+  | 'stockadjustment'
+  | 'stockwaste'
+  | 'stockproduction'
 
 export function logActivity(kind: ActivityKind, target: string, ref?: string) {
   if (typeof localStorage === 'undefined' || !sessionGet(TOKEN_KEY)) return
