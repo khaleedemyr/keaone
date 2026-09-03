@@ -10,6 +10,8 @@ import { MasterModal, MasterViewModal, MasterNameButton, ViewField } from '../co
 import { useI18n } from '../i18n'
 import { useAccess } from '../access'
 
+const LOCATION_TYPES = ['general', 'dry', 'chiller', 'freezer', 'bar', 'other'] as const
+
 export default function Warehouses() {
   const { t } = useI18n()
   const { can } = useAccess()
@@ -19,6 +21,7 @@ export default function Warehouses() {
   const [outlets, setOutlets] = useState<Outlet[]>([])
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
+  const [locationType, setLocationType] = useState('general')
   const [outletId, setOutletId] = useState('')
   const [editing, setEditing] = useState<Warehouse | null>(null)
   const [viewing, setViewing] = useState<Warehouse | null>(null)
@@ -61,6 +64,7 @@ export default function Warehouses() {
     setEditing(null)
     setName('')
     setAddress('')
+    setLocationType('general')
     setOutletId('')
     setError('')
     setOpen(true)
@@ -71,6 +75,7 @@ export default function Warehouses() {
     setEditing(item)
     setName(item.name)
     setAddress(item.address ?? '')
+    setLocationType(item.location_type || 'general')
     setOutletId(item.outlet_id ? String(item.outlet_id) : '')
     setError('')
     setOpen(true)
@@ -85,6 +90,7 @@ export default function Warehouses() {
       const payload = {
         name,
         address: address || null,
+        location_type: locationType,
         outlet_id: outletId ? Number(outletId) : null,
       }
       if (editing) await api.put(`/warehouses/${editing.id}`, payload)
@@ -140,6 +146,19 @@ export default function Warehouses() {
   const canDelete = can('warehouses', 'delete')
   const showActions = canEdit || canDelete
 
+  function locationLabel(value?: string | null) {
+    const key = value || 'general'
+    const map: Record<string, string> = {
+      general: t('warehouseLocationGeneral'),
+      dry: t('warehouseLocationDry'),
+      chiller: t('warehouseLocationChiller'),
+      freezer: t('warehouseLocationFreezer'),
+      bar: t('warehouseLocationBar'),
+      other: t('warehouseLocationOther'),
+    }
+    return map[key] ?? key
+  }
+
   return (
     <div>
       <PageHeader
@@ -163,6 +182,7 @@ export default function Warehouses() {
             <tr>
               <th className="px-4 py-3 font-medium">{t('name')}</th>
               <th className="px-4 py-3 font-medium">{t('navOutlets')}</th>
+              <th className="px-4 py-3 font-medium">{t('warehouseLocationType')}</th>
               <th className="px-4 py-3 font-medium">{t('address')}</th>
               <th className="px-4 py-3 font-medium">{t('status')}</th>
               {showActions ? <th className="px-4 py-3 font-medium"></th> : null}
@@ -180,6 +200,7 @@ export default function Warehouses() {
                   ) : null}
                 </td>
                 <td className="px-4 py-3 text-muted">{item.outlet?.name ?? '-'}</td>
+                <td className="px-4 py-3 text-muted">{locationLabel(item.location_type)}</td>
                 <td className="px-4 py-3 text-muted">{item.address ?? '-'}</td>
                 <td className="px-4 py-3">
                   <span className={item.is_active ? 'text-mint' : 'text-rose-300'}>
@@ -214,7 +235,7 @@ export default function Warehouses() {
             ))}
             {items.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-center text-muted" colSpan={showActions ? 5 : 4}>
+                <td className="px-4 py-8 text-center text-muted" colSpan={showActions ? 6 : 5}>
                   {t('emptyMaster')}
                 </td>
               </tr>
@@ -248,6 +269,16 @@ export default function Warehouses() {
           </select>
         </label>
         <label className="text-sm text-muted">
+          {t('warehouseLocationType')}
+          <select className="field" value={locationType} onChange={(e) => setLocationType(e.target.value)}>
+            {LOCATION_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {locationLabel(type)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm text-muted">
           {t('address')}
           <textarea className="field min-h-20" value={address} onChange={(e) => setAddress(e.target.value)} />
         </label>
@@ -269,6 +300,7 @@ export default function Warehouses() {
       >
         <ViewField label={t('name')} value={viewing?.name} />
         <ViewField label={t('navOutlets')} value={viewing?.outlet?.name} />
+        <ViewField label={t('warehouseLocationType')} value={locationLabel(viewing?.location_type)} />
         <ViewField label={t('address')} value={viewing?.address} />
         <ViewField label={t('defaultWarehouse')} value={viewing?.is_default ? t('defaultWarehouse') : '-'} />
         <ViewField label={t('status')} value={viewing?.is_active ? t('active') : t('inactive')} />

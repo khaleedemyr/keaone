@@ -20,6 +20,7 @@ import { NotifyTray } from './NotifyTray'
 import { useDesktop, type AppId } from './DesktopContext'
 import { APP_TILE, AppGlyph } from './glyphs'
 import MasterApp from './MasterApp'
+import InventoryApp from './InventoryApp'
 import PurchaseApp from './PurchaseApp'
 import ApprovalsApp from './ApprovalsApp'
 import HrApp from './HrApp'
@@ -123,6 +124,7 @@ export default function Desktop() {
               {win.id === 'insight' ? <Dashboard /> : null}
               {win.id === 'pos' ? <Pos /> : null}
               {win.id === 'master' ? <MasterApp /> : null}
+              {win.id === 'inventory' ? <InventoryApp /> : null}
               {win.id === 'sales' ? <SalesApp /> : null}
               {win.id === 'purchase' ? <PurchaseApp /> : null}
               {win.id === 'hr' ? <HrApp /> : null}

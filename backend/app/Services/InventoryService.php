@@ -2,15 +2,22 @@
 
 namespace App\Services;
 
+use App\Models\Company;
 use App\Models\Outlet;
 use App\Models\Product;
 use App\Models\StockBalance;
 use App\Models\StockMovement;
 use App\Models\Warehouse;
+use App\Support\InventoryAdjustment;
+use App\Support\InventorySettings;
 use Illuminate\Validation\ValidationException;
 
 class InventoryService
 {
+    public function __construct(
+        private CostingService $costing,
+    ) {}
+
     public function resolveDefaultWarehouse(int $companyId, int $outletId): Warehouse
     {
         $warehouse = Warehouse::query()
@@ -83,7 +90,9 @@ class InventoryService
         ?string $note = null,
         ?int $outletId = null,
         ?array $unitMeta = null,
-    ): int {
+        ?int $unitCost = null,
+        bool $reverseCosting = false,
+    ): InventoryAdjustment {
         $warehouse = Warehouse::query()
             ->withoutGlobalScopes()
             ->where('company_id', $companyId)
@@ -112,7 +121,9 @@ class InventoryService
             ->whereKey($productId)
             ->firstOrFail();
 
-        $balance = StockBalance::query()->firstOrCreate(
+        $company = Company::query()->findOrFail($companyId);
+
+        $balance = StockBalance::query()->withoutGlobalScopes()->firstOrCreate(
             [
                 'company_id' => $companyId,
                 'warehouse_id' => $warehouseId,
@@ -121,10 +132,13 @@ class InventoryService
             [
                 'outlet_id' => $resolvedOutletId,
                 'qty' => 0,
+                'avg_cost' => (int) $product->cost_price,
+                'cost_value' => 0,
             ],
         );
 
         $balance = StockBalance::query()
+            ->withoutGlobalScopes()
             ->whereKey($balance->id)
             ->lockForUpdate()
             ->firstOrFail();
@@ -133,18 +147,31 @@ class InventoryService
             $balance->outlet_id = $resolvedOutletId;
         }
 
-        $nextQty = (int) $balance->qty + $qtyChange;
+        $qtyBefore = (int) $balance->qty;
+        $nextQty = $qtyBefore + $qtyChange;
 
-        if ($qtyChange < 0 && $nextQty < 0) {
+        if ($qtyChange < 0 && $nextQty < 0 && ! InventorySettings::allowsNegativeStock($company)) {
             throw ValidationException::withMessages([
                 'items' => ["Stok {$product->name} tidak cukup (tersedia {$balance->qty})."],
             ]);
         }
 
+        $costing = $this->costing->apply(
+            $company,
+            $product,
+            $balance,
+            $qtyBefore,
+            $qtyChange,
+            $refType,
+            $refId,
+            $unitCost,
+            $reverseCosting,
+        );
+
         $balance->qty = $nextQty;
         $balance->save();
 
-        StockMovement::query()->create([
+        $movement = StockMovement::query()->withoutGlobalScopes()->create([
             'company_id' => $companyId,
             'outlet_id' => $resolvedOutletId,
             'warehouse_id' => $warehouseId,
@@ -152,6 +179,9 @@ class InventoryService
             'type' => $type,
             'qty_change' => $qtyChange,
             'qty_after' => $nextQty,
+            'unit_cost' => $costing['unit_cost'],
+            'cost_amount' => $costing['cost_amount'],
+            'costing_method' => $costing['method'],
             'qty_input' => $unitMeta['qty_input'] ?? null,
             'unit_level' => $unitMeta['unit_level'] ?? null,
             'unit' => $unitMeta['unit'] ?? null,
@@ -161,7 +191,16 @@ class InventoryService
             'note' => $note,
         ]);
 
-        return $nextQty;
+        if ($costing['consumptions'] !== []) {
+            $this->costing->attachConsumptions($movement, $costing['consumptions']);
+        }
+
+        return new InventoryAdjustment(
+            $nextQty,
+            (int) $costing['unit_cost'],
+            (int) $costing['cost_amount'],
+            (string) $costing['method'],
+        );
     }
 
     public function qtyAtWarehouse(int $warehouseId, int $productId): int

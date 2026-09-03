@@ -292,6 +292,7 @@ class RoleService
         $viewer['salesreportdaily'] = $this->flags(true, false, false, false);
         $viewer['stock'] = $this->flags(true, false, false, false);
         $viewer['stockcard'] = $this->flags(true, false, false, false);
+        $viewer['stocksettings'] = $this->flags(true, false, false, false);
         $viewer['purchaserequisitions'] = $this->flags(true, false, false, false);
         $viewer['purchaseorders'] = $this->flags(true, false, false, false);
         $viewer['goodsreceipts'] = $this->flags(true, false, false, false);

@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, apiMessage } from '../api/client'
-import type { ApiOk, Warehouse } from '../types'
+import type { ApiOk, Product, Warehouse } from '../types'
 import { PageEnter } from '../components/motion'
 import { useFeedback } from '../components/feedback'
 import { PageHeader } from '../components/ui'
-import { useI18n } from '../i18n'
+import { SearchSelect } from '../components/SearchSelect'
+import { InventoryScanBar } from '../components/InventoryScanBar'
+import { useI18n, type MsgKey } from '../i18n'
+import { formatRupiah } from '../lib/money'
+import { buildTrackableProductOptions, productVariantLabel } from '../lib/productScan'
 
 type Movement = {
   id: number
@@ -20,14 +24,33 @@ type Movement = {
   ref_type: string | null
   ref_id: number | null
   note: string | null
+  unit_cost?: number
+  cost_amount?: number
+  costing_method?: string | null
 }
 
 type CardPayload = {
-  product: { id: number; name: string; sku: string | null; unit: string; min_stock: number }
+  product: { id: number; name: string; sku: string | null; barcode?: string | null; unit: string; min_stock: number }
   warehouse: { id: number; name: string }
   qty: number
   qty_display?: string
+  unit_cost?: number
+  cost_value?: number
+  costing_method?: string
   movements: Movement[]
+}
+
+function costingLabel(method: string | undefined, t: (key: MsgKey) => string) {
+  switch (method) {
+    case 'fifo':
+      return t('inventoryCostingFifo')
+    case 'average':
+      return t('inventoryCostingAverage')
+    case 'moving_average':
+      return t('inventoryCostingMovingAverage')
+    default:
+      return method || '—'
+  }
 }
 
 export default function StockCardPage({
@@ -40,12 +63,15 @@ export default function StockCardPage({
   const { t, locale } = useI18n()
   const feedback = useFeedback()
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
-  const [products, setProducts] = useState<{ id: number; name: string }[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [warehouseId, setWarehouseId] = useState(initialWarehouseId ? String(initialWarehouseId) : '')
   const [productId, setProductId] = useState(initialProductId ? String(initialProductId) : '')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [card, setCard] = useState<CardPayload | null>(null)
+
+  const productOptions = useMemo(() => buildTrackableProductOptions(products), [products])
+  const trackableProducts = useMemo(() => products.filter((p) => p.track_stock), [products])
 
   useEffect(() => {
     void api
@@ -59,11 +85,11 @@ export default function StockCardPage({
       })
       .catch(() => {})
     void api
-      .get<ApiOk<{ id: number; name: string }[]>>('/products', {
-        params: { for_select: 1, status: 'active', per_page: 100 },
+      .get<ApiOk<Product[]>>('/products', {
+        params: { for_select: 1, status: 'active', per_page: 500 },
         silent: true,
       })
-      .then(({ data }) => setProducts(data.data))
+      .then(({ data }) => setProducts(data.data ?? []))
       .catch(() => {})
   }, [])
 
@@ -95,7 +121,7 @@ export default function StockCardPage({
 
   useEffect(() => {
     void load()
-  }, [productId, warehouseId, from, to])
+  }, [productId, warehouseId, from, to]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <PageEnter>
@@ -112,16 +138,15 @@ export default function StockCardPage({
             ))}
           </select>
         </label>
-        <label className="text-sm text-muted">
+        <label className="min-w-[240px] flex-1 text-sm text-muted">
           {t('product')}
-          <select className="field !mt-1 min-w-[220px]" value={productId} onChange={(e) => setProductId(e.target.value)}>
-            <option value="">{t('purchasePickProduct')}</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            className="!mt-1"
+            value={productId}
+            onChange={setProductId}
+            options={productOptions}
+            placeholder={t('purchasePickProduct')}
+          />
         </label>
         <label className="text-sm text-muted">
           {t('stockFrom')}
@@ -133,11 +158,32 @@ export default function StockCardPage({
         </label>
       </div>
 
+      <div className="mb-4 max-w-xl">
+        <div className="mb-1 text-sm text-muted">{t('stockScanTitle')}</div>
+        <InventoryScanBar
+          products={trackableProducts}
+          productOptions={productOptions}
+          onPick={(product) => setProductId(String(product.id))}
+        />
+      </div>
+
       {card ? (
         <div className="mb-4 rounded-2xl border border-line bg-fill px-4 py-3 text-sm">
-          <div className="font-medium text-fg">{card.product.name}</div>
+          <div className="font-medium text-fg">{productVariantLabel(card.product)}</div>
           <div className="mt-1 text-muted">
+            {card.product.barcode ? (
+              <>
+                {t('barcode')}: {card.product.barcode}
+                {' · '}
+              </>
+            ) : null}
             {card.warehouse.name} · {t('stockQty')}: {card.qty_display ?? `${card.qty} ${card.product.unit}`}
+            {' · '}
+            {t('stockCostingMethod')}: {costingLabel(card.costing_method, t)}
+            {' · '}
+            {t('stockUnitCost')}: {formatRupiah(card.unit_cost ?? 0, locale)}
+            {' · '}
+            {t('stockValue')}: {formatRupiah(card.cost_value ?? 0, locale)}
           </div>
         </div>
       ) : null}
@@ -150,31 +196,26 @@ export default function StockCardPage({
               <th className="px-3 py-2">{t('stockType')}</th>
               <th className="px-3 py-2">{t('stockChange')}</th>
               <th className="px-3 py-2">{t('stockAfter')}</th>
+              <th className="px-3 py-2">{t('stockUnitCost')}</th>
+              <th className="px-3 py-2">{t('stockCostAmount')}</th>
               <th className="px-3 py-2">{t('purchaseNote')}</th>
             </tr>
           </thead>
           <tbody>
-            {(card?.movements ?? []).map((m) => (
-              <tr key={m.id} className="border-t border-line">
-                <td className="px-3 py-2 text-muted">
-                  {m.created_at ? new Date(m.created_at).toLocaleString(locale) : '—'}
-                </td>
-                <td className="px-3 py-2">{m.type}</td>
-                <td className={`px-3 py-2 font-medium ${m.qty_change < 0 ? 'text-rose-400' : 'text-mint'}`}>
-                  <div>{m.qty_change_display ?? (m.qty_change > 0 ? `+${m.qty_change}` : m.qty_change)}</div>
-                  {m.qty_input != null && m.unit ? (
-                    <div className="text-xs font-normal text-muted">
-                      {m.qty_input} {m.unit}
-                    </div>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2">{m.qty_after_display ?? m.qty_after}</td>
-                <td className="px-3 py-2 text-muted">{m.note ?? '—'}</td>
+            {(card?.movements ?? []).map((row) => (
+              <tr key={row.id} className="border-t border-line">
+                <td className="px-3 py-2 whitespace-nowrap text-muted">{new Date(row.created_at).toLocaleString(locale)}</td>
+                <td className="px-3 py-2">{row.type}</td>
+                <td className="px-3 py-2">{row.qty_change_display ?? row.qty_change}</td>
+                <td className="px-3 py-2">{row.qty_after_display ?? row.qty_after}</td>
+                <td className="px-3 py-2">{formatRupiah(row.unit_cost ?? 0, locale)}</td>
+                <td className="px-3 py-2">{formatRupiah(row.cost_amount ?? 0, locale)}</td>
+                <td className="px-3 py-2 text-muted">{row.note ?? '—'}</td>
               </tr>
             ))}
             {!card || card.movements.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-muted">
+                <td colSpan={7} className="px-3 py-8 text-center text-muted">
                   {t('stockCardEmpty')}
                 </td>
               </tr>

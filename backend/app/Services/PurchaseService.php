@@ -886,6 +886,9 @@ class PurchaseService
                 $baseQty = $this->productUnits->toBaseQty((int) $item->qty, $factor);
 
                 if ($product?->track_stock) {
+                    $costPerBase = (int) $item->unit_cost > 0
+                        ? (int) round((int) $item->unit_cost / $factor)
+                        : 0;
                     $this->inventory->adjust(
                         (int) $gr->company_id,
                         (int) $gr->warehouse_id,
@@ -902,11 +905,12 @@ class PurchaseService
                             'unit' => $item->unit,
                             'factor_to_base' => $factor,
                         ],
+                        $costPerBase > 0 ? $costPerBase : null,
                     );
                 } elseif ($product?->is_fixed_asset_item) {
                     $this->assets->registerFromGrItem($gr, $item, $product);
                 }
-                if ($updateCost && $product && (int) $item->unit_cost > 0) {
+                if ($updateCost && $product && ! $product->track_stock && (int) $item->unit_cost > 0) {
                     $costPerBase = (int) round((int) $item->unit_cost / $factor);
                     if ($costPerBase > 0) {
                         $product->forceFill(['cost_price' => $costPerBase])->save();
@@ -1008,6 +1012,8 @@ class PurchaseService
                             'unit' => $item->unit,
                             'factor_to_base' => $factor,
                         ],
+                        null,
+                        true,
                     );
                 }
 

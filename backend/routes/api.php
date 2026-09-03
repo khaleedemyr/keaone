@@ -66,6 +66,11 @@ use App\Http\Controllers\Api\V1\VendorWithholdingController;
 use App\Http\Controllers\Api\V1\VendorInvoiceController;
 use App\Http\Controllers\Api\V1\MatchExceptionController;
 use App\Http\Controllers\Api\V1\StockController;
+use App\Http\Controllers\Api\V1\StockTransferController;
+use App\Http\Controllers\Api\V1\StockOpnameController;
+use App\Http\Controllers\Api\V1\StockAdjustmentController;
+use App\Http\Controllers\Api\V1\StockLotController;
+use App\Http\Controllers\Api\V1\StockProductionController;
 use App\Http\Controllers\Api\V1\SubCategoryController;
 use App\Http\Controllers\Api\V1\SupplierController;
 use App\Http\Controllers\Api\V1\UnitController;
@@ -325,7 +330,47 @@ Route::prefix('v1')->group(function () {
 
             Route::get('stock', [StockController::class, 'index']);
             Route::get('stock/low', [StockController::class, 'low']);
+            Route::get('stock/over', [StockController::class, 'over']);
+            Route::get('stock/valuation', [StockController::class, 'valuation']);
+            Route::get('stock/mutations', [StockController::class, 'mutations']);
+            Route::get('stock/reorder-suggestions', [StockController::class, 'reorderSuggestions']);
+            Route::post('stock/reorder-suggestions/create-pr', [StockController::class, 'createReorderPr']);
             Route::get('stock/movements', [StockController::class, 'movements']);
+
+            Route::get('stock-transfers', [StockTransferController::class, 'index']);
+            Route::post('stock-transfers', [StockTransferController::class, 'store']);
+            Route::get('stock-transfers/{stockTransfer}', [StockTransferController::class, 'show']);
+            Route::put('stock-transfers/{stockTransfer}', [StockTransferController::class, 'update']);
+            Route::post('stock-transfers/{stockTransfer}/ship', [StockTransferController::class, 'ship']);
+            Route::post('stock-transfers/{stockTransfer}/receive', [StockTransferController::class, 'receive']);
+            Route::post('stock-transfers/{stockTransfer}/cancel', [StockTransferController::class, 'cancel']);
+
+            Route::get('stock-opnames', [StockOpnameController::class, 'index']);
+            Route::post('stock-opnames', [StockOpnameController::class, 'store']);
+            Route::get('stock-opnames/{stockOpname}', [StockOpnameController::class, 'show']);
+            Route::put('stock-opnames/{stockOpname}', [StockOpnameController::class, 'update']);
+            Route::post('stock-opnames/{stockOpname}/confirm', [StockOpnameController::class, 'confirm']);
+            Route::post('stock-opnames/{stockOpname}/cancel', [StockOpnameController::class, 'cancel']);
+
+            Route::get('stock-adjustments', [StockAdjustmentController::class, 'index']);
+            Route::post('stock-adjustments', [StockAdjustmentController::class, 'store']);
+            Route::get('stock-adjustments/{stockAdjustment}', [StockAdjustmentController::class, 'show']);
+            Route::put('stock-adjustments/{stockAdjustment}', [StockAdjustmentController::class, 'update']);
+            Route::post('stock-adjustments/{stockAdjustment}/confirm', [StockAdjustmentController::class, 'confirm']);
+            Route::post('stock-adjustments/{stockAdjustment}/cancel', [StockAdjustmentController::class, 'cancel']);
+
+            Route::get('stock-lots', [StockLotController::class, 'index']);
+            Route::get('stock-lots/{stockLot}', [StockLotController::class, 'show']);
+
+            Route::get('stock-productions/preview', [StockProductionController::class, 'preview']);
+            Route::get('stock-productions', [StockProductionController::class, 'index']);
+            Route::post('stock-productions', [StockProductionController::class, 'store']);
+            Route::get('stock-productions/{stockProduction}', [StockProductionController::class, 'show']);
+            Route::put('stock-productions/{stockProduction}', [StockProductionController::class, 'update']);
+            Route::post('stock-productions/{stockProduction}/confirm', [StockProductionController::class, 'confirm']);
+            Route::post('stock-productions/{stockProduction}/steps/{step}/complete', [StockProductionController::class, 'completeStep']);
+            Route::post('stock-productions/{stockProduction}/void', [StockProductionController::class, 'void']);
+            Route::post('stock-productions/{stockProduction}/cancel', [StockProductionController::class, 'cancel']);
 
             Route::get('notifications', [NotificationController::class, 'index']);
             Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);

@@ -18,6 +18,9 @@ class StockMovement extends Model
         'type',
         'qty_change',
         'qty_after',
+        'unit_cost',
+        'cost_amount',
+        'costing_method',
         'qty_input',
         'unit_level',
         'unit',
@@ -32,6 +35,8 @@ class StockMovement extends Model
         return [
             'qty_change' => 'integer',
             'qty_after' => 'integer',
+            'unit_cost' => 'integer',
+            'cost_amount' => 'integer',
             'qty_input' => 'integer',
             'factor_to_base' => 'integer',
         ];

@@ -85,7 +85,7 @@ export function NotifyTray() {
 
   function onOpenItem(item: TrayNotification) {
     const app = item.meta && typeof item.meta.app === 'string' ? item.meta.app : null
-    if (app === 'beranda' || app === 'approvals' || app === 'purchase' || app === 'insight' || app === 'pos' || app === 'master' || app === 'sales' || app === 'admin' || app === 'settings') {
+    if (app === 'beranda' || app === 'approvals' || app === 'purchase' || app === 'insight' || app === 'pos' || app === 'master' || app === 'inventory' || app === 'sales' || app === 'admin' || app === 'settings') {
       if (erpNav) erpNav.openApp(app)
       else desktop.openApp(app)
       setOpen(false)

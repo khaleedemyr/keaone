@@ -182,12 +182,16 @@ export type Modules = {
 
 export type PosMode = 'retail' | 'restaurant' | 'cafe'
 
+export type InventoryCostingMethod = 'fifo' | 'average' | 'moving_average'
+
 export type Settings = {
   tax_percent: number
   allow_credit: boolean
   receipt_width: number
   receipt_footer: string
   pos_mode?: PosMode
+  inventory_costing_method?: InventoryCostingMethod
+  inventory_allow_negative_stock?: boolean
   purchase_flow?: 'strict_pr_po_gr' | 'po_gr' | 'direct'
   purchase_update_cost?: boolean
   po_auto_close_on_full_receive?: boolean
@@ -501,6 +505,7 @@ export type Warehouse = {
   outlet: { id: number; name: string } | null
   name: string
   address: string | null
+  location_type?: string | null
   is_default: boolean
   is_active: boolean
 }
@@ -627,6 +632,7 @@ export type Product = {
   suggested_unit_cost?: number
   cost_price?: number
   min_stock: number
+  max_stock?: number
   reorder_qty?: number
   is_active: boolean
   stock_qty: number

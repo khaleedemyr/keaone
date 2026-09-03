@@ -32,15 +32,17 @@ export function useTenantApps() {
           'customfields',
           'choicetypes',
           'choices',
-          'warehouses',
+          'glaccounts',
           'suppliers',
           'customers',
-          'stock',
-          'stockcard',
         ],
         'view',
       )
         ? (['master'] as TenantAppId[])
+        : []),
+      ...(me?.modules?.stock &&
+      canAny(['stock', 'stockcard', 'stocksettings', 'warehouses', 'stocktransfers', 'stockopnames', 'stockadjustments', 'stockwaste', 'stockproduction', 'stockvaluation'], 'view')
+        ? (['inventory'] as TenantAppId[])
         : []),
       ...(can('sales') || canAny([...SALES_REPORT_MENUS], 'view') ? (['sales'] as TenantAppId[]) : []),
       ...(me?.modules?.purchase &&
@@ -52,7 +54,7 @@ export function useTenantApps() {
       ...(canAdmin ? (['admin'] as TenantAppId[]) : []),
       ...(canAny(['settings', 'possettings', 'cafetables']) ? (['settings'] as TenantAppId[]) : []),
     ],
-    [can, canAny, canAdmin, me?.modules?.pos, me?.modules?.purchase],
+    [can, canAny, canAdmin, me?.modules?.pos, me?.modules?.purchase, me?.modules?.stock],
   )
 
   const titles = useMemo<Partial<Record<AppId, string>>>(
@@ -61,6 +63,7 @@ export function useTenantApps() {
       insight: t('appInsight'),
       pos: t('appPos'),
       master: t('appMaster'),
+      inventory: t('appInventory'),
       sales: t('appSales'),
       purchase: t('appProcurement'),
       hr: t('appHr'),

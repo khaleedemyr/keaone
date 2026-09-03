@@ -1,5 +1,6 @@
 import type { AppId } from '../desktop/DesktopContext'
 import { MASTER_NAV_GROUPS } from '../desktop/MasterApp'
+import { INVENTORY_NAV_ITEMS } from '../desktop/InventoryApp'
 import { HR_NAV_ITEMS } from '../desktop/HrApp'
 import { SALES_NAV_ITEMS } from '../desktop/SalesApp'
 import { PROCUREMENT_NAV_GROUPS } from '../desktop/PurchaseApp'
@@ -81,6 +82,16 @@ export function buildErpSearchEntries(
           if (mod && !hasModule(mod)) continue
           pushEntry(entries, appId, appLabel, item.id, t(item.label), groupLabel)
         }
+      }
+      continue
+    }
+
+    if (appId === 'inventory') {
+      for (const item of INVENTORY_NAV_ITEMS) {
+        if (!can(item.menu, 'view')) continue
+        const mod = moduleForMenu(item.menu)
+        if (mod && !hasModule(mod)) continue
+        pushEntry(entries, appId, appLabel, item.id, t(item.label))
       }
       continue
     }

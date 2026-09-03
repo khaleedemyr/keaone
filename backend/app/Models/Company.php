@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\InventorySettings;
 use App\Support\ModuleCatalog;
 use App\Support\ProcurementSettings;
 use Illuminate\Database\Eloquent\Model;
@@ -78,7 +79,7 @@ class Company extends Model
             'receipt_width' => 80,
             'receipt_footer' => 'Terima kasih',
             'pos_mode' => 'retail',
-        ], ProcurementSettings::defaults());
+        ], ProcurementSettings::defaults(), InventorySettings::defaults());
     }
 
     /**

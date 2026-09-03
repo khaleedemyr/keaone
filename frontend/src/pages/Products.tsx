@@ -27,6 +27,7 @@ const emptyForm = {
   unit_id: '',
   item_type_id: '',
   min_stock: '0',
+  max_stock: '0',
   reorder_qty: '0',
   initial_qty: '0',
   track_stock: true,
@@ -338,6 +339,7 @@ export default function Products() {
       unit_id: nextLevels.small.unit_id || (product.unit_id ? String(product.unit_id) : ''),
       item_type_id: product.item_type_id ? String(product.item_type_id) : '',
       min_stock: String(product.min_stock),
+      max_stock: String(product.max_stock ?? 0),
       reorder_qty: String(product.reorder_qty ?? 0),
       initial_qty: '0',
       track_stock: product.track_stock,
@@ -495,6 +497,7 @@ export default function Products() {
         }))
         .filter((row) => Number.isFinite(row.sell_price)),
       min_stock: Number(form.min_stock || 0),
+      max_stock: Number(form.max_stock || 0),
       reorder_qty: Number(form.reorder_qty || 0),
       track_stock: form.is_procurement_item || form.is_fixed_asset_item ? false : form.track_stock,
       is_procurement_item: form.is_procurement_item,
@@ -1018,6 +1021,17 @@ export default function Products() {
               value={form.min_stock}
               onChange={(e) => setForm({ ...form, min_stock: e.target.value })}
             />
+          </label>
+          <label className="text-sm text-muted">
+            {t('maxStock')}
+            <input
+              type="number"
+              min={0}
+              className="field"
+              value={form.max_stock}
+              onChange={(e) => setForm({ ...form, max_stock: e.target.value })}
+            />
+            <span className="mt-1 block text-xs">{t('maxStockHint')}</span>
           </label>
           {form.track_stock && !form.is_procurement_item && !form.is_fixed_asset_item ? (
             <label className="text-sm text-muted">

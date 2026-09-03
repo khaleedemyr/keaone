@@ -55,6 +55,9 @@ class ActivityLogger
             if ($keys !== [] && array_diff($keys, $procurementKeys) === []) {
                 $described['menu_key'] = 'purchasesettings';
                 $described['summary'] = 'Ubah pengaturan procurement';
+            } elseif ($keys !== [] && array_diff($keys, config('inventory.settings_keys', [])) === []) {
+                $described['menu_key'] = 'stocksettings';
+                $described['summary'] = 'Ubah pengaturan persediaan';
             } elseif ($keys !== [] && array_diff($keys, ['pos_mode']) === []) {
                 $described['menu_key'] = 'possettings';
                 $described['summary'] = 'Ubah mode kasir';

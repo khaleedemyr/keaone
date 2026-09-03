@@ -17,11 +17,8 @@ type Section =
   | 'customfields'
   | 'choicetypes'
   | 'choices'
-  | 'warehouses'
   | 'suppliers'
   | 'customers'
-  | 'stock'
-  | 'stockcard'
   | 'glaccounts'
 
 const Products = lazy(() => import('../pages/Products'))
@@ -35,10 +32,7 @@ const Promotions = lazy(() => import('../pages/Promotions'))
 const CustomFields = lazy(() => import('../pages/CustomFields'))
 const ChoiceTypes = lazy(() => import('../pages/ChoiceTypes'))
 const Choices = lazy(() => import('../pages/Choices'))
-const Warehouses = lazy(() => import('../pages/Warehouses'))
 const Parties = lazy(() => import('../pages/Parties'))
-const StockPage = lazy(() => import('../pages/Stock'))
-const StockCardPage = lazy(() => import('../pages/StockCard'))
 const GlAccounts = lazy(() => import('../pages/GlAccounts'))
 
 export const MASTER_NAV_GROUPS: { id: string; label: MsgKey; items: { id: Section; label: MsgKey }[] }[] = [
@@ -72,15 +66,6 @@ export const MASTER_NAV_GROUPS: { id: string; label: MsgKey; items: { id: Sectio
     ],
   },
   {
-    id: 'inventory',
-    label: 'masterGroupInventory',
-    items: [
-      { id: 'stock', label: 'navStock' },
-      { id: 'stockcard', label: 'navStockCard' },
-      { id: 'warehouses', label: 'navWarehouses' },
-    ],
-  },
-  {
     id: 'finance',
     label: 'masterGroupFinance',
     items: [{ id: 'glaccounts', label: 'navGlAccounts' }],
@@ -98,7 +83,6 @@ export const MASTER_NAV_GROUPS: { id: string; label: MsgKey; items: { id: Sectio
 export default function MasterApp() {
   const { t } = useI18n()
   const { can, hasModule } = useAccess()
-  const [cardFocus, setCardFocus] = useState<{ productId: number; warehouseId: number } | null>(null)
   const groups = useMemo<AppNavGroup<Section>[]>(
     () =>
       MASTER_NAV_GROUPS.map((group) => ({
@@ -124,7 +108,6 @@ export default function MasterApp() {
       current={current}
       onSelect={(id) => {
         setSection(id)
-        if (id !== 'stockcard') setCardFocus(null)
         logActivity('open_section', id)
       }}
     >
@@ -139,21 +122,6 @@ export default function MasterApp() {
       {current === 'customfields' ? <CustomFields /> : null}
       {current === 'choicetypes' ? <ChoiceTypes /> : null}
       {current === 'choices' ? <Choices /> : null}
-      {current === 'warehouses' ? <Warehouses /> : null}
-      {current === 'stock' ? (
-        <StockPage
-          onOpenCard={(productId, warehouseId) => {
-            setCardFocus({ productId, warehouseId })
-            setSection('stockcard')
-          }}
-        />
-      ) : null}
-      {current === 'stockcard' ? (
-        <StockCardPage
-          initialProductId={cardFocus?.productId}
-          initialWarehouseId={cardFocus?.warehouseId}
-        />
-      ) : null}
       {current === 'glaccounts' ? <GlAccounts /> : null}
       {current === 'suppliers' ? (
         <Parties

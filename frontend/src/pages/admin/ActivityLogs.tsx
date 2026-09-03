@@ -34,6 +34,7 @@ const MENU_LABEL: Record<string, MsgKey> = {
   contacts: 'menuContacts',
   stock: 'menuStock',
   stockcard: 'menuStockCard',
+  stocksettings: 'menuStockSettings',
   purchaserequisitions: 'menuPurchaseRequisitions',
   purchaseorders: 'menuPurchaseOrders',
   goodsreceipts: 'menuGoodsReceipts',

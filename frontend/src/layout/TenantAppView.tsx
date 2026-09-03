@@ -4,6 +4,7 @@ import ApprovalsApp from '../desktop/ApprovalsApp'
 import type { TenantAppId } from '../desktop/DesktopContext'
 import HrApp from '../desktop/HrApp'
 import MasterApp from '../desktop/MasterApp'
+import InventoryApp from '../desktop/InventoryApp'
 import PurchaseApp from '../desktop/PurchaseApp'
 import SalesApp from '../desktop/SalesApp'
 import SettingsApp from '../desktop/SettingsApp'
@@ -18,6 +19,7 @@ export function TenantAppView({ appId }: { appId: TenantAppId }) {
       {appId === 'insight' ? <Dashboard /> : null}
       {appId === 'pos' ? <Pos /> : null}
       {appId === 'master' ? <MasterApp /> : null}
+      {appId === 'inventory' ? <InventoryApp /> : null}
       {appId === 'sales' ? <SalesApp /> : null}
       {appId === 'purchase' ? <PurchaseApp /> : null}
       {appId === 'hr' ? <HrApp /> : null}

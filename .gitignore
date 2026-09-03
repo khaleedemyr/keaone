@@ -26,6 +26,7 @@ frontend/dist-ssr/
 
 # Laravel runtime
 backend/node_modules/
+backend/docs/node_modules/
 backend/public/hot
 backend/public/storage
 backend/storage/*.key

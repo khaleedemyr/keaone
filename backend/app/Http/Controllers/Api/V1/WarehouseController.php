@@ -131,6 +131,7 @@ class WarehouseController extends Controller
             ],
             'is_default' => ['sometimes', 'boolean'],
             'is_active' => ['sometimes', 'boolean'],
+            'location_type' => ['sometimes', 'nullable', 'string', Rule::in(\App\Support\InventoryOps::warehouseLocationTypes())],
         ]);
     }
 }

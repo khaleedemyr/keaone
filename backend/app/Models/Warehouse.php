@@ -15,6 +15,7 @@ class Warehouse extends Model
         'outlet_id',
         'name',
         'address',
+        'location_type',
         'is_default',
         'is_active',
     ];

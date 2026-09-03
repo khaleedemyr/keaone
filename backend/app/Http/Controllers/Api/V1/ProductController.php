@@ -34,9 +34,29 @@ class ProductController extends Controller
                 'purchaserequisitions',
                 'purchaseorders',
                 'goodsreceipts',
+                'stock',
+                'stockcard',
+                'stocktransfers',
+                'stockopnames',
+                'stockadjustments',
+                'stockwaste',
+                'stockproduction',
             ]);
         } else {
-            $this->ensureCanAny(['products', 'pos', 'purchaserequisitions', 'purchaseorders', 'goodsreceipts']);
+            $this->ensureCanAny([
+                'products',
+                'pos',
+                'purchaserequisitions',
+                'purchaseorders',
+                'goodsreceipts',
+                'stock',
+                'stockcard',
+                'stocktransfers',
+                'stockopnames',
+                'stockadjustments',
+                'stockwaste',
+                'stockproduction',
+            ]);
         }
         $query = Product::query()->orderBy('name');
 
@@ -89,6 +109,7 @@ class ProductController extends Controller
             $this->applyActiveStatus($query, $request);
             $items = $query
                 ->with(['productUnits.unitMaster', 'unitMaster', 'category:id,preferred_supplier_id'])
+                ->withCount('bomItems')
                 ->limit(500)
                 ->get();
 
@@ -100,9 +121,12 @@ class ProductController extends Controller
                     'id' => $product->id,
                     'name' => $product->name,
                     'sku' => $product->sku,
+                    'barcode' => $product->barcode,
                     'unit' => $product->unit,
                     'unit_id' => $product->unit_id,
                     'is_active' => $product->is_active,
+                    'track_stock' => (bool) $product->track_stock,
+                    'has_bom' => (int) ($product->bom_items_count ?? 0) > 0,
                     'is_procurement_item' => (bool) $product->is_procurement_item,
                     'is_fixed_asset_item' => (bool) $product->is_fixed_asset_item,
                     'preferred_supplier_id' => $resolvedPreferred,
@@ -199,7 +223,17 @@ class ProductController extends Controller
 
     public function barcode(string $code): JsonResponse
     {
-        $this->ensureCanAny(['products', 'pos']);
+        $this->ensureCanAny([
+            'products',
+            'pos',
+            'stock',
+            'stockcard',
+            'stocktransfers',
+            'stockopnames',
+            'stockadjustments',
+            'stockwaste',
+            'stockproduction',
+        ]);
         $product = Product::query()
             ->with($this->relationList())
             ->where('is_active', true)
@@ -420,6 +454,7 @@ class ProductController extends Controller
             'is_fixed_asset_item' => ['sometimes', 'boolean'],
             'preferred_supplier_id' => ['nullable', 'integer'],
             'min_stock' => ['sometimes', 'integer', 'min:0'],
+            'max_stock' => ['sometimes', 'integer', 'min:0'],
             'reorder_qty' => ['sometimes', 'integer', 'min:0'],
             'custom_fields' => ['nullable', 'array'],
             'is_active' => ['sometimes', 'boolean'],
@@ -797,6 +832,8 @@ class ProductController extends Controller
             (int) $product->id,
             $note,
             (int) $outlet->id,
+            null,
+            (int) $product->cost_price,
         );
     }
 
@@ -845,6 +882,7 @@ class ProductController extends Controller
                 ]]
                 : [],
             'min_stock' => $product->min_stock,
+            'max_stock' => (int) ($product->max_stock ?? 0),
             'reorder_qty' => (int) ($product->reorder_qty ?? 0),
             'is_procurement_item' => (bool) $product->is_procurement_item,
             'is_fixed_asset_item' => (bool) $product->is_fixed_asset_item,
@@ -950,6 +988,7 @@ class ProductController extends Controller
                 : app(\App\Services\PreferredVendorService::class)->resolveForProduct($product),
             'preferred_supplier' => $product->preferredSupplier?->only(['id', 'name']),
             'min_stock' => $product->min_stock,
+            'max_stock' => (int) ($product->max_stock ?? 0),
             'reorder_qty' => (int) ($product->reorder_qty ?? 0),
             'custom_fields' => $product->custom_fields,
             'is_active' => $product->is_active,

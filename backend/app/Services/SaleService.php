@@ -101,10 +101,18 @@ class SaleService
             foreach ($sale->items as $item) {
                 $product = $item->product;
                 if ($product?->track_stock) {
-                    $this->adjustStock($sale, $product, (int) $item->qty, 'cancel', 'Pembatalan '.$sale->number);
+                    $this->adjustStock(
+                        $sale,
+                        $product,
+                        (int) $item->qty,
+                        'cancel',
+                        'Pembatalan '.$sale->number,
+                        (int) $item->cost_snapshot,
+                        true,
+                    );
                 }
                 if ($product) {
-                    $this->explodeBomStock($sale, $product, (int) $item->qty, 1, 'cancel', 'Pembatalan '.$sale->number);
+                    $this->explodeBomStock($sale, $product, (int) $item->qty, 1, 'cancel', 'Pembatalan '.$sale->number, true);
                 }
             }
 
@@ -852,6 +860,12 @@ class SaleService
             /** @var Product $product */
             $product = $line['product'];
 
+            $costSnapshot = (int) $product->cost_price;
+            if ($product->track_stock) {
+                $adj = $this->adjustStock($sale, $product, -1 * $line['qty'], 'sale', 'Penjualan '.$sale->number);
+                $costSnapshot = $adj->unitCost;
+            }
+
             SaleItem::query()->create([
                 'company_id' => $company->id,
                 'sale_id' => $sale->id,
@@ -863,12 +877,9 @@ class SaleService
                 'discount' => $line['discount'],
                 'tax' => $line['tax'],
                 'total' => $line['total'],
-                'cost_snapshot' => (int) $product->cost_price,
+                'cost_snapshot' => $costSnapshot,
             ]);
 
-            if ($product->track_stock) {
-                $this->adjustStock($sale, $product, -1 * $line['qty'], 'sale', 'Penjualan '.$sale->number);
-            }
             $this->explodeBomStock($sale, $product, (int) $line['qty'], -1, 'sale', 'Penjualan '.$sale->number);
         }
 
@@ -906,8 +917,15 @@ class SaleService
         return $prefix.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
     }
 
-    private function explodeBomStock(Sale $sale, Product $product, int $soldQty, int $sign, string $type, string $note): void
-    {
+    private function explodeBomStock(
+        Sale $sale,
+        Product $product,
+        int $soldQty,
+        int $sign,
+        string $type,
+        string $note,
+        bool $reverseCosting = false,
+    ): void {
         $items = $product->relationLoaded('bomItems')
             ? $product->bomItems
             : $product->bomItems()->with('component')->get();
@@ -929,15 +947,25 @@ class SaleService
                 $sign * $qty,
                 $type,
                 $note.' · BOM '.$product->name,
+                null,
+                $reverseCosting,
             );
         }
     }
 
-    private function adjustStock(Sale $sale, Product $product, int $qtyChange, string $type, string $note): void
-    {
+    private function adjustStock(
+        Sale $sale,
+        Product $product,
+        int $qtyChange,
+        string $type,
+        string $note,
+        ?int $unitCost = null,
+        bool $reverseCosting = false,
+    ): \App\Support\InventoryAdjustment {
         $inventory = app(InventoryService::class);
         $warehouse = $inventory->resolveDefaultWarehouse((int) $sale->company_id, (int) $sale->outlet_id);
-        $inventory->adjust(
+
+        return $inventory->adjust(
             (int) $sale->company_id,
             (int) $warehouse->id,
             (int) $product->id,
@@ -947,6 +975,9 @@ class SaleService
             (int) $sale->id,
             $note,
             (int) $sale->outlet_id,
+            null,
+            $unitCost,
+            $reverseCosting,
         );
     }
 

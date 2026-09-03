@@ -9,7 +9,9 @@ use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Services\InventoryService;
 use App\Services\ProductUnitService;
+use App\Services\StockReportService;
 use App\Support\CurrentCompany;
+use App\Support\InventorySettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,6 +22,7 @@ class StockController extends Controller
     public function __construct(
         private InventoryService $inventory,
         private ProductUnitService $productUnits,
+        private StockReportService $reports,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -30,6 +33,87 @@ class StockController extends Controller
     public function low(Request $request): JsonResponse
     {
         return $this->paginatedStock($request, true);
+    }
+
+    public function over(Request $request): JsonResponse
+    {
+        return $this->paginatedStock($request, false, true);
+    }
+
+    public function valuation(Request $request): JsonResponse
+    {
+        $this->ensureModule('stock');
+        $this->ensureCan('stockvaluation', 'view');
+
+        $data = $request->validate([
+            'warehouse_id' => ['nullable', 'integer'],
+            'category_id' => ['nullable', 'integer'],
+        ]);
+
+        return $this->ok($this->reports->valuation(
+            isset($data['warehouse_id']) ? (int) $data['warehouse_id'] : null,
+            isset($data['category_id']) ? (int) $data['category_id'] : null,
+        ));
+    }
+
+    public function mutations(Request $request): JsonResponse
+    {
+        $this->ensureModule('stock');
+        $this->ensureCan('stockvaluation', 'view');
+
+        $data = $request->validate([
+            'warehouse_id' => ['nullable', 'integer'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+        ]);
+
+        return $this->ok($this->reports->mutations(
+            isset($data['warehouse_id']) ? (int) $data['warehouse_id'] : null,
+            $data['from'] ?? null,
+            $data['to'] ?? null,
+        ));
+    }
+
+    public function reorderSuggestions(Request $request): JsonResponse
+    {
+        $this->ensureModule('stock');
+        $this->ensureCan('stock', 'view');
+
+        $data = $request->validate([
+            'warehouse_id' => ['nullable', 'integer'],
+        ]);
+
+        return $this->ok($this->reports->reorderSuggestions(
+            isset($data['warehouse_id']) ? (int) $data['warehouse_id'] : null,
+        )->values());
+    }
+
+    public function createReorderPr(Request $request): JsonResponse
+    {
+        $this->ensureModule('stock');
+        $this->ensureCan('stock', 'view');
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaserequisitions', 'create');
+        $this->ensureBilling();
+
+        $data = $request->validate([
+            'warehouse_id' => ['nullable', 'integer'],
+            'items' => ['nullable', 'array'],
+            'items.*.product_id' => ['required_with:items', 'integer'],
+            'items.*.qty' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $pr = $this->reports->createReorderPr(
+            $request->user(),
+            isset($data['warehouse_id']) ? (int) $data['warehouse_id'] : null,
+            $data['items'] ?? null,
+        );
+
+        return $this->ok([
+            'id' => $pr->id,
+            'number' => $pr->number,
+            'status' => $pr->status,
+        ], [], 201);
     }
 
     public function movements(Request $request): JsonResponse
@@ -52,6 +136,14 @@ class StockController extends Controller
         $warehouse = Warehouse::query()->findOrFail($warehouseId);
         $units = $this->productUnits->serialize($product);
         $qty = $this->inventory->qtyAtWarehouse($warehouseId, $product->id);
+        $balance = StockBalance::query()
+            ->where('warehouse_id', $warehouseId)
+            ->where('product_id', $product->id)
+            ->first();
+        $company = CurrentCompany::company();
+        $method = InventorySettings::method($company);
+        $unitCost = (int) ($balance?->avg_cost ?: $product->cost_price);
+        $costValue = (int) ($balance?->cost_value ?? ($qty * $unitCost));
 
         $query = StockMovement::query()
             ->with(['warehouse:id,name'])
@@ -85,6 +177,9 @@ class StockController extends Controller
             'note' => $m->note,
             'warehouse_id' => $m->warehouse_id,
             'warehouse_name' => $m->warehouse?->name ?? $warehouse->name,
+            'unit_cost' => (int) $m->unit_cost,
+            'cost_amount' => (int) $m->cost_amount,
+            'costing_method' => $m->costing_method,
         ]);
 
         return $this->ok([
@@ -92,6 +187,7 @@ class StockController extends Controller
                 'id' => $product->id,
                 'name' => $product->name,
                 'sku' => $product->sku,
+                'barcode' => $product->barcode,
                 'unit' => $product->unit,
                 'units' => $units,
                 'min_stock' => $product->min_stock,
@@ -102,11 +198,14 @@ class StockController extends Controller
             ],
             'qty' => $qty,
             'qty_display' => $this->productUnits->formatQtyBreakdown($qty, $units),
+            'unit_cost' => $unitCost,
+            'cost_value' => $costValue,
+            'costing_method' => $method,
             'movements' => $rows->values(),
         ], $this->pageMeta($page));
     }
 
-    private function paginatedStock(Request $request, bool $lowOnly): JsonResponse
+    private function paginatedStock(Request $request, bool $lowOnly, bool $overOnly = false): JsonResponse
     {
         $this->ensureModule('stock');
         $this->ensureCan('stock', 'view');
@@ -114,7 +213,7 @@ class StockController extends Controller
         $warehouseId = $this->resolveWarehouseId($request);
         $warehouse = Warehouse::query()->findOrFail($warehouseId);
 
-        $query = $this->stockProductQuery($request, $warehouseId, $lowOnly);
+        $query = $this->stockProductQuery($request, $warehouseId, $lowOnly, $overOnly);
         $page = $query
             ->with(['productUnits.unitMaster', 'unitMaster'])
             ->paginate($this->perPage($request, 50));
@@ -131,7 +230,7 @@ class StockController extends Controller
     /**
      * @return Builder<Product>
      */
-    private function stockProductQuery(Request $request, int $warehouseId, bool $lowOnly): Builder
+    private function stockProductQuery(Request $request, int $warehouseId, bool $lowOnly, bool $overOnly = false): Builder
     {
         $query = Product::query()
             ->where('products.track_stock', true)
@@ -140,10 +239,19 @@ class StockController extends Controller
                 $join->on('products.id', '=', 'stock_balances.product_id')
                     ->where('stock_balances.warehouse_id', '=', $warehouseId);
             })
-            ->select('products.*', DB::raw('COALESCE(stock_balances.qty, 0) as stock_qty'));
+            ->select(
+                'products.*',
+                DB::raw('COALESCE(stock_balances.qty, 0) as stock_qty'),
+                DB::raw('COALESCE(stock_balances.avg_cost, products.cost_price, 0) as stock_avg_cost'),
+                DB::raw('COALESCE(stock_balances.cost_value, 0) as stock_cost_value'),
+            );
 
         if ($lowOnly) {
             $query->whereRaw('COALESCE(stock_balances.qty, 0) <= products.min_stock');
+        }
+        if ($overOnly) {
+            $query->where('products.max_stock', '>', 0)
+                ->whereRaw('COALESCE(stock_balances.qty, 0) > products.max_stock');
         }
 
         if ($search = trim($request->string('search')->toString())) {
@@ -175,10 +283,14 @@ class StockController extends Controller
             'qty' => $qty,
             'qty_display' => $this->productUnits->formatQtyBreakdown($qty, $units),
             'min_stock' => $product->min_stock,
+            'max_stock' => (int) ($product->max_stock ?? 0),
+            'reorder_qty' => (int) ($product->reorder_qty ?? 0),
             'unit' => $product->unit,
             'units' => $units,
             'warehouse_id' => $warehouse->id,
             'warehouse_name' => $warehouse->name,
+            'unit_cost' => (int) ($product->stock_avg_cost ?? $product->cost_price ?? 0),
+            'cost_value' => (int) ($product->stock_cost_value ?? 0),
         ];
 
         if ($withBarcode) {

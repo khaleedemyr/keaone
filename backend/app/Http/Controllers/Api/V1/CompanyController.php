@@ -63,15 +63,19 @@ class CompanyController extends Controller
             'settings.receipt_footer' => ['nullable', 'string'],
             'settings.receipt_layout' => ['sometimes', 'array'],
             'settings.pos_mode' => ['sometimes', Rule::in(['retail', 'restaurant', 'cafe'])],
+            'settings.inventory_costing_method' => ['sometimes', Rule::in(['fifo', 'average', 'moving_average'])],
+            'settings.inventory_allow_negative_stock' => ['sometimes', 'boolean'],
         ], $this->procurementSettingsValidationRules()));
 
         $settingsInput = $data['settings'] ?? [];
         $posKeys = ['pos_mode'];
         $procurementKeys = config('procurement.settings_keys', []);
+        $inventoryKeys = config('inventory.settings_keys', []);
         $incoming = array_keys($settingsInput);
         $hasPos = array_intersect($incoming, $posKeys) !== [];
         $hasProcurement = array_intersect($incoming, $procurementKeys) !== [];
-        $hasOps = array_diff($incoming, array_merge($posKeys, $procurementKeys)) !== [];
+        $hasInventory = array_intersect($incoming, $inventoryKeys) !== [];
+        $hasOps = array_diff($incoming, array_merge($posKeys, $procurementKeys, $inventoryKeys)) !== [];
 
         if (isset($data['modules'])) {
             $this->ensureCan('modules', 'edit');
@@ -82,10 +86,13 @@ class CompanyController extends Controller
         if ($hasProcurement) {
             $this->ensureCanAny(['purchasesettings', 'ops', 'settings']);
         }
+        if ($hasInventory) {
+            $this->ensureCanAny(['stocksettings', 'ops', 'settings']);
+        }
         if ($hasOps) {
             $this->ensureCan('ops', 'edit');
         }
-        if (! isset($data['modules']) && ! $hasPos && ! $hasOps && ! $hasProcurement) {
+        if (! isset($data['modules']) && ! $hasPos && ! $hasOps && ! $hasProcurement && ! $hasInventory) {
             $this->ensureCan('ops', 'edit');
         }
 
@@ -113,6 +120,7 @@ class CompanyController extends Controller
             $allowedKeys = array_merge(
                 ['tax_percent', 'allow_credit', 'receipt_width', 'receipt_footer', 'receipt_layout', 'pos_mode'],
                 config('procurement.settings_keys', []),
+                config('inventory.settings_keys', []),
             );
             $settingsPatch = array_intersect_key($settingsPatch, array_flip($allowedKeys));
 

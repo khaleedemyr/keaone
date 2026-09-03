@@ -16,12 +16,28 @@ class StockBalance extends Model
         'warehouse_id',
         'product_id',
         'qty',
+        'avg_cost',
+        'cost_value',
+        'period_year',
+        'period_month',
+        'period_opening_qty',
+        'period_opening_value',
+        'period_receipt_qty',
+        'period_receipt_value',
     ];
 
     protected function casts(): array
     {
         return [
             'qty' => 'integer',
+            'avg_cost' => 'integer',
+            'cost_value' => 'integer',
+            'period_year' => 'integer',
+            'period_month' => 'integer',
+            'period_opening_qty' => 'integer',
+            'period_opening_value' => 'integer',
+            'period_receipt_qty' => 'integer',
+            'period_receipt_value' => 'integer',
         ];
     }
 
