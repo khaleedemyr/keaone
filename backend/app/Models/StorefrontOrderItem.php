@@ -15,6 +15,7 @@ class StorefrontOrderItem extends Model
         'storefront_order_id',
         'product_id',
         'name_snapshot',
+        'variant_snapshot',
         'qty',
         'unit_price',
         'line_total',
@@ -23,6 +24,7 @@ class StorefrontOrderItem extends Model
     protected function casts(): array
     {
         return [
+            'variant_snapshot' => 'array',
             'qty' => 'integer',
             'unit_price' => 'integer',
             'line_total' => 'integer',

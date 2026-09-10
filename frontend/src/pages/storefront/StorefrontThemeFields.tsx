@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, apiMessage } from '../../api/client'
 import { SearchMultiSelect } from '../../components/SearchMultiSelect'
-import { useI18n } from '../../i18n'
+import { useI18n, type MsgKey } from '../../i18n'
+import { STOREFRONT_IMAGE_ACCEPT, storefrontImageSizeHintKey } from './lib/imageUploadHints'
 import type { ApiOk, Category } from '../../types'
 import type {
   StorefrontCarouselSlide,
@@ -15,6 +16,29 @@ type Props = {
   value: StorefrontThemeContent
   disabled?: boolean
   onChange: (next: StorefrontThemeContent) => void
+}
+
+function ImageUploadHints({
+  sizeKey,
+  multi,
+  remaining,
+}: {
+  sizeKey: MsgKey
+  multi?: boolean
+  remaining?: number
+}) {
+  const { t } = useI18n()
+  return (
+    <div className="space-y-0.5 text-[11px] leading-snug text-muted">
+      <p>{t('storefrontImageFormats', { mb: '5' })}</p>
+      <p>{t(sizeKey)}</p>
+      {multi ? (
+        <p>{t('storefrontImageMultiHint', { n: String(Math.max(0, remaining ?? 0)) })}</p>
+      ) : (
+        <p>{t('storefrontImageSingleHint')}</p>
+      )}
+    </div>
+  )
 }
 
 export function StorefrontThemeFields({ slots, value, disabled, onChange }: Props) {
@@ -62,21 +86,43 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
     return data.data.url
   }
 
-  async function onPickImage(slotKey: string, file: File | undefined, mode: 'replace' | 'gallery' | 'carousel') {
-    if (!file || disabled) return
+  async function onPickImages(
+    slotKey: string,
+    fileList: FileList | null | undefined,
+    mode: 'replace' | 'gallery' | 'carousel',
+    maxItems?: number,
+  ) {
+    if (!fileList?.length || disabled) return
+    const files = Array.from(fileList)
     setError('')
     setUploading(slotKey)
     try {
-      const url = await uploadFile(file)
       if (mode === 'replace') {
+        const url = await uploadFile(files[0]!)
         onChange({ ...value, [slotKey]: url })
-      } else if (mode === 'gallery') {
-        const prev = Array.isArray(value[slotKey]) ? (value[slotKey] as string[]) : []
-        onChange({ ...value, [slotKey]: [...prev, url] })
-      } else {
-        const prev = Array.isArray(value[slotKey]) ? (value[slotKey] as StorefrontCarouselSlide[]) : []
-        onChange({ ...value, [slotKey]: [...prev, { image: url, title: '', subtitle: '' }] })
+        return
       }
+
+      if (mode === 'gallery') {
+        const prev = Array.isArray(value[slotKey]) ? (value[slotKey] as string[]) : []
+        const room = Math.max(0, (maxItems ?? 5) - prev.length)
+        const batch = files.slice(0, room)
+        const urls: string[] = []
+        for (const file of batch) {
+          urls.push(await uploadFile(file))
+        }
+        if (urls.length) onChange({ ...value, [slotKey]: [...prev, ...urls] })
+        return
+      }
+
+      const prev = Array.isArray(value[slotKey]) ? (value[slotKey] as StorefrontCarouselSlide[]) : []
+      const room = Math.max(0, (maxItems ?? 5) - prev.length)
+      const batch = files.slice(0, room)
+      const slides: StorefrontCarouselSlide[] = []
+      for (const file of batch) {
+        slides.push({ image: await uploadFile(file), title: '', subtitle: '' })
+      }
+      if (slides.length) onChange({ ...value, [slotKey]: [...prev, ...slides] })
     } catch (err) {
       setError(apiMessage(err, t('storefrontMediaFailed')))
     } finally {
@@ -182,7 +228,7 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
                 <div className="space-y-2">
                   <div className="text-xs font-medium text-muted">{catName || `ID ${item.category_id}`}</div>
                   <input
-                    className="input w-full text-sm"
+                    className="field text-sm"
                     placeholder={t('storefrontCategoryLabelOverride')}
                     disabled={disabled}
                     value={item.label || ''}
@@ -223,16 +269,19 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
                     </div>
                   )}
                   {!disabled ? (
-                    <label className="btn-ghost inline-flex cursor-pointer text-xs">
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        disabled={itemBusy}
-                        onChange={(e) => void setCategoryImage(item.category_id, e.target.files?.[0])}
-                      />
-                      {itemBusy ? t('storefrontUploading') : t('storefrontUploadImage')}
-                    </label>
+                    <div className="space-y-1">
+                      <label className="btn-ghost inline-flex cursor-pointer text-xs">
+                        <input
+                          type="file"
+                          accept={STOREFRONT_IMAGE_ACCEPT}
+                          className="hidden"
+                          disabled={itemBusy}
+                          onChange={(e) => void setCategoryImage(item.category_id, e.target.files?.[0])}
+                        />
+                        {itemBusy ? t('storefrontUploading') : t('storefrontUploadImage')}
+                      </label>
+                      <ImageUploadHints sizeKey={storefrontImageSizeHintKey('category', slot.key)} />
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -245,10 +294,10 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
     if (slot.type === 'text') {
       const text = typeof value[slot.key] === 'string' ? (value[slot.key] as string) : ''
       return (
-        <label key={slot.key} className="block space-y-1 text-sm">
-          <span className="text-muted">{slot.label}</span>
+        <label key={slot.key} className="field-block">
+          <span>{slot.label}</span>
           <input
-            className="input w-full"
+            className="field"
             disabled={disabled}
             value={text}
             placeholder={placeholder}
@@ -263,10 +312,10 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
       const options = Array.isArray(slot.options) ? slot.options : []
       const fallback = placeholder || options[0]?.value || ''
       return (
-        <label key={slot.key} className="block space-y-1 text-sm sm:col-span-2">
-          <span className="text-muted">{slot.label}</span>
+        <label key={slot.key} className="field-block sm:col-span-2">
+          <span>{slot.label}</span>
           <select
-            className="input w-full"
+            className="field"
             disabled={disabled}
             value={selected || fallback}
             onChange={(e) => setText(slot.key, e.target.value)}
@@ -284,10 +333,10 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
     if (slot.type === 'textarea') {
       const text = typeof value[slot.key] === 'string' ? (value[slot.key] as string) : ''
       return (
-        <label key={slot.key} className="block space-y-1 text-sm sm:col-span-2">
-          <span className="text-muted">{slot.label}</span>
+        <label key={slot.key} className="field-block sm:col-span-2">
+          <span>{slot.label}</span>
           <textarea
-            className="input min-h-20 w-full"
+            className="field min-h-24 font-mono text-[13px] leading-relaxed"
             disabled={disabled}
             value={text}
             placeholder={placeholder}
@@ -300,8 +349,8 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
     if (slot.type === 'image') {
       const url = typeof value[slot.key] === 'string' ? (value[slot.key] as string) : ''
       return (
-        <div key={slot.key} className="space-y-2 rounded-2xl border border-line p-3">
-          <div className="text-sm text-muted">{slot.label}</div>
+        <div key={slot.key} className="space-y-2 rounded-2xl border border-line bg-fill/30 p-3">
+          <div className="text-sm font-medium text-fg">{slot.label}</div>
           {url ? (
             <div className="relative aspect-[16/10] overflow-hidden rounded-xl bg-slate-200">
               <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
@@ -316,21 +365,27 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
               ) : null}
             </div>
           ) : (
-            <div className="grid h-28 place-items-center rounded-xl border border-dashed border-line text-xs text-muted">
+            <div className="grid h-28 place-items-center rounded-xl border border-dashed border-line bg-fill text-xs text-muted">
               {t('storefrontNoImage')}
             </div>
           )}
           {!disabled ? (
-            <label className="btn-ghost inline-flex cursor-pointer text-sm">
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                disabled={busy}
-                onChange={(e) => void onPickImage(slot.key, e.target.files?.[0], 'replace')}
-              />
-              {busy ? t('storefrontUploading') : t('storefrontUploadImage')}
-            </label>
+            <div className="space-y-1.5">
+              <label className="btn-ghost inline-flex cursor-pointer text-sm">
+                <input
+                  type="file"
+                  accept={STOREFRONT_IMAGE_ACCEPT}
+                  className="hidden"
+                  disabled={busy}
+                  onChange={(e) => {
+                    void onPickImages(slot.key, e.target.files, 'replace')
+                    e.target.value = ''
+                  }}
+                />
+                {busy ? t('storefrontUploading') : t('storefrontUploadImage')}
+              </label>
+              <ImageUploadHints sizeKey={storefrontImageSizeHintKey('image', slot.key)} />
+            </div>
           ) : null}
         </div>
       )
@@ -338,25 +393,31 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
 
     if (slot.type === 'gallery') {
       const images = Array.isArray(value[slot.key]) ? (value[slot.key] as string[]) : []
+      const remaining = Math.max(0, max - images.length)
       return (
         <div key={slot.key} className="space-y-2 rounded-2xl border border-line p-3 sm:col-span-2">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-sm text-muted">
+            <div className="text-sm font-medium text-fg">
               {slot.label} ({images.length}/{max})
             </div>
-            {!disabled && images.length < max ? (
+            {!disabled && remaining > 0 ? (
               <label className="btn-ghost cursor-pointer text-sm">
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept={STOREFRONT_IMAGE_ACCEPT}
                   className="hidden"
+                  multiple
                   disabled={busy}
-                  onChange={(e) => void onPickImage(slot.key, e.target.files?.[0], 'gallery')}
+                  onChange={(e) => {
+                    void onPickImages(slot.key, e.target.files, 'gallery', max)
+                    e.target.value = ''
+                  }}
                 />
                 {busy ? t('storefrontUploading') : t('storefrontAddImage')}
               </label>
             ) : null}
           </div>
+          <ImageUploadHints sizeKey={storefrontImageSizeHintKey('gallery', slot.key)} multi remaining={remaining} />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {images.map((src, index) => (
               <div key={`${src}-${index}`} className="relative overflow-hidden rounded-xl bg-slate-100">
@@ -379,25 +440,31 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
 
     if (slot.type === 'carousel') {
       const realSlides = Array.isArray(value[slot.key]) ? (value[slot.key] as StorefrontCarouselSlide[]) : []
+      const remaining = Math.max(0, max - realSlides.length)
       return (
         <div key={slot.key} className="space-y-3 rounded-2xl border border-line p-3 sm:col-span-2">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-sm text-muted">
+            <div className="text-sm font-medium text-fg">
               {slot.label} ({realSlides.length}/{max})
             </div>
-            {!disabled && realSlides.length < max ? (
+            {!disabled && remaining > 0 ? (
               <label className="btn-ghost cursor-pointer text-sm">
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept={STOREFRONT_IMAGE_ACCEPT}
                   className="hidden"
+                  multiple
                   disabled={busy}
-                  onChange={(e) => void onPickImage(slot.key, e.target.files?.[0], 'carousel')}
+                  onChange={(e) => {
+                    void onPickImages(slot.key, e.target.files, 'carousel', max)
+                    e.target.value = ''
+                  }}
                 />
                 {busy ? t('storefrontUploading') : t('storefrontAddSlide')}
               </label>
             ) : null}
           </div>
+          <ImageUploadHints sizeKey={storefrontImageSizeHintKey('carousel', slot.key)} multi remaining={remaining} />
           {realSlides.map((slide, index) => (
             <div key={`${slide.image}-${index}`} className="grid gap-2 rounded-xl border border-line p-2 sm:grid-cols-[120px_1fr]">
               <div className="relative overflow-hidden rounded-lg bg-slate-100">
@@ -414,14 +481,14 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
               </div>
               <div className="space-y-2">
                 <input
-                  className="input w-full text-sm"
+                  className="field text-sm"
                   placeholder={t('storefrontSlideTitle')}
                   disabled={disabled}
                   value={slide.title ?? ''}
                   onChange={(e) => patchCarousel(slot.key, index, { title: e.target.value })}
                 />
                 <input
-                  className="input w-full text-sm"
+                  className="field text-sm"
                   placeholder={t('storefrontSlideSubtitle')}
                   disabled={disabled}
                   value={slide.subtitle ?? ''}
@@ -441,8 +508,8 @@ export function StorefrontThemeFields({ slots, value, disabled, onChange }: Prop
     <div className="space-y-5">
       {error ? <div className="text-sm text-rose-500">{error}</div> : null}
       {sections.map((section) => (
-        <section key={section.title} className="space-y-3">
-          <div className="border-b border-line pb-1.5 text-sm font-semibold text-slate-800">{section.title}</div>
+        <section key={section.title} className="space-y-3 rounded-2xl border border-line bg-fill/25 p-4">
+          <div className="border-b border-line pb-2 text-sm font-semibold text-fg">{section.title}</div>
           <div className="grid gap-3 sm:grid-cols-2">{section.slots.map((slot) => renderSlot(slot))}</div>
         </section>
       ))}

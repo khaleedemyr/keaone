@@ -20,18 +20,28 @@ export function mergeThemeContent(
   return { ...themeDefaultsFromSlots(slots), ...(saved ?? {}) }
 }
 
-/** Keep only keys allowed by the new template; fill missing text from defaults. */
+function isMediaSlot(slot: StorefrontTemplateSlot | undefined, key: string): boolean {
+  if (slot?.type === 'image' || slot?.type === 'gallery') return true
+  return /(_image|_gallery|logo)/i.test(key)
+}
+
+/**
+ * On template switch: use the new template’s text defaults.
+ * Only keep previous media so old nav/hero copy cannot target missing section ids
+ * (e.g. Ellipse `#awards` left over on Prompt).
+ */
 export function themeForTemplateSwitch(
   slots: StorefrontTemplateSlot[],
   previous: StorefrontThemeContent,
 ): StorefrontThemeContent {
   const defaults = themeDefaultsFromSlots(slots)
+  const byKey = new Map(slots.map((s) => [s.key, s]))
   const next: StorefrontThemeContent = { ...defaults }
-  const allowed = new Set(slots.map((s) => s.key))
   for (const [key, value] of Object.entries(previous)) {
-    if (!allowed.has(key) || value == null) continue
+    if (!byKey.has(key) || value == null) continue
     if (typeof value === 'string' && value.trim() === '') continue
     if (Array.isArray(value) && value.length === 0) continue
+    if (!isMediaSlot(byKey.get(key), key)) continue
     next[key] = value
   }
   return next

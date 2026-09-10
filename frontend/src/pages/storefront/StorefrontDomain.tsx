@@ -161,7 +161,7 @@ export default function StorefrontDomainPage() {
           <label className="block space-y-1 text-sm">
             <span className="text-muted">{t('storefrontDomainHost')}</span>
             <input
-              className="input w-full"
+              className="field w-full"
               placeholder="tokoanda.com"
               value={host}
               onChange={(e) => {

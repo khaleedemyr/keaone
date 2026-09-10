@@ -22,6 +22,8 @@ type PublicStorefrontPayload = {
   contact_address?: string | null
   bank_accounts?: StorefrontRenderModel['bank_accounts']
   shipping?: StorefrontShipping | null
+  has_news?: boolean
+  news?: StorefrontRenderModel['news']
 }
 
 type PublicProductPayload = {
@@ -32,6 +34,9 @@ type PublicProductPayload = {
   available_qty?: number | null
   category_id?: number | null
   image_url?: string | null
+  images?: Array<{ id?: number; url?: string | null; is_primary?: boolean }>
+  weight_gram?: number | null
+  variant_attributes?: StorefrontRenderProduct['variant_attributes']
   is_deal?: boolean
   is_new_arrival?: boolean
   is_bestseller?: boolean
@@ -76,6 +81,15 @@ export default function StorefrontPublicPage() {
               available_qty: row.available_qty ?? null,
               category_id: row.category_id ?? null,
               image_url: row.image_url ?? null,
+              images: (row.images ?? [])
+                .map((img) => ({
+                  id: img.id,
+                  url: String(img.url || ''),
+                  is_primary: Boolean(img.is_primary),
+                }))
+                .filter((img) => img.url),
+              weight_gram: row.weight_gram ?? null,
+              variant_attributes: row.variant_attributes ?? [],
               is_deal: Boolean(row.is_deal),
               is_new_arrival: Boolean(row.is_new_arrival),
               is_bestseller: Boolean(row.is_bestseller),
@@ -104,6 +118,7 @@ export default function StorefrontPublicPage() {
           theme_content: sf.theme_content ?? {},
           home_blocks: sf.home_blocks ?? [],
           products,
+          news: sf.has_news ? (sf.news ?? []) : [],
           preview: false,
           host: sf.host || host,
         })

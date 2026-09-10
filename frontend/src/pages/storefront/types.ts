@@ -136,6 +136,7 @@ export type StorefrontAdmin = {
     site_kind: string
     items: Array<{ key: string; ok: boolean }>
   }
+  has_news?: boolean
   domains: StorefrontDomainRow[]
   templates: {
     landing: StorefrontTemplate[]
@@ -149,6 +150,37 @@ export type StorefrontAdmin = {
     txt_host?: string
     txt_value?: string
   }
+}
+
+export type StorefrontNewsPostRow = {
+  id: number
+  slug: string
+  title: string
+  excerpt?: string | null
+  body?: string | null
+  image_path?: string | null
+  image_url?: string | null
+  tags?: string | null
+  sort_order: number
+  is_published: boolean
+  published_at?: string | null
+  day?: string | null
+  month?: string | null
+}
+
+export type StorefrontInquiryRow = {
+  id: number
+  kind: 'contact' | 'quote' | string
+  name: string
+  email: string
+  phone?: string | null
+  subject?: string | null
+  message: string
+  meta?: Record<string, unknown> | null
+  status: 'new' | 'read' | 'archived' | string
+  read_at?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export type StorefrontHomePage = {
@@ -200,6 +232,9 @@ export type StorefrontProductRow = {
     track_stock?: boolean
     category_id?: number | null
     image_url?: string | null
+    images?: Array<{ id?: number; url?: string | null; is_primary?: boolean }>
+    variant_attributes?: import('./templates/renderTypes').StorefrontVariantAttribute[]
+    weight_gram?: number | null
   } | null
 }
 

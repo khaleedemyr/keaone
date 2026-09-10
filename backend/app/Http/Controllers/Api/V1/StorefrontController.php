@@ -5,11 +5,14 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\StorefrontDomain;
+use App\Models\StorefrontInquiry;
+use App\Models\StorefrontNewsPost;
 use App\Models\StorefrontOrder;
 use App\Models\StorefrontProduct;
 use App\Services\StorefrontDomainService;
 use App\Services\StorefrontService;
 use App\Support\CurrentCompany;
+use App\Support\StorefrontCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -20,7 +23,7 @@ class StorefrontController extends Controller
     public function show(StorefrontService $storefronts): JsonResponse
     {
         $this->ensureModule('storefront');
-        $this->ensureCanAny(['storefrontsetup', 'storefrontdomain', 'storefrontproducts', 'storefrontorders', 'storefrontpages']);
+        $this->ensureCanAny(['storefrontsetup', 'storefrontdomain', 'storefrontproducts', 'storefrontorders', 'storefrontpages', 'storefrontnews', 'storefrontinquiries']);
 
         $company = CurrentCompany::company();
         abort_unless($company, 404);
@@ -157,7 +160,7 @@ class StorefrontController extends Controller
     public function storeMedia(Request $request, StorefrontService $storefronts): JsonResponse
     {
         $this->ensureModule('storefront');
-        $this->ensureCanAny([['storefrontsetup', 'edit'], ['storefrontpages', 'edit']]);
+        $this->ensureCanAny([['storefrontsetup', 'edit'], ['storefrontpages', 'edit'], ['storefrontnews', 'edit'], ['storefrontnews', 'create']]);
 
         $company = CurrentCompany::company();
         abort_unless($company, 404);
@@ -278,8 +281,11 @@ class StorefrontController extends Controller
 
         $query = StorefrontProduct::query()
             ->with([
-                'product' => fn ($q) => $q->select(['id', 'name', 'sku', 'sell_price', 'is_active', 'track_stock', 'category_id', 'description'])
-                    ->with(['images' => fn ($iq) => $iq->orderByDesc('is_primary')->orderBy('sort_order')->orderBy('id')]),
+                'product' => fn ($q) => $q->select(['id', 'name', 'sku', 'sell_price', 'is_active', 'track_stock', 'category_id', 'description', 'weight_gram'])
+                    ->with([
+                        'images' => fn ($iq) => $iq->orderByDesc('is_primary')->orderBy('sort_order')->orderBy('id'),
+                        'variantAttributes.options',
+                    ]),
             ])
             ->where('storefront_id', $storefront->id)
             ->orderBy('sort_order')
@@ -313,6 +319,16 @@ class StorefrontController extends Controller
                     'track_stock' => $product->track_stock,
                     'category_id' => $product->category_id,
                     'image_url' => $cover?->url(),
+                    'images' => $product->images
+                        ? $product->images->map(fn ($img) => [
+                            'id' => $img->id,
+                            'url' => $img->url(),
+                            'is_primary' => (bool) $img->is_primary,
+                        ])->filter(fn ($img) => ! empty($img['url']))->values()->all()
+                        : [],
+                    'variant_attributes' => app(\App\Services\ProductVariantService::class)
+                        ->serialize($product, storefrontOnly: true),
+                    'weight_gram' => $product->weight_gram !== null ? (int) $product->weight_gram : null,
                 ] : null,
             ];
         });
@@ -337,6 +353,9 @@ class StorefrontController extends Controller
             'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.product_id' => ['required', 'integer', 'min:1'],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:999'],
+            'items.*.selected_options' => ['nullable', 'array'],
+            'items.*.selected_options.*.attribute_id' => ['required_with:items.*.selected_options', 'integer', 'min:1'],
+            'items.*.selected_options.*.option_id' => ['required_with:items.*.selected_options', 'integer', 'min:1'],
             'shipping_destination_id' => ['nullable', 'integer', 'min:1'],
             'shipping_destination_label' => ['nullable', 'string', 'max:255'],
             'shipping_courier' => ['nullable', 'string', 'max:40'],
@@ -615,5 +634,227 @@ class StorefrontController extends Controller
         }
 
         return $this->ok($order);
+    }
+
+    public function newsPosts(Request $request, StorefrontService $storefronts): JsonResponse
+    {
+        $this->ensureModule('storefront');
+        $this->ensureCan('storefrontnews', 'view');
+
+        $company = CurrentCompany::company();
+        abort_unless($company, 404);
+        $storefront = $storefronts->forCompany($company);
+
+        $query = StorefrontNewsPost::query()
+            ->where('storefront_id', $storefront->id)
+            ->orderBy('sort_order')
+            ->orderByDesc('published_at')
+            ->orderByDesc('id');
+
+        if ($search = $request->string('search')->toString()) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                    ->orWhere('excerpt', 'like', "%{$search}%")
+                    ->orWhere('tags', 'like', "%{$search}%")
+                    ->orWhere('slug', 'like', "%{$search}%");
+            });
+        }
+
+        $status = $request->string('status')->toString();
+        if ($status === 'published') {
+            $query->where('is_published', true);
+        } elseif ($status === 'draft') {
+            $query->where('is_published', false);
+        }
+
+        return $this->paged($query, $request, fn (StorefrontNewsPost $row) => $storefronts->newsPostToArray($row));
+    }
+
+    public function storeNewsPost(Request $request, StorefrontService $storefronts): JsonResponse
+    {
+        $this->ensureModule('storefront');
+        $this->ensureCan('storefrontnews', 'create');
+
+        $company = CurrentCompany::company();
+        abort_unless($company, 404);
+        $storefront = $storefronts->forCompany($company);
+        abort_unless(StorefrontCatalog::templateHas((string) $storefront->template_key, 'has_news'), 422, 'Template situs ini tidak mendukung news/blog.');
+
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:200'],
+            'excerpt' => ['nullable', 'string', 'max:500'],
+            'body' => ['nullable', 'string'],
+            'image_path' => ['nullable', 'string', 'max:255'],
+            'tags' => ['nullable', 'string', 'max:160'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
+            'is_published' => ['sometimes', 'boolean'],
+            'published_at' => ['nullable', 'date'],
+            'slug' => ['nullable', 'string', 'max:160'],
+        ]);
+
+        $slug = trim((string) ($data['slug'] ?? ''));
+        if ($slug === '') {
+            $slug = $storefronts->uniqueNewsSlug($storefront, (string) $data['title']);
+        } else {
+            $slug = $storefronts->uniqueNewsSlug($storefront, $slug);
+        }
+
+        $isPublished = array_key_exists('is_published', $data) ? (bool) $data['is_published'] : true;
+        $publishedAt = $data['published_at'] ?? null;
+        if ($isPublished && ! $publishedAt) {
+            $publishedAt = now();
+        }
+
+        $post = StorefrontNewsPost::query()->create([
+            'company_id' => $company->id,
+            'storefront_id' => $storefront->id,
+            'slug' => $slug,
+            'title' => $data['title'],
+            'excerpt' => $data['excerpt'] ?? null,
+            'body' => $data['body'] ?? null,
+            'image_path' => $data['image_path'] ?? null,
+            'tags' => $data['tags'] ?? null,
+            'sort_order' => (int) ($data['sort_order'] ?? 0),
+            'is_published' => $isPublished,
+            'published_at' => $publishedAt,
+        ]);
+
+        return $this->ok($storefronts->newsPostToArray($post), [], 201);
+    }
+
+    public function updateNewsPost(Request $request, StorefrontNewsPost $storefrontNewsPost, StorefrontService $storefronts): JsonResponse
+    {
+        $this->ensureModule('storefront');
+        $this->ensureCan('storefrontnews', 'edit');
+
+        $company = CurrentCompany::company();
+        abort_unless($company, 404);
+        $storefront = $storefronts->forCompany($company);
+        abort_unless((int) $storefrontNewsPost->storefront_id === (int) $storefront->id, 404);
+
+        $data = $request->validate([
+            'title' => ['sometimes', 'string', 'max:200'],
+            'excerpt' => ['nullable', 'string', 'max:500'],
+            'body' => ['nullable', 'string'],
+            'image_path' => ['nullable', 'string', 'max:255'],
+            'tags' => ['nullable', 'string', 'max:160'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:9999'],
+            'is_published' => ['sometimes', 'boolean'],
+            'published_at' => ['nullable', 'date'],
+            'slug' => ['nullable', 'string', 'max:160'],
+        ]);
+
+        if (array_key_exists('title', $data) && ! array_key_exists('slug', $data)) {
+            // keep existing slug when only title changes
+        } elseif (array_key_exists('slug', $data)) {
+            $slug = trim((string) ($data['slug'] ?? ''));
+            $data['slug'] = $slug === ''
+                ? $storefronts->uniqueNewsSlug($storefront, (string) ($data['title'] ?? $storefrontNewsPost->title), $storefrontNewsPost->id)
+                : $storefronts->uniqueNewsSlug($storefront, $slug, $storefrontNewsPost->id);
+        }
+
+        if (array_key_exists('is_published', $data) && $data['is_published'] && empty($data['published_at']) && ! $storefrontNewsPost->published_at) {
+            $data['published_at'] = now();
+        }
+
+        $storefrontNewsPost->fill($data)->save();
+
+        return $this->ok($storefronts->newsPostToArray($storefrontNewsPost->fresh()));
+    }
+
+    public function destroyNewsPost(StorefrontNewsPost $storefrontNewsPost, StorefrontService $storefronts): JsonResponse
+    {
+        $this->ensureModule('storefront');
+        $this->ensureCan('storefrontnews', 'delete');
+
+        $company = CurrentCompany::company();
+        abort_unless($company, 404);
+        $storefront = $storefronts->forCompany($company);
+        abort_unless((int) $storefrontNewsPost->storefront_id === (int) $storefront->id, 404);
+
+        $storefrontNewsPost->delete();
+
+        return $this->ok(['deleted' => true]);
+    }
+
+    public function inquiries(Request $request, StorefrontService $storefronts): JsonResponse
+    {
+        $this->ensureModule('storefront');
+        $this->ensureCan('storefrontinquiries', 'view');
+
+        $company = CurrentCompany::company();
+        abort_unless($company, 404);
+        $storefront = $storefronts->forCompany($company);
+
+        $query = StorefrontInquiry::query()
+            ->where('storefront_id', $storefront->id)
+            ->orderByDesc('id');
+
+        if ($status = $request->string('status')->toString()) {
+            $query->where('status', $status);
+        }
+
+        if ($kind = $request->string('kind')->toString()) {
+            $query->where('kind', $kind);
+        }
+
+        if ($search = $request->string('search')->toString()) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('subject', 'like', "%{$search}%")
+                    ->orWhere('message', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%");
+            });
+        }
+
+        return $this->paged($query, $request, fn (StorefrontInquiry $row) => $storefronts->inquiryToArray($row));
+    }
+
+    public function showInquiry(StorefrontInquiry $storefrontInquiry, StorefrontService $storefronts): JsonResponse
+    {
+        $this->ensureModule('storefront');
+        $this->ensureCan('storefrontinquiries', 'view');
+
+        $company = CurrentCompany::company();
+        abort_unless($company, 404);
+        $storefront = $storefronts->forCompany($company);
+        abort_unless((int) $storefrontInquiry->storefront_id === (int) $storefront->id, 404);
+
+        if ($storefrontInquiry->status === StorefrontInquiry::STATUS_NEW) {
+            $storefrontInquiry = $storefronts->markInquiryRead($storefrontInquiry);
+        }
+
+        return $this->ok($storefronts->inquiryToArray($storefrontInquiry));
+    }
+
+    public function markInquiryRead(StorefrontInquiry $storefrontInquiry, StorefrontService $storefronts): JsonResponse
+    {
+        $this->ensureModule('storefront');
+        $this->ensureCan('storefrontinquiries', 'edit');
+
+        $company = CurrentCompany::company();
+        abort_unless($company, 404);
+        $storefront = $storefronts->forCompany($company);
+        abort_unless((int) $storefrontInquiry->storefront_id === (int) $storefront->id, 404);
+
+        $inquiry = $storefronts->markInquiryRead($storefrontInquiry);
+
+        return $this->ok($storefronts->inquiryToArray($inquiry));
+    }
+
+    public function archiveInquiry(StorefrontInquiry $storefrontInquiry, StorefrontService $storefronts): JsonResponse
+    {
+        $this->ensureModule('storefront');
+        $this->ensureCan('storefrontinquiries', 'edit');
+
+        $company = CurrentCompany::company();
+        abort_unless($company, 404);
+        $storefront = $storefronts->forCompany($company);
+        abort_unless((int) $storefrontInquiry->storefront_id === (int) $storefront->id, 404);
+
+        $inquiry = $storefronts->archiveInquiry($storefrontInquiry);
+
+        return $this->ok($storefronts->inquiryToArray($inquiry));
     }
 }

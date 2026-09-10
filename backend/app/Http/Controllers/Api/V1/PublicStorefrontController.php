@@ -7,6 +7,7 @@ use App\Models\Storefront;
 use App\Models\StorefrontProduct;
 use App\Services\StorefrontDomainService;
 use App\Services\StorefrontService;
+use App\Support\StorefrontCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -46,7 +47,26 @@ class PublicStorefrontController extends Controller
             'shipping' => $storefront->isShop() ? $storefronts->shippingPublicPayload($storefront) : null,
             'stock_mode' => $storefront->stock_mode,
             'pages' => $storefront->pages,
+            'has_news' => StorefrontCatalog::templateHas((string) $storefront->template_key, 'has_news'),
+            'news' => $storefronts->publishedNewsPayload($storefront),
         ]);
+    }
+
+    public function news(Request $request, StorefrontDomainService $domains, StorefrontService $storefronts): JsonResponse
+    {
+        $storefront = $this->resolvePublishedStorefront($request, $domains);
+        if ($storefront instanceof JsonResponse) {
+            return $storefront;
+        }
+
+        if (! StorefrontCatalog::templateHas((string) $storefront->template_key, 'has_news')) {
+            return response()->json(['message' => 'News tidak tersedia untuk template ini.'], 404);
+        }
+
+        return $this->ok($storefronts->publishedNewsPayload(
+            $storefront,
+            min(48, max(1, (int) $request->input('limit', 24))),
+        ));
     }
 
     public function products(Request $request, StorefrontDomainService $domains, StorefrontService $storefronts): JsonResponse
@@ -138,6 +158,9 @@ class PublicStorefrontController extends Controller
             'items' => ['required', 'array', 'min:1', 'max:50'],
             'items.*.product_id' => ['required', 'integer', 'min:1'],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:999'],
+            'items.*.selected_options' => ['nullable', 'array'],
+            'items.*.selected_options.*.attribute_id' => ['required_with:items.*.selected_options', 'integer', 'min:1'],
+            'items.*.selected_options.*.option_id' => ['required_with:items.*.selected_options', 'integer', 'min:1'],
             'shipping_destination_id' => ['nullable', 'integer', 'min:1'],
             'shipping_destination_label' => ['nullable', 'string', 'max:255'],
             'shipping_courier' => ['nullable', 'string', 'max:40'],
@@ -178,6 +201,7 @@ class PublicStorefrontController extends Controller
             'items' => $order->items->map(fn ($item) => [
                 'product_id' => $item->product_id,
                 'name' => $item->name_snapshot,
+                'variant_snapshot' => $item->variant_snapshot,
                 'qty' => $item->qty,
                 'unit_price' => $item->unit_price,
                 'line_total' => $item->line_total,
@@ -240,6 +264,53 @@ class PublicStorefrontController extends Controller
         ]);
     }
 
+    public function submitInquiry(Request $request, StorefrontDomainService $domains, StorefrontService $storefronts): JsonResponse
+    {
+        $storefront = $this->resolvePublishedStorefront($request, $domains);
+        if ($storefront instanceof JsonResponse) {
+            return $storefront;
+        }
+
+        $data = $request->validate([
+            'kind' => ['nullable', 'string', 'in:contact,quote'],
+            'name' => ['required', 'string', 'max:120'],
+            'email' => ['required', 'email', 'max:120'],
+            'phone' => ['nullable', 'string', 'max:40'],
+            'subject' => ['nullable', 'string', 'max:200'],
+            'message' => ['required', 'string', 'max:5000'],
+            'website' => ['nullable', 'string', 'max:200'], // honeypot
+        ]);
+
+        // Silent success for bots filling honeypot.
+        if (trim((string) ($data['website'] ?? '')) !== '') {
+            return $this->ok([
+                'id' => 0,
+                'kind' => ($data['kind'] ?? 'contact') === 'quote' ? 'quote' : 'contact',
+                'status' => 'new',
+            ], [], 201);
+        }
+
+        $inquiry = $storefronts->submitInquiry($storefront, [
+            'kind' => $data['kind'] ?? 'contact',
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'phone' => $data['phone'] ?? null,
+            'subject' => $data['subject'] ?? null,
+            'message' => $data['message'],
+            'meta' => [
+                'template_key' => $storefront->template_key,
+            ],
+            'ip' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+        ]);
+
+        return $this->ok([
+            'id' => $inquiry->id,
+            'kind' => $inquiry->kind,
+            'status' => $inquiry->status,
+        ], [], 201);
+    }
+
     private function resolvePublishedStorefront(Request $request, StorefrontDomainService $domains): Storefront|JsonResponse
     {
         $host = (string) ($request->header('X-Storefront-Host') ?: $request->getHost());
@@ -281,8 +352,12 @@ class PublicStorefrontController extends Controller
             ->withoutGlobalScopes()
             ->with([
                 'product' => fn ($q) => $q->withoutGlobalScopes()
-                    ->select(['id', 'name', 'sku', 'sell_price', 'description', 'is_active', 'category_id'])
-                    ->with(['images' => fn ($iq) => $iq->withoutGlobalScopes()->orderByDesc('is_primary')->orderBy('sort_order')->orderBy('id')]),
+                    ->select(['id', 'name', 'sku', 'sell_price', 'description', 'is_active', 'category_id', 'weight_gram', 'track_stock'])
+                    ->with([
+                        'images' => fn ($iq) => $iq->withoutGlobalScopes()->orderByDesc('is_primary')->orderBy('sort_order')->orderBy('id'),
+                        'variantAttributes' => fn ($aq) => $aq->withoutGlobalScopes()->orderBy('sort_order')->orderBy('id')
+                            ->with(['options' => fn ($oq) => $oq->withoutGlobalScopes()->orderBy('sort_order')->orderBy('id')]),
+                    ]),
             ])
             ->where('storefront_id', $storefront->id)
             ->where('company_id', $storefront->company_id)

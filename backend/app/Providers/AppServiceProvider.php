@@ -55,5 +55,11 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute(5)->by($host.'|'.$request->ip());
         });
+
+        RateLimiter::for('storefront-inquiry', function (Request $request) {
+            $host = Str::lower((string) ($request->header('X-Storefront-Host') ?: $request->getHost()));
+
+            return Limit::perMinute(8)->by($host.'|'.$request->ip());
+        });
     }
 }

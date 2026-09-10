@@ -2,8 +2,13 @@
 
 namespace App\Services;
 
+use App\Mail\StorefrontInquiryMail;
 use App\Models\Company;
+use App\Models\Product;
+use App\Models\ProductVariantOption;
 use App\Models\Storefront;
+use App\Models\StorefrontInquiry;
+use App\Models\StorefrontNewsPost;
 use App\Models\StorefrontOrder;
 use App\Models\StorefrontOrderItem;
 use App\Models\StorefrontPage;
@@ -12,6 +17,8 @@ use App\Support\InventorySettings;
 use App\Support\StorefrontCatalog;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 class StorefrontService
@@ -31,7 +38,7 @@ class StorefrontService
             $storefront = Storefront::query()->create([
                 'company_id' => $company->id,
                 'site_kind' => $defaults['site_kind'] ?? 'landing',
-                'template_key' => $defaults['template_key'] ?? 'landing_minimal',
+                'template_key' => $defaults['template_key'] ?? 'landing_dilabs',
                 'status' => $defaults['status'] ?? 'draft',
                 'title' => $company->name,
                 'stock_mode' => $defaults['stock_mode'] ?? 'realtime',
@@ -355,20 +362,49 @@ class StorefrontService
     }
 
     /**
-     * Weight in grams for cart lines (default weight × qty).
+     * Weight in grams for cart lines (product weight × qty, fallback to storefront default).
      *
      * @param  list<array{product_id?: mixed, qty?: mixed}>  $items
      */
     public function estimateCartWeightGram(Storefront $storefront, array $items): int
     {
         $shipping = is_array($storefront->shipping) ? $storefront->shipping : [];
-        $perItem = max(1, (int) ($shipping['default_weight_gram'] ?? config('rajaongkir.default_weight_gram', 500)));
-        $totalQty = 0;
+        $defaultPerItem = max(1, (int) ($shipping['default_weight_gram'] ?? config('rajaongkir.default_weight_gram', 500)));
+
+        $productIds = [];
         foreach ($items as $item) {
-            $totalQty += max(0, (int) ($item['qty'] ?? 0));
+            $pid = (int) ($item['product_id'] ?? 0);
+            if ($pid > 0) {
+                $productIds[$pid] = true;
+            }
         }
 
-        return max(1, $perItem * max(1, $totalQty));
+        $weights = [];
+        if ($productIds !== []) {
+            $weights = Product::query()
+                ->withoutGlobalScopes()
+                ->where('company_id', $storefront->company_id)
+                ->whereIn('id', array_keys($productIds))
+                ->pluck('weight_gram', 'id')
+                ->all();
+        }
+
+        $total = 0;
+        $hasQty = false;
+        foreach ($items as $item) {
+            $qty = max(0, (int) ($item['qty'] ?? 0));
+            if ($qty <= 0) {
+                continue;
+            }
+            $hasQty = true;
+            $pid = (int) ($item['product_id'] ?? 0);
+            $per = isset($weights[$pid]) && $weights[$pid] !== null && (int) $weights[$pid] > 0
+                ? (int) $weights[$pid]
+                : $defaultPerItem;
+            $total += $per * $qty;
+        }
+
+        return max(1, $hasQty ? $total : $defaultPerItem);
     }
 
     /**
@@ -429,11 +465,18 @@ class StorefrontService
     /** Map removed template keys to their replacements (in-place). */
     private function migrateRetiredTemplate(Storefront $storefront): void
     {
-        if (! in_array($storefront->template_key, ['shop_compact', 'shop_classic'], true)) {
+        $map = [
+            'shop_compact' => 'shop_nexora',
+            'shop_classic' => 'shop_nexora',
+            'landing_minimal' => 'landing_dilabs',
+        ];
+
+        $next = $map[$storefront->template_key] ?? null;
+        if (! $next) {
             return;
         }
 
-        $storefront->template_key = 'shop_nexora';
+        $storefront->template_key = $next;
         $storefront->save();
     }
 
@@ -492,7 +535,74 @@ class StorefrontService
             ],
             'dns_instructions' => StorefrontCatalog::dnsInstructions(),
             'publish_readiness' => $this->publishReadiness($storefront),
+            'has_news' => StorefrontCatalog::templateHas((string) $storefront->template_key, 'has_news'),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function newsPostToArray(StorefrontNewsPost $post): array
+    {
+        $published = $post->published_at;
+
+        return [
+            'id' => $post->id,
+            'slug' => $post->slug,
+            'title' => $post->title,
+            'excerpt' => $post->excerpt,
+            'body' => $post->body,
+            'image_path' => $post->image_path,
+            'image_url' => $post->imageUrl(),
+            'tags' => $post->tags,
+            'sort_order' => (int) $post->sort_order,
+            'is_published' => (bool) $post->is_published,
+            'published_at' => optional($published)?->toIso8601String(),
+            'day' => $published ? $published->format('d') : null,
+            'month' => $published ? $published->format('M') : null,
+            'created_at' => optional($post->created_at)?->toIso8601String(),
+            'updated_at' => optional($post->updated_at)?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function publishedNewsPayload(Storefront $storefront, int $limit = 24): array
+    {
+        if (! StorefrontCatalog::templateHas((string) $storefront->template_key, 'has_news')) {
+            return [];
+        }
+
+        return $storefront->newsPosts()
+            ->where('is_published', true)
+            ->orderBy('sort_order')
+            ->orderByDesc('published_at')
+            ->orderByDesc('id')
+            ->limit(max(1, min(48, $limit)))
+            ->get()
+            ->map(fn (StorefrontNewsPost $post) => $this->newsPostToArray($post))
+            ->values()
+            ->all();
+    }
+
+    public function uniqueNewsSlug(Storefront $storefront, string $title, ?int $ignoreId = null): string
+    {
+        $base = \Illuminate\Support\Str::slug(\Illuminate\Support\Str::limit(trim($title), 80, '')) ?: 'berita';
+        $slug = $base;
+        $n = 2;
+        while (
+            StorefrontNewsPost::query()
+                ->where('storefront_id', $storefront->id)
+                ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
+                ->where('slug', $slug)
+                ->exists()
+        ) {
+            $slug = $base.'-'.$n;
+            $n++;
+        }
+
+        return \Illuminate\Support\Str::limit($slug, 160, '');
     }
 
     /**
@@ -659,6 +769,7 @@ class StorefrontService
             'description' => $product?->description,
             'category_id' => $product?->category_id,
             'price' => $this->unitPriceFor($storefront, $row),
+            'weight_gram' => $product?->weight_gram !== null ? (int) $product->weight_gram : null,
             'available_qty' => $available,
             'stock_mode' => $storefront->stock_mode,
             'image_url' => $imageUrl,
@@ -668,6 +779,9 @@ class StorefrontService
                     'url' => $img->url(),
                     'is_primary' => (bool) $img->is_primary,
                 ])->filter(fn ($img) => ! empty($img['url']))->values()->all()
+                : [],
+            'variant_attributes' => $product
+                ? app(ProductVariantService::class)->serialize($product, storefrontOnly: true)
                 : [],
             'is_deal' => (bool) $row->is_deal,
             'is_new_arrival' => (bool) $row->is_new_arrival,
@@ -784,7 +898,10 @@ class StorefrontService
 
                     $row = StorefrontProduct::query()
                         ->withoutGlobalScopes()
-                        ->with(['product' => fn ($q) => $q->withoutGlobalScopes()])
+                        ->with([
+                            'product' => fn ($q) => $q->withoutGlobalScopes()
+                                ->with(['variantAttributes.options']),
+                        ])
                         ->where('storefront_id', $storefront->id)
                         ->where('company_id', $storefront->company_id)
                         ->where('product_id', $productId)
@@ -800,13 +917,19 @@ class StorefrontService
 
                     $this->assertOrderStockAvailable($storefront, $row, $qty, $index);
 
-                    $unit = $this->unitPriceFor($storefront, $row);
+                    $variant = $this->resolveOrderVariantSelections($row->product, $raw['selected_options'] ?? null, $index);
+                    $unit = $this->unitPriceFor($storefront, $row) + (int) ($variant['extra_price'] ?? 0);
                     $lineTotal = $unit * $qty;
                     $subtotal += $lineTotal;
+                    $nameSnapshot = (string) $row->product->name;
+                    if (! empty($variant['label'])) {
+                        $nameSnapshot .= ' ('.$variant['label'].')';
+                    }
                     $lines[] = [
                         'company_id' => $storefront->company_id,
                         'product_id' => $productId,
-                        'name_snapshot' => (string) $row->product->name,
+                        'name_snapshot' => $nameSnapshot,
+                        'variant_snapshot' => $variant['snapshot'],
                         'qty' => $qty,
                         'unit_price' => $unit,
                         'line_total' => $lineTotal,
@@ -1143,6 +1266,75 @@ class StorefrontService
         });
     }
 
+    /**
+     * @param  mixed  $selectedOptions
+     * @return array{snapshot: list<array<string, mixed>>|null, label: string|null, extra_price: int}
+     */
+    private function resolveOrderVariantSelections(Product $product, mixed $selectedOptions, int $index): array
+    {
+        $attributes = $product->relationLoaded('variantAttributes')
+            ? $product->variantAttributes
+            : $product->variantAttributes()->with('options')->get();
+
+        $storefrontAttrs = $attributes->where('show_in_storefront', true)->values();
+        if ($storefrontAttrs->isEmpty()) {
+            return ['snapshot' => null, 'label' => null, 'extra_price' => 0];
+        }
+
+        $picked = [];
+        if (is_array($selectedOptions)) {
+            foreach ($selectedOptions as $row) {
+                if (! is_array($row)) {
+                    continue;
+                }
+                $attrId = (int) ($row['attribute_id'] ?? 0);
+                $optId = (int) ($row['option_id'] ?? 0);
+                if ($attrId > 0 && $optId > 0) {
+                    $picked[$attrId] = $optId;
+                }
+            }
+        }
+
+        $snapshot = [];
+        $labels = [];
+        $extra = 0;
+
+        foreach ($storefrontAttrs as $attr) {
+            $optionId = $picked[(int) $attr->id] ?? 0;
+            if ($optionId <= 0) {
+                throw ValidationException::withMessages([
+                    "items.$index.selected_options" => 'Pilih '.$attr->name.' untuk '.$product->name.'.',
+                ]);
+            }
+
+            $option = $attr->options
+                ->first(fn (ProductVariantOption $opt) => (int) $opt->id === $optionId && $opt->is_active);
+
+            if (! $option) {
+                throw ValidationException::withMessages([
+                    "items.$index.selected_options" => 'Opsi '.$attr->name.' tidak valid.',
+                ]);
+            }
+
+            $extra += (int) $option->extra_price;
+            $labels[] = $attr->name.': '.$option->name;
+            $snapshot[] = [
+                'attribute_id' => (int) $attr->id,
+                'attribute' => $attr->name,
+                'option_id' => (int) $option->id,
+                'option' => $option->name,
+                'extra_price' => (int) $option->extra_price,
+                'image_url' => $option->url(),
+            ];
+        }
+
+        return [
+            'snapshot' => $snapshot,
+            'label' => implode(', ', $labels),
+            'extra_price' => $extra,
+        ];
+    }
+
     private function assertOrderStockAvailable(
         Storefront $storefront,
         StorefrontProduct $row,
@@ -1433,5 +1625,97 @@ class StorefrontService
                 'status' => 'Tambahkan minimal satu produk visible sebelum publish toko.',
             ]);
         }
+    }
+
+    /**
+     * @param  array{
+     *   kind?: string,
+     *   name: string,
+     *   email: string,
+     *   phone?: string|null,
+     *   subject?: string|null,
+     *   message: string,
+     *   meta?: array<string, mixed>|null,
+     *   ip?: string|null,
+     *   user_agent?: string|null,
+     * }  $data
+     */
+    public function submitInquiry(Storefront $storefront, array $data): StorefrontInquiry
+    {
+        $kind = ($data['kind'] ?? StorefrontInquiry::KIND_CONTACT) === StorefrontInquiry::KIND_QUOTE
+            ? StorefrontInquiry::KIND_QUOTE
+            : StorefrontInquiry::KIND_CONTACT;
+
+        $inquiry = StorefrontInquiry::query()->create([
+            'company_id' => $storefront->company_id,
+            'storefront_id' => $storefront->id,
+            'kind' => $kind,
+            'name' => trim((string) $data['name']),
+            'email' => trim((string) $data['email']),
+            'phone' => ($phone = trim((string) ($data['phone'] ?? ''))) !== '' ? $phone : null,
+            'subject' => ($subject = trim((string) ($data['subject'] ?? ''))) !== '' ? $subject : null,
+            'message' => trim((string) $data['message']),
+            'meta' => is_array($data['meta'] ?? null) ? $data['meta'] : null,
+            'status' => StorefrontInquiry::STATUS_NEW,
+            'ip' => isset($data['ip']) ? substr((string) $data['ip'], 0, 45) : null,
+            'user_agent' => isset($data['user_agent']) ? substr((string) $data['user_agent'], 0, 500) : null,
+        ]);
+
+        $to = trim((string) ($storefront->contact_email ?? ''));
+        if ($to !== '' && filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            try {
+                Mail::to($to)->send(new StorefrontInquiryMail($storefront, $inquiry));
+            } catch (\Throwable $e) {
+                Log::warning('storefront_inquiry_mail_failed', [
+                    'storefront_id' => $storefront->id,
+                    'inquiry_id' => $inquiry->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $inquiry;
+    }
+
+    public function inquiryToArray(StorefrontInquiry $inquiry): array
+    {
+        return [
+            'id' => $inquiry->id,
+            'kind' => $inquiry->kind,
+            'name' => $inquiry->name,
+            'email' => $inquiry->email,
+            'phone' => $inquiry->phone,
+            'subject' => $inquiry->subject,
+            'message' => $inquiry->message,
+            'meta' => $inquiry->meta,
+            'status' => $inquiry->status,
+            'read_at' => optional($inquiry->read_at)?->toIso8601String(),
+            'created_at' => optional($inquiry->created_at)?->toIso8601String(),
+            'updated_at' => optional($inquiry->updated_at)?->toIso8601String(),
+        ];
+    }
+
+    public function markInquiryRead(StorefrontInquiry $inquiry): StorefrontInquiry
+    {
+        if ($inquiry->status === StorefrontInquiry::STATUS_ARCHIVED) {
+            return $inquiry;
+        }
+
+        $inquiry->status = StorefrontInquiry::STATUS_READ;
+        $inquiry->read_at = $inquiry->read_at ?? now();
+        $inquiry->save();
+
+        return $inquiry->fresh();
+    }
+
+    public function archiveInquiry(StorefrontInquiry $inquiry): StorefrontInquiry
+    {
+        $inquiry->status = StorefrontInquiry::STATUS_ARCHIVED;
+        if (! $inquiry->read_at) {
+            $inquiry->read_at = now();
+        }
+        $inquiry->save();
+
+        return $inquiry->fresh();
     }
 }

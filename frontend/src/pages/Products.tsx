@@ -29,6 +29,7 @@ const emptyForm = {
   min_stock: '0',
   max_stock: '0',
   reorder_qty: '0',
+  weight_gram: '',
   initial_qty: '0',
   track_stock: true,
   is_procurement_item: false,
@@ -55,7 +56,7 @@ type DraftImage = {
 
 type PrimaryPick = { kind: 'existing'; id: number } | { kind: 'draft'; key: string }
 
-type ProductTab = 'info' | 'bom' | 'choices' | 'price' | 'images'
+type ProductTab = 'info' | 'bom' | 'choices' | 'variants' | 'price' | 'images'
 
 type BomDraft = {
   key: string
@@ -64,8 +65,40 @@ type BomDraft = {
   unit_id: string
 }
 
+type VariantOptionDraft = {
+  key: string
+  id?: number
+  name: string
+  extra_price: string
+  image_url?: string | null
+  draftFile?: File | null
+  draftUrl?: string | null
+  clear_image?: boolean
+}
+
+type VariantAttributeDraft = {
+  key: string
+  id?: number
+  name: string
+  show_in_storefront: boolean
+  options: VariantOptionDraft[]
+}
+
 function newBomRow(): BomDraft {
   return { key: `bom-${Date.now()}-${Math.random()}`, component_id: '', qty: '1', unit_id: '' }
+}
+
+function newVariantOption(): VariantOptionDraft {
+  return { key: `opt-${Date.now()}-${Math.random()}`, name: '', extra_price: '0' }
+}
+
+function newVariantAttribute(): VariantAttributeDraft {
+  return {
+    key: `attr-${Date.now()}-${Math.random()}`,
+    name: '',
+    show_in_storefront: true,
+    options: [newVariantOption()],
+  }
 }
 
 function coverImage(product: Product): ProductImage | undefined {
@@ -105,6 +138,8 @@ export default function Products() {
   const [selectedChoiceIds, setSelectedChoiceIds] = useState<number[]>([])
   const [useChoices, setUseChoices] = useState(false)
   const [useBom, setUseBom] = useState(false)
+  const [useVariants, setUseVariants] = useState(false)
+  const [variantAttrs, setVariantAttrs] = useState<VariantAttributeDraft[]>([])
   const [outlets, setOutlets] = useState<Outlet[]>([])
   const [priceChannels, setPriceChannels] = useState<PriceChannel[]>([])
   const [suppliers, setSuppliers] = useState<Array<{ id: number; name: string }>>([])
@@ -295,8 +330,10 @@ export default function Products() {
     setChannelPrices({})
     setSelectedChoiceIds([])
     setBomLines([])
+    setVariantAttrs([])
     setUseChoices(false)
     setUseBom(false)
+    setUseVariants(false)
     resetImages()
     setFormError('')
     setTab('info')
@@ -341,6 +378,7 @@ export default function Products() {
       min_stock: String(product.min_stock),
       max_stock: String(product.max_stock ?? 0),
       reorder_qty: String(product.reorder_qty ?? 0),
+      weight_gram: product.weight_gram != null ? String(product.weight_gram) : '',
       initial_qty: '0',
       track_stock: product.track_stock,
       is_procurement_item: product.is_procurement_item ?? false,
@@ -360,8 +398,26 @@ export default function Products() {
         unit_id: row.unit_id ? String(row.unit_id) : '',
       })),
     )
+    const attrs = (product.variant_attributes ?? []).map((attr) => ({
+      key: `attr-${attr.id}`,
+      id: attr.id,
+      name: attr.name,
+      show_in_storefront: attr.show_in_storefront,
+      options: (attr.options ?? []).map((opt) => ({
+        key: `opt-${opt.id}`,
+        id: opt.id,
+        name: opt.name,
+        extra_price: String(opt.extra_price ?? 0),
+        image_url: opt.image_url ?? null,
+        draftFile: null,
+        draftUrl: null,
+        clear_image: false,
+      })),
+    }))
+    setVariantAttrs(attrs)
     setUseChoices((product.choice_ids ?? []).length > 0 || (product.choice_types ?? []).length > 0)
     setUseBom(Boolean(product.has_bom) || (product.bom_items ?? []).length > 0)
+    setUseVariants(attrs.length > 0)
     setCustomFields({ ...(product.custom_fields ?? {}) })
     setDraftImages((current) => {
       current.forEach((item) => URL.revokeObjectURL(item.url))
@@ -499,6 +555,7 @@ export default function Products() {
       min_stock: Number(form.min_stock || 0),
       max_stock: Number(form.max_stock || 0),
       reorder_qty: Number(form.reorder_qty || 0),
+      weight_gram: form.weight_gram.trim() === '' ? null : Number(form.weight_gram || 0),
       track_stock: form.is_procurement_item || form.is_fixed_asset_item ? false : form.track_stock,
       is_procurement_item: form.is_procurement_item,
       is_fixed_asset_item: form.is_fixed_asset_item,
@@ -515,6 +572,36 @@ export default function Products() {
               unit_id: row.unit_id ? Number(row.unit_id) : null,
             }))
         : [],
+      variant_attributes: useVariants
+        ? variantAttrs.map((attr, attrIndex) => ({
+            id: attr.id,
+            name: attr.name.trim(),
+            show_in_storefront: attr.show_in_storefront,
+            sort_order: attrIndex,
+            options: attr.options
+              .filter((opt) => opt.name.trim() !== '')
+              .map((opt, optIndex) => ({
+                id: opt.id,
+                name: opt.name.trim(),
+                extra_price: Number(opt.extra_price || 0),
+                sort_order: optIndex,
+                is_active: true,
+                clear_image: Boolean(opt.clear_image),
+              })),
+          }))
+        : [],
+    }
+
+    if (useVariants) {
+      const invalid = payload.variant_attributes.some(
+        (attr) => !attr.name || attr.options.length === 0,
+      )
+      if (invalid) {
+        setFormError(t('variantAttributeRequired'))
+        setTab('variants')
+        setSaving(false)
+        return
+      }
     }
 
     try {
@@ -522,6 +609,7 @@ export default function Products() {
         ? await api.put<ApiOk<Product>>(`/products/${editing.id}`, payload)
         : await api.post<ApiOk<Product>>('/products', payload)
       const productId = saved.data.data.id
+      const savedAttrs = saved.data.data.variant_attributes ?? []
 
       for (const imageId of removedImageIds) {
         await api.delete(`/products/${productId}/images/${imageId}`)
@@ -542,6 +630,27 @@ export default function Products() {
         : resolveExistingPrimaryId(existingImages, removedImageIds, primaryPick)
       if (primaryExistingId) {
         await api.post(`/products/${productId}/images/${primaryExistingId}/primary`)
+      }
+
+      if (useVariants) {
+        for (let ai = 0; ai < variantAttrs.length; ai++) {
+          const draftAttr = variantAttrs[ai]
+          const savedAttr = savedAttrs[ai]
+          if (!savedAttr) continue
+          const draftOpts = draftAttr.options.filter((opt) => opt.name.trim() !== '')
+          for (let oi = 0; oi < draftOpts.length; oi++) {
+            const draftOpt = draftOpts[oi]
+            const savedOpt = savedAttr.options[oi]
+            if (!savedOpt) continue
+            if (draftOpt.draftFile) {
+              const body = new FormData()
+              body.append('image', draftOpt.draftFile)
+              await apiUpload(`/products/${productId}/variant-options/${savedOpt.id}/image`, body)
+            } else if (draftOpt.clear_image && savedOpt.id) {
+              await api.delete(`/products/${productId}/variant-options/${savedOpt.id}/image`)
+            }
+          }
+        }
       }
 
       setOpen(false)
@@ -656,11 +765,14 @@ export default function Products() {
     pairChoiceType(type)
   }
 
-  function setExtraTab(kind: 'choices' | 'bom', on: boolean) {
+  function setExtraTab(kind: 'choices' | 'bom' | 'variants', on: boolean) {
     if (kind === 'choices') setUseChoices(on)
-    else {
+    else if (kind === 'bom') {
       setUseBom(on)
       if (on && bomLines.length === 0) setBomLines([newBomRow()])
+    } else {
+      setUseVariants(on)
+      if (on && variantAttrs.length === 0) setVariantAttrs([newVariantAttribute()])
     }
     if (on) setTab(kind)
     else if (tab === kind) setTab('info')
@@ -842,7 +954,7 @@ export default function Products() {
           const field = event.target as HTMLElement
           const panel = field.closest('[data-product-tab]') as HTMLElement | null
           const next = panel?.dataset.productTab
-          if (next === 'info' || next === 'bom' || next === 'choices' || next === 'price' || next === 'images') {
+          if (next === 'info' || next === 'bom' || next === 'choices' || next === 'variants' || next === 'price' || next === 'images') {
             setTab(next)
           }
         }}
@@ -854,6 +966,7 @@ export default function Products() {
                 ['info', 'productTabInfo'],
                 ...(useBom ? ([['bom', 'productTabBom']] as const) : []),
                 ...(useChoices && choicesEnabled ? ([['choices', 'productTabChoices']] as const) : []),
+                ...(useVariants ? ([['variants', 'productTabVariants']] as const) : []),
                 ['price', 'productTabPrice'],
                 ['images', 'productTabImages'],
               ] as const
@@ -1046,6 +1159,18 @@ export default function Products() {
               <span className="mt-1 block text-xs">{t('reorderQtyHint')}</span>
             </label>
           ) : null}
+          <label className="text-sm text-muted">
+            {t('productWeight')}
+            <input
+              type="number"
+              min={0}
+              className="field"
+              value={form.weight_gram}
+              onChange={(e) => setForm({ ...form, weight_gram: e.target.value })}
+              placeholder="500"
+            />
+            <span className="mt-1 block text-xs">{t('productWeightHint')}</span>
+          </label>
           <label className="flex items-center gap-2 text-sm text-muted sm:col-span-2">
             <input
               type="checkbox"
@@ -1131,6 +1256,16 @@ export default function Products() {
               <span className="text-sm font-medium text-fg">{t('useProductBom')}</span>
               <span className={`rounded-full px-2.5 py-0.5 text-xs ${useBom ? 'bg-mint/15 text-mint' : 'bg-fill text-muted'}`}>
                 {useBom ? t('active') : t('inactive')}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="glass flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left"
+              onClick={() => setExtraTab('variants', !useVariants)}
+            >
+              <span className="text-sm font-medium text-fg">{t('useProductVariants')}</span>
+              <span className={`rounded-full px-2.5 py-0.5 text-xs ${useVariants ? 'bg-mint/15 text-mint' : 'bg-fill text-muted'}`}>
+                {useVariants ? t('active') : t('inactive')}
               </span>
             </button>
           </div>
@@ -1277,6 +1412,248 @@ export default function Products() {
               })}
             </div>
           )}
+        </div>
+        ) : null}
+
+        {useVariants ? (
+        <div className={tab === 'variants' ? 'grid gap-3' : 'hidden'} data-product-tab="variants">
+          <div className="text-xs text-muted">{t('productVariantsHint')}</div>
+          <div className="grid gap-3">
+            {variantAttrs.map((attr) => (
+              <div key={attr.key} className="rounded-2xl bg-fill px-3 py-3">
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+                  <label className="text-sm text-muted">
+                    {t('variantAttributeName')}
+                    <input
+                      className="field"
+                      value={attr.name}
+                      onChange={(e) =>
+                        setVariantAttrs((current) =>
+                          current.map((row) => (row.key === attr.key ? { ...row, name: e.target.value } : row)),
+                        )
+                      }
+                      placeholder="Warna / Size"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 pb-2 text-xs text-muted">
+                    <input
+                      type="checkbox"
+                      checked={attr.show_in_storefront}
+                      onChange={(e) =>
+                        setVariantAttrs((current) =>
+                          current.map((row) =>
+                            row.key === attr.key ? { ...row, show_in_storefront: e.target.checked } : row,
+                          ),
+                        )
+                      }
+                    />
+                    {t('variantShowInShop')}
+                  </label>
+                  <button
+                    type="button"
+                    className="pb-2 text-xs text-rose-300"
+                    onClick={() => setVariantAttrs((current) => current.filter((row) => row.key !== attr.key))}
+                  >
+                    {t('remove')}
+                  </button>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {attr.options.map((opt) => {
+                    const preview = opt.draftUrl || (!opt.clear_image ? opt.image_url : null)
+                    return (
+                      <div key={opt.key} className="grid gap-2 rounded-xl bg-white/50 p-2 sm:grid-cols-[72px_1fr_120px_auto] sm:items-center">
+                        <label className="relative flex h-[72px] w-[72px] cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-black/20 bg-fill text-center hover:border-mint/60 hover:bg-mint/10">
+                          {preview ? (
+                            <img src={preview} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="px-1 text-[10px] font-medium text-fg/70">{t('variantOptionImage')}</span>
+                          )}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="absolute inset-0 cursor-pointer opacity-0"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              e.target.value = ''
+                              if (!file || !file.type.startsWith('image/')) return
+                              const url = URL.createObjectURL(file)
+                              setVariantAttrs((current) =>
+                                current.map((row) =>
+                                  row.key !== attr.key
+                                    ? row
+                                    : {
+                                        ...row,
+                                        options: row.options.map((item) => {
+                                          if (item.key !== opt.key) return item
+                                          if (item.draftUrl) URL.revokeObjectURL(item.draftUrl)
+                                          return {
+                                            ...item,
+                                            draftFile: file,
+                                            draftUrl: url,
+                                            clear_image: false,
+                                          }
+                                        }),
+                                      },
+                                ),
+                              )
+                            }}
+                          />
+                        </label>
+                        <label className="text-xs text-muted">
+                          {t('variantOptionName')}
+                          <input
+                            className="field"
+                            value={opt.name}
+                            onChange={(e) =>
+                              setVariantAttrs((current) =>
+                                current.map((row) =>
+                                  row.key !== attr.key
+                                    ? row
+                                    : {
+                                        ...row,
+                                        options: row.options.map((item) =>
+                                          item.key === opt.key ? { ...item, name: e.target.value } : item,
+                                        ),
+                                      },
+                                ),
+                              )
+                            }
+                            placeholder="Merah / L"
+                          />
+                        </label>
+                        <label className="text-xs text-muted">
+                          {t('extraPrice')}
+                          <input
+                            type="number"
+                            min={0}
+                            className="field"
+                            value={opt.extra_price}
+                            onChange={(e) =>
+                              setVariantAttrs((current) =>
+                                current.map((row) =>
+                                  row.key !== attr.key
+                                    ? row
+                                    : {
+                                        ...row,
+                                        options: row.options.map((item) =>
+                                          item.key === opt.key ? { ...item, extra_price: e.target.value } : item,
+                                        ),
+                                      },
+                                ),
+                              )
+                            }
+                          />
+                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <label className="inline-flex cursor-pointer items-center rounded-lg border border-mint/40 bg-mint/15 px-2.5 py-1 text-xs font-medium text-fg hover:bg-mint/25">
+                            {t('variantOptionImage')}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                e.target.value = ''
+                                if (!file || !file.type.startsWith('image/')) return
+                                const url = URL.createObjectURL(file)
+                                setVariantAttrs((current) =>
+                                  current.map((row) =>
+                                    row.key !== attr.key
+                                      ? row
+                                      : {
+                                          ...row,
+                                          options: row.options.map((item) => {
+                                            if (item.key !== opt.key) return item
+                                            if (item.draftUrl) URL.revokeObjectURL(item.draftUrl)
+                                            return {
+                                              ...item,
+                                              draftFile: file,
+                                              draftUrl: url,
+                                              clear_image: false,
+                                            }
+                                          }),
+                                        },
+                                  ),
+                                )
+                              }}
+                            />
+                          </label>
+                          {preview ? (
+                            <button
+                              type="button"
+                              className="rounded-lg border border-rose-300/50 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                              onClick={() =>
+                                setVariantAttrs((current) =>
+                                  current.map((row) =>
+                                    row.key !== attr.key
+                                      ? row
+                                      : {
+                                          ...row,
+                                          options: row.options.map((item) => {
+                                            if (item.key !== opt.key) return item
+                                            if (item.draftUrl) URL.revokeObjectURL(item.draftUrl)
+                                            return {
+                                              ...item,
+                                              draftFile: null,
+                                              draftUrl: null,
+                                              clear_image: true,
+                                              image_url: null,
+                                            }
+                                          }),
+                                        },
+                                  ),
+                                )
+                              }
+                            >
+                              {t('remove')}
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="rounded-lg border border-rose-300/50 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                            onClick={() =>
+                              setVariantAttrs((current) =>
+                                current.map((row) =>
+                                  row.key !== attr.key
+                                    ? row
+                                    : {
+                                        ...row,
+                                        options: row.options.filter((item) => item.key !== opt.key),
+                                      },
+                                ),
+                              )
+                            }
+                          >
+                            {t('remove')}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded-xl border border-mint/40 bg-mint/15 px-3 py-1.5 text-sm font-medium text-fg hover:bg-mint/25"
+                    onClick={() =>
+                      setVariantAttrs((current) =>
+                        current.map((row) =>
+                          row.key === attr.key ? { ...row, options: [...row.options, newVariantOption()] } : row,
+                        ),
+                      )
+                    }
+                  >
+                    {t('addVariantOption')}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="inline-flex items-center rounded-xl border border-mint/40 bg-mint/15 px-3 py-1.5 text-sm font-medium text-fg hover:bg-mint/25"
+            onClick={() => setVariantAttrs((current) => [...current, newVariantAttribute()])}
+          >
+            {t('addVariantAttribute')}
+          </button>
         </div>
         ) : null}
 

@@ -121,7 +121,7 @@ export default function StorefrontProducts() {
           <label className="min-w-40 flex-1 space-y-1 text-sm">
             <span className="text-muted">{t('storefrontSearchProduct')}</span>
             <input
-              className="input w-full"
+              className="field w-full"
               value={productSearch}
               onChange={(e) => setProductSearch(e.target.value)}
               placeholder={t('storefrontSearchProduct')}
@@ -129,7 +129,7 @@ export default function StorefrontProducts() {
           </label>
           <label className="min-w-48 flex-1 space-y-1 text-sm">
             <span className="text-muted">{t('storefrontAddProduct')}</span>
-            <select className="input w-full" value={productId} onChange={(e) => setProductId(e.target.value)}>
+            <select className="field w-full" value={productId} onChange={(e) => setProductId(e.target.value)}>
               <option value="">—</option>
               {options.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -142,7 +142,7 @@ export default function StorefrontProducts() {
           <label className="w-32 space-y-1 text-sm">
             <span className="text-muted">{t('storefrontOverridePrice')}</span>
             <input
-              className="input w-full"
+              className="field w-full"
               type="number"
               min={0}
               value={overridePrice}
@@ -154,7 +154,7 @@ export default function StorefrontProducts() {
             <label className="w-28 space-y-1 text-sm">
               <span className="text-muted">{t('storefrontAllocatedQty')}</span>
               <input
-                className="input w-full"
+                className="field w-full"
                 type="number"
                 min={0}
                 value={allocatedQty}
@@ -226,7 +226,7 @@ export default function StorefrontProducts() {
                       {row.is_visible ? t('storefrontHideBlock') : t('storefrontShowBlock')}
                     </button>
                     <input
-                      className="input w-28"
+                      className="field w-28"
                       type="number"
                       min={0}
                       title={t('storefrontOverridePrice')}
@@ -240,7 +240,7 @@ export default function StorefrontProducts() {
                       }}
                     />
                     <input
-                      className="input w-20"
+                      className="field w-20"
                       type="number"
                       min={0}
                       title={t('storefrontSortOrder')}
@@ -254,7 +254,7 @@ export default function StorefrontProducts() {
                     />
                     {stockMode === 'allocated' ? (
                       <input
-                        className="input w-24"
+                        className="field w-24"
                         type="number"
                         min={0}
                         defaultValue={row.allocated_qty ?? ''}

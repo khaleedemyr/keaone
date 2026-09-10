@@ -1,5 +1,6 @@
 import { useShop } from '../commerce/StorefrontShop'
 import type { FooterLinkItem } from '../lib/footerLinks'
+import { handleShopNavClick } from './storefrontNav'
 
 type Props = {
   links: FooterLinkItem[]
@@ -33,7 +34,7 @@ function LinkNode({
     )
   }
   return (
-    <a href={link.href || '#'} className={className}>
+    <a href={link.href || '#'} className={className} onClick={(e) => handleShopNavClick(e, link, shop)}>
       {link.label}
     </a>
   )

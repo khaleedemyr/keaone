@@ -613,6 +613,23 @@ export type ProductUnitRow = {
   factor_to_base: number
 }
 
+export type ProductVariantOption = {
+  id: number
+  name: string
+  sort_order: number
+  extra_price: number
+  image_url?: string | null
+  is_active: boolean
+}
+
+export type ProductVariantAttribute = {
+  id: number
+  name: string
+  sort_order: number
+  show_in_storefront: boolean
+  options: ProductVariantOption[]
+}
+
 export type Product = {
   id: number
   category_id: number | null
@@ -645,6 +662,7 @@ export type Product = {
   min_stock: number
   max_stock?: number
   reorder_qty?: number
+  weight_gram?: number | null
   is_active: boolean
   stock_qty: number
   choice_ids?: number[]
@@ -652,6 +670,7 @@ export type Product = {
   bom_items?: ProductBomItem[]
   has_bom?: boolean
   custom_fields?: Record<string, string | number | boolean | null> | null
+  variant_attributes?: ProductVariantAttribute[]
 }
 
 export type SaleItem = {

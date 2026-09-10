@@ -4,13 +4,26 @@ import { STOREFRONT_PREVIEW_BANNER } from '../previewDraft'
 import { useShop } from '../commerce/StorefrontShop'
 import type { StorefrontRenderModel, StorefrontRenderProduct } from './renderTypes'
 import { FooterLinkList } from './FooterLinkList'
-import { readFooterColumn, readFooterLegal } from '../lib/footerLinks'
+import { parseFooterLinks, readFooterColumn, readFooterLegal } from '../lib/footerLinks'
+import { coerceNavForTemplate, handleShopNavClick, useStorefrontScrolled } from './storefrontNav'
+import { withDemoFallback, withDemoImage } from './storefrontDemo'
 import {
   MIZU_DEFAULT_CATS,
   MIZU_DEFAULT_HERO,
   MIZU_DEMO,
   MIZU_PRODUCT_NAMES,
 } from './mizuDemo'
+import {
+  HeroEnter,
+  HoverLift,
+  Magnetic,
+  Parallax,
+  Reveal,
+  ScalePop,
+  Stagger,
+  StaggerItem,
+  Tilt3D,
+} from './storefrontMotion'
 
 /**
  * Mizu recreation from https://woodemo1.modstar.co.uk/
@@ -82,7 +95,7 @@ function Shell({ model, children }: { model: StorefrontRenderModel; children: Re
       }}
     >
       {model.preview ? (
-        <div className="sticky top-0 z-50 border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
+        <div className="border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
           {STOREFRONT_PREVIEW_BANNER}
         </div>
       ) : null}
@@ -96,9 +109,10 @@ function ProductCard({
   imageFallback,
 }: {
   product: StorefrontRenderProduct
-  imageFallback: string
+  imageFallback?: string
 }) {
   const shop = useShop()
+  const imageSrc = product.image_url || imageFallback
   return (
     <article className="group flex h-full min-w-0 flex-col">
       <button
@@ -106,11 +120,13 @@ function ProductCard({
         className="relative aspect-[3/4] w-full overflow-hidden bg-[#f3f3f3] text-left"
         onClick={() => shop?.openProduct(product)}
       >
-        <img
-          src={product.image_url || imageFallback}
-          alt=""
-          className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]"
-        />
+        {imageSrc ? (
+          <img
+            src={imageSrc}
+            alt=""
+            className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]"
+          />
+        ) : null}
       </button>
       <div className="pt-3">
         <button type="button" className="text-left" onClick={() => shop?.openProduct(product)}>
@@ -122,7 +138,7 @@ function ProductCard({
   )
 }
 
-function ProductRow({ products, id }: { products: StorefrontRenderProduct[]; id: string }) {
+function ProductRow({ products, id, model }: { products: StorefrontRenderProduct[]; id: string; model: StorefrontRenderModel }) {
   const ref = useRef<HTMLDivElement>(null)
   const scrollBy = (dir: -1 | 1) => {
     const el = ref.current
@@ -152,17 +168,24 @@ function ProductRow({ products, id }: { products: StorefrontRenderProduct[]; id:
       <div
         id={id}
         ref={ref}
-        className="flex gap-4 overflow-x-auto scroll-smooth pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="overflow-x-auto scroll-smooth pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {products.map((p, i) => (
-          <div
-            key={`${id}-${p.id}`}
-            data-card
-            className="w-[calc((100%-1rem)/2)] shrink-0 sm:w-[calc((100%-2rem)/3)] lg:w-[calc((100%-4rem)/5)]"
-          >
-            <ProductCard product={p} imageFallback={MIZU_DEMO.products[i % MIZU_DEMO.products.length]!} />
-          </div>
-        ))}
+        <Stagger className="flex gap-4" stagger={0.08}>
+          {products.map((p, i) => (
+            <StaggerItem
+              key={`${id}-${p.id}`}
+              className="w-[calc((100%-1rem)/2)] shrink-0 sm:w-[calc((100%-2rem)/3)] lg:w-[calc((100%-4rem)/5)]"
+            >
+              <div data-card className="h-full">
+                <Tilt3D className="relative">
+                  <HoverLift>
+                    <ProductCard product={p} imageFallback={withDemoImage(model, p.image_url, MIZU_DEMO.products[i % MIZU_DEMO.products.length]!)} />
+                  </HoverLift>
+                </Tilt3D>
+              </div>
+            </StaggerItem>
+          ))}
+        </Stagger>
       </div>
     </div>
   )
@@ -170,13 +193,12 @@ function ProductRow({ products, id }: { products: StorefrontRenderProduct[]; id:
 
 export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
   const content = theme(model)
-  const c = colors(model)
   const shop = useShop()
+  const [navGlass, chromeRef] = useStorefrontScrolled(16)
   const [slide, setSlide] = useState(0)
 
   const catalog = useMemo(() => {
-    if (model.products?.length) return model.products
-    return MIZU_PRODUCT_NAMES.map((name, i) => ({
+    const demoProducts = MIZU_PRODUCT_NAMES.map((name, i) => ({
       id: -(i + 1),
       name,
       description: '',
@@ -184,7 +206,8 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
       image_url: MIZU_DEMO.products[i % MIZU_DEMO.products.length],
       is_new_arrival: true,
     }))
-  }, [model.products])
+    return withDemoFallback(model, model.products ?? [], demoProducts)
+  }, [model])
 
   const newIn = (() => {
     const hits = catalog.filter((p) => p.is_new_arrival)
@@ -194,25 +217,41 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
   const heroSlides = useMemo(() => {
     const fromSlot = Array.isArray(content.hero_slides) ? content.hero_slides : []
     const slides = fromSlot
-      .filter((s): s is { image?: string; title?: string; subtitle?: string } => !!s && typeof s === 'object')
+      .filter((s) => !!s && typeof s === 'object')
       .map((s, i) => ({
-        image: typeof s.image === 'string' && s.image ? s.image : MIZU_DEMO.heroes[i % MIZU_DEMO.heroes.length]!,
-        title: (typeof s.title === 'string' && s.title.trim()) || MIZU_DEFAULT_HERO[i]?.title || MIZU_DEFAULT_HERO[0]!.title,
+        image:
+          'image' in s && typeof s.image === 'string' && s.image
+            ? s.image
+            : withDemoImage(model, undefined, MIZU_DEMO.heroes[i % MIZU_DEMO.heroes.length]!),
+        title:
+          ('title' in s && typeof s.title === 'string' && s.title.trim()) ||
+          MIZU_DEFAULT_HERO[i]?.title ||
+          MIZU_DEFAULT_HERO[0]!.title,
         subtitle:
-          (typeof s.subtitle === 'string' && s.subtitle.trim()) ||
+          ('subtitle' in s && typeof s.subtitle === 'string' && s.subtitle.trim()) ||
           MIZU_DEFAULT_HERO[i]?.subtitle ||
           MIZU_DEFAULT_HERO[0]!.subtitle,
       }))
+      .filter((s) => model.preview || s.image)
     if (slides.length) return slides.slice(0, 3)
     const single = typeof content.hero_image === 'string' && content.hero_image ? content.hero_image : null
     const headline = slotText(content, 'hero_headline', MIZU_DEFAULT_HERO[0]!.title)
     const body = slotText(content, 'hero_body', MIZU_DEFAULT_HERO[0]!.subtitle)
+    if (!model.preview) {
+      return [
+        {
+          image: withDemoImage(model, single, MIZU_DEMO.heroes[0]!),
+          title: headline,
+          subtitle: body,
+        },
+      ]
+    }
     return MIZU_DEFAULT_HERO.map((h, i) => ({
-      image: i === 0 && single ? single : MIZU_DEMO.heroes[i]!,
+      image: withDemoImage(model, i === 0 ? single : undefined, MIZU_DEMO.heroes[i]!),
       title: i === 0 ? headline : h.title,
       subtitle: i === 0 ? body : h.subtitle,
     }))
-  }, [content])
+  }, [content, model])
 
   useEffect(() => {
     if (heroSlides.length < 2) return
@@ -224,9 +263,7 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
   const newinCta = slotText(content, 'newin_cta', 'Shop all')
 
   const campaignImage =
-    typeof content.campaign_image === 'string' && content.campaign_image
-      ? content.campaign_image
-      : MIZU_DEMO.campaign
+    withDemoImage(model, typeof content.campaign_image === 'string' ? content.campaign_image : undefined, MIZU_DEMO.campaign)
   const campaignKicker = slotText(content, 'campaign_kicker', "FW’25 COLLECTION")
   const campaignTitle = slotText(content, 'campaign_title', 'Elegant and Timeless.')
   const campaignCta = slotText(content, 'campaign_cta', 'Discover more')
@@ -235,9 +272,11 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
   const collections = [1, 2, 3].map((n) => ({
     title: slotText(content, `collection_${n}_title`, ['Jackets & Coats', 'Dresses', 'Accessories'][n - 1]!),
     image:
-      typeof content[`collection_${n}_image`] === 'string' && content[`collection_${n}_image`]
-        ? (content[`collection_${n}_image`] as string)
-        : MIZU_DEMO.collections[n - 1]!,
+      withDemoImage(
+        model,
+        typeof content[`collection_${n}_image`] === 'string' ? (content[`collection_${n}_image`] as string) : undefined,
+        MIZU_DEMO.collections[n - 1]!,
+      ),
   }))
 
   const exploreTitle = slotText(content, 'explore_title', 'Explore and Discover')
@@ -249,7 +288,7 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
   const exploreCta = slotText(content, 'explore_cta', 'Learn more')
 
   const menImage =
-    typeof content.men_image === 'string' && content.men_image ? content.men_image : MIZU_DEMO.men
+    withDemoImage(model, typeof content.men_image === 'string' ? content.men_image : undefined, MIZU_DEMO.men)
   const menTitle = slotText(content, 'men_title', 'Men')
   const menBody = slotText(
     content,
@@ -259,7 +298,7 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
   const menCta = slotText(content, 'men_cta', 'Explore')
 
   const womenImage =
-    typeof content.women_image === 'string' && content.women_image ? content.women_image : MIZU_DEMO.women
+    withDemoImage(model, typeof content.women_image === 'string' ? content.women_image : undefined, MIZU_DEMO.women)
   const womenTitle = slotText(content, 'women_title', 'Women')
   const womenBody = slotText(
     content,
@@ -269,9 +308,7 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
   const womenCta = slotText(content, 'women_cta', 'Explore')
 
   const movementImage =
-    typeof content.movement_image === 'string' && content.movement_image
-      ? content.movement_image
-      : MIZU_DEMO.movement
+    withDemoImage(model, typeof content.movement_image === 'string' ? content.movement_image : undefined, MIZU_DEMO.movement)
   const movementKicker = slotText(content, 'movement_kicker', 'Join the movement')
   const movementTitle = slotText(content, 'movement_title', 'Effortless, Eco-friendly Styles')
 
@@ -287,6 +324,8 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
     if (fromSlot.length > 0) {
       return fromSlot.slice(0, 5).map((row, index) => ({
         key: `cat-${index}`,
+        categoryId:
+          typeof row === 'object' && row && 'category_id' in row ? Number(row.category_id) || 0 : 0,
         label:
           typeof row === 'object' && row && 'label' in row && typeof row.label === 'string' && row.label.trim()
             ? row.label
@@ -294,14 +333,19 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
         image:
           typeof row === 'object' && row && 'image' in row && typeof row.image === 'string' && row.image
             ? row.image
-            : MIZU_DEMO.categories[index % MIZU_DEMO.categories.length]!,
+            : withDemoImage(model, undefined, MIZU_DEMO.categories[index % MIZU_DEMO.categories.length]!),
       }))
     }
-    return MIZU_DEFAULT_CATS.map((label, index) => ({
-      key: `demo-${index}`,
-      label,
-      image: MIZU_DEMO.categories[index]!,
-    }))
+    return withDemoFallback(
+      model,
+      [],
+      MIZU_DEFAULT_CATS.map((label, index) => ({
+        key: `demo-${index}`,
+        categoryId: 0,
+        label,
+        image: withDemoImage(model, undefined, MIZU_DEMO.categories[index]!),
+      })),
+    )
   })()
 
   const footerTagline = slotText(
@@ -327,28 +371,39 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
         .join('\n') || 'Mizu Theme – Minimalist Luxury Fashion\n1 Example Road\nAAAA 111\nUnited Kingdom',
     ),
   )
-  const footerLegal = readFooterLegal(content, 'Terms and conditions of use | #\nLegal Notice | #')
-
   const brand = model.title || 'Mizu'
+  const footerLegal = readFooterLegal(content, 'Terms and conditions of use | #\nLegal Notice | #')
+  const footerCopy = slotText(content, 'footer_copy', `© ${new Date().getFullYear()} ${brand}. All Rights Reserved.`)
   const active = heroSlides[slide] ?? heroSlides[0]!
 
-  const nav = [
-    { href: '#newin', label: 'New in' },
-    { href: '#women', label: 'Women' },
-    { href: '#men', label: 'Men' },
-    { href: '#shopcat', label: 'Accessories' },
-    { href: '#about', label: 'About us' },
-    { href: '#collections', label: 'Blog' },
-  ]
+  const navDefault =
+    'New in | #newin\nShop | #shopcat\nCollections | #collections\nAbout us | #about\nCampaign | #campaign\nContact | #footer'
+  const nav = coerceNavForTemplate(
+    parseFooterLinks(slotText(content, 'nav_links', navDefault)),
+    parseFooterLinks(navDefault),
+    ['hero', 'newin', 'campaign', 'collections', 'about', 'shopcat', 'footer'],
+  )
 
   return (
     <Shell model={model}>
       {/* Header — minimal luxury */}
-      <header className="sticky top-0 z-40 border-b border-[#eee] bg-white/95 backdrop-blur-md">
+      <header
+        ref={chromeRef}
+        className={`sticky top-0 z-40 border-b transition-[background-color,border-color,backdrop-filter,box-shadow] duration-300 ${
+          navGlass
+            ? 'border-[#eee]/40 bg-white/50 shadow-sm backdrop-blur-md'
+            : 'border-[#eee] bg-white/95 backdrop-blur-md'
+        }`}
+      >
         <div className={`${M.wide} grid h-[72px] grid-cols-[1fr_auto_1fr] items-center gap-3`}>
           <nav className="hidden items-center gap-6 text-[13px] font-medium text-[#232323] lg:flex">
             {nav.slice(0, 3).map((item) => (
-              <a key={item.label} href={item.href} className="transition hover:opacity-55">
+              <a
+                key={item.label}
+                href={item.href || '#newin'}
+                className="transition hover:opacity-55"
+                onClick={(e) => handleShopNavClick(e, item, shop)}
+              >
                 {item.label}
               </a>
             ))}
@@ -357,6 +412,7 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
             href="#hero"
             className="justify-self-center text-[18px] font-semibold tracking-[0.12em] uppercase text-[#232323]"
             style={{ fontFamily: 'Outfit, sans-serif' }}
+            onClick={(e) => handleShopNavClick(e, { href: '#hero' }, shop)}
           >
             {model.logo_url ? (
               <img src={model.logo_url} alt="" className="h-8 w-auto max-w-[140px] object-contain" />
@@ -367,7 +423,12 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
           <div className="flex items-center justify-end gap-4 text-[13px] font-medium text-[#232323]">
             <nav className="mr-2 hidden items-center gap-6 lg:flex">
               {nav.slice(3).map((item) => (
-                <a key={item.label} href={item.href} className="transition hover:opacity-55">
+                <a
+                  key={item.label}
+                  href={item.href || '#newin'}
+                  className="transition hover:opacity-55"
+                  onClick={(e) => handleShopNavClick(e, item, shop)}
+                >
                   {item.label}
                 </a>
               ))}
@@ -385,17 +446,21 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
       {/* Hero — 95vh cover + caption UNDER image (Mizu signature) */}
       <section id="hero" className="bg-white">
         <div className="relative min-h-[95vh] w-full overflow-hidden bg-[#111]">
-          {heroSlides.map((s, i) => (
-            <img
-              key={s.title + i}
-              src={s.image}
-              alt=""
-              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
-                i === slide ? 'opacity-100' : 'opacity-0'
-              }`}
-              style={{ objectPosition: i === 0 ? '65% 40%' : '40% 48%' }}
-            />
-          ))}
+          <Parallax offset={72} className="absolute inset-0 h-full w-full">
+            {heroSlides.map((s, i) => (
+              s.image ? (
+                <img
+                  key={s.title + i}
+                  src={s.image}
+                  alt=""
+                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+                    i === slide ? 'opacity-100' : 'opacity-0'
+                  }`}
+                  style={{ objectPosition: i === 0 ? '65% 40%' : '40% 48%' }}
+                />
+              ) : null
+            ))}
+          </Parallax>
           {heroSlides.length > 1 ? (
             <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 gap-2">
               {heroSlides.map((_, i) => (
@@ -411,101 +476,136 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
           ) : null}
         </div>
         <div className={`${M.wide} py-6 sm:py-8`}>
-          <h1
-            className="max-w-4xl text-[28px] font-medium leading-tight tracking-tight text-[#232323] sm:text-[36px] lg:text-[42px]"
-            style={{ fontFamily: 'Outfit, sans-serif' }}
-          >
-            <a href="#newin" className="transition hover:opacity-70">
-              {active.title}
-            </a>
-          </h1>
-          <p className="mt-2 text-[14px] text-[#7a7a7a] sm:text-[15px]">{active.subtitle}</p>
+          <HeroEnter key={`hero-title-${slide}`}>
+            <h1
+              className="max-w-4xl text-[28px] font-medium leading-tight tracking-tight text-[#232323] sm:text-[36px] lg:text-[42px]"
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              <Magnetic className="inline-block">
+                <a href="#newin" className="transition hover:opacity-70">
+                  {active.title}
+                </a>
+              </Magnetic>
+            </h1>
+          </HeroEnter>
+          <HeroEnter key={`hero-body-${slide}`} delay={0.12}>
+            <p className="mt-2 text-[14px] text-[#7a7a7a] sm:text-[15px]">{active.subtitle}</p>
+          </HeroEnter>
         </div>
       </section>
 
       {/* New In */}
+      {newIn.length > 0 ? (
       <section id="newin" className="bg-white pb-16 pt-6 sm:pb-20 sm:pt-10">
-        <div className={`${M.wide} mb-7 flex items-end justify-between gap-4`}>
+        <Reveal className={`${M.wide} mb-7 flex items-end justify-between gap-4`}>
           <h2
             className="text-[28px] font-medium tracking-tight text-[#232323] sm:text-[34px]"
             style={{ fontFamily: 'Outfit, sans-serif' }}
           >
             {newinTitle}
           </h2>
-          <a href="#shopcat" className="text-[13px] font-medium text-[#232323] underline-offset-4 hover:underline">
+          <button
+            type="button"
+            className="text-[13px] font-medium text-[#232323] underline-offset-4 hover:underline"
+            onClick={() => shop?.openCatalog()}
+          >
             {newinCta}
-          </a>
-        </div>
+          </button>
+        </Reveal>
         <div className={M.wide}>
-          <ProductRow products={newIn} id="mizu-newin" />
+          <ProductRow products={newIn} id="mizu-newin" model={model} />
         </div>
       </section>
+      ) : null}
 
       {/* Campaign banner */}
       <section id="campaign" className="relative min-h-[70vh] overflow-hidden bg-[#111] text-white sm:min-h-[80vh]">
-        <img src={campaignImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        {campaignImage ? <img src={campaignImage} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
         <div className="absolute inset-0 bg-black/25" />
         <div className={`${M.wide} relative z-10 flex min-h-[70vh] flex-col items-center justify-center py-20 text-center sm:min-h-[80vh]`}>
-          <p className="text-[12px] font-medium uppercase tracking-[0.22em] text-white/90">{campaignKicker}</p>
-          <h2
-            className="mt-4 max-w-3xl text-[36px] font-medium leading-tight sm:text-[48px] lg:text-[54px]"
-            style={{ fontFamily: 'Outfit, sans-serif' }}
-          >
-            {campaignTitle}
-          </h2>
-          <a
-            href="#collections"
-            className="mt-8 text-[13px] font-medium uppercase tracking-[0.14em] text-white underline underline-offset-8"
-          >
-            {campaignCta}
-          </a>
+          <ScalePop>
+            <p className="text-[12px] font-medium uppercase tracking-[0.22em] text-white/90">{campaignKicker}</p>
+          </ScalePop>
+          <Reveal delay={0.08}>
+            <h2
+              className="mt-4 max-w-3xl text-[36px] font-medium leading-tight sm:text-[48px] lg:text-[54px]"
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              {campaignTitle}
+            </h2>
+          </Reveal>
+          <Reveal delay={0.16}>
+            <button
+              type="button"
+              className="mt-8 inline-block text-[13px] font-medium uppercase tracking-[0.14em] text-white underline underline-offset-8"
+              onClick={() => shop?.openCatalog()}
+            >
+              {campaignCta}
+            </button>
+          </Reveal>
         </div>
       </section>
 
       {/* Featured collections */}
       <section id="collections" className="bg-white py-14 sm:py-16">
-        <div className={`${M.wide} mb-8 flex items-center justify-end`}>
+        <Reveal className={`${M.wide} mb-8 flex items-center justify-end`}>
           <h2 className="text-[13px] font-medium uppercase tracking-[0.16em] text-[#232323]">
             {collectionsTitle} →
           </h2>
-        </div>
-        <div className={`${M.wide} grid gap-3 sm:grid-cols-3 sm:gap-4`}>
+        </Reveal>
+        <Stagger className={`${M.wide} grid gap-3 sm:grid-cols-3 sm:gap-4`} stagger={0.1}>
           {collections.map((col) => (
-            <a key={col.title} href="#shopcat" className="group relative aspect-[3/4] overflow-hidden bg-[#f3f3f3]">
-              <img
-                src={col.image}
-                alt=""
-                className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]"
-              />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-5 pt-16">
-                <div
-                  className="text-[18px] font-medium uppercase tracking-wide text-white sm:text-[20px]"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+            <StaggerItem key={col.title}>
+              <HoverLift>
+                <button
+                  type="button"
+                  className="group relative block aspect-[3/4] w-full overflow-hidden bg-[#f3f3f3] text-left"
+                  onClick={() => shop?.openCategories()}
                 >
-                  {col.title}
-                </div>
-              </div>
-            </a>
+                  {col.image ? (
+                    <img
+                      src={col.image}
+                      alt=""
+                      className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]"
+                    />
+                  ) : null}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-5 pt-16">
+                    <div
+                      className="text-[18px] font-medium uppercase tracking-wide text-white sm:text-[20px]"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      {col.title}
+                    </div>
+                  </div>
+                </button>
+              </HoverLift>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
 
       {/* Explore & discover */}
       <section id="about" className="bg-white py-16 sm:py-20">
         <div className={`${M.content} text-center`}>
-          <h2
-            className="text-[28px] font-medium tracking-tight text-[#232323] sm:text-[36px] lg:text-[44px]"
-            style={{ fontFamily: 'Outfit, sans-serif' }}
-          >
-            {exploreTitle}
-          </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-[15px] leading-relaxed text-[#7a7a7a]">{exploreBody}</p>
-          <a
-            href="#men"
-            className="mt-8 inline-block text-[13px] font-medium text-[#232323] underline underline-offset-4"
-          >
-            {exploreCta}
-          </a>
+          <Reveal>
+            <h2
+              className="text-[28px] font-medium tracking-tight text-[#232323] sm:text-[36px] lg:text-[44px]"
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              {exploreTitle}
+            </h2>
+          </Reveal>
+          <Reveal delay={0.1}>
+            <p className="mx-auto mt-5 max-w-2xl text-[15px] leading-relaxed text-[#7a7a7a]">{exploreBody}</p>
+          </Reveal>
+          <Reveal delay={0.18}>
+            <a
+              href="#men"
+              className="mt-8 inline-block text-[13px] font-medium text-[#232323] underline underline-offset-4"
+            >
+              {exploreCta}
+            </a>
+          </Reveal>
         </div>
       </section>
 
@@ -516,23 +616,29 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
           { id: 'women', image: womenImage, title: womenTitle, body: womenBody, cta: womenCta },
         ].map((panel) => (
           <div key={panel.id} id={panel.id} className="relative min-h-[72vh] overflow-hidden bg-[#111] text-white sm:min-h-[80vh]">
-            <img src={panel.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            {panel.image ? <img src={panel.image} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
             <div className="relative z-10 flex min-h-[72vh] flex-col justify-end p-8 sm:min-h-[80vh] sm:p-12 lg:p-14">
-              <div className="text-[12px] font-medium uppercase tracking-[0.18em] text-white/80">{panel.title}</div>
-              <h3
-                className="mt-3 max-w-md text-[32px] font-medium leading-tight sm:text-[40px]"
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                {panel.title}
-              </h3>
-              <p className="mt-4 max-w-md text-[14px] leading-relaxed text-white/80">{panel.body}</p>
-              <a
-                href="#shopcat"
-                className="mt-7 inline-flex w-fit border border-white px-5 py-2.5 text-[12px] font-medium uppercase tracking-[0.12em] text-white transition hover:bg-white hover:text-[#232323]"
-              >
-                {panel.cta}
-              </a>
+              <Reveal>
+                <div className="text-[12px] font-medium uppercase tracking-[0.18em] text-white/80">{panel.title}</div>
+                <h3
+                  className="mt-3 max-w-md text-[32px] font-medium leading-tight sm:text-[40px]"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  {panel.title}
+                </h3>
+              </Reveal>
+              <Reveal delay={0.1}>
+                <p className="mt-4 max-w-md text-[14px] leading-relaxed text-white/80">{panel.body}</p>
+              </Reveal>
+              <Reveal delay={0.18}>
+                <a
+                  href="#shopcat"
+                  className="mt-7 inline-flex w-fit border border-white px-5 py-2.5 text-[12px] font-medium uppercase tracking-[0.12em] text-white transition hover:bg-white hover:text-[#232323]"
+                >
+                  {panel.cta}
+                </a>
+              </Reveal>
             </div>
           </div>
         ))}
@@ -540,42 +646,64 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
 
       {/* Movement banner */}
       <section className="relative min-h-[55vh] overflow-hidden bg-[#111] text-white sm:min-h-[62vh]">
-        <img src={movementImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        {movementImage ? <img src={movementImage} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
         <div className="absolute inset-0 bg-black/35" />
         <div className={`${M.wide} relative z-10 flex min-h-[55vh] flex-col items-center justify-center py-16 text-center sm:min-h-[62vh]`}>
-          <p className="text-[12px] font-medium uppercase tracking-[0.22em] text-white/85">{movementKicker}</p>
-          <h2
-            className="mt-4 max-w-3xl text-[34px] font-medium leading-tight sm:text-[46px] lg:text-[52px]"
-            style={{ fontFamily: 'Outfit, sans-serif' }}
-          >
-            {movementTitle}
-          </h2>
+          <ScalePop>
+            <p className="text-[12px] font-medium uppercase tracking-[0.22em] text-white/85">{movementKicker}</p>
+          </ScalePop>
+          <Reveal delay={0.08}>
+            <h2
+              className="mt-4 max-w-3xl text-[34px] font-medium leading-tight sm:text-[46px] lg:text-[52px]"
+              style={{ fontFamily: 'Outfit, sans-serif' }}
+            >
+              {movementTitle}
+            </h2>
+          </Reveal>
         </div>
       </section>
 
       {/* Shop by category */}
+      {categoryItems.length > 0 ? (
       <section id="shopcat" className="bg-white py-16 sm:py-20">
-        <div className={`${M.wide} mb-3`}>
+        <Reveal className={`${M.wide} mb-3`}>
           <h2 className="text-[13px] font-medium uppercase tracking-[0.16em] text-[#232323]">
             {shopcatTitle} →
           </h2>
           <p className="mt-4 max-w-xl text-[14px] leading-relaxed text-[#7a7a7a]">{shopcatBody}</p>
-        </div>
-        <div className={`${M.wide} mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 lg:gap-5`}>
+        </Reveal>
+        <Stagger className={`${M.wide} mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 lg:gap-5`} stagger={0.07}>
           {categoryItems.map((cat) => (
-            <a key={cat.key} href="#newin" className="group">
-              <div className="aspect-[3/4] overflow-hidden bg-[#f3f3f3]">
-                <img
-                  src={cat.image}
-                  alt=""
-                  className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]"
-                />
-              </div>
-              <div className="mt-3 text-[14px] font-medium text-[#232323] group-hover:underline">{cat.label}</div>
-            </a>
+            <StaggerItem key={cat.key}>
+              <Tilt3D className="relative">
+                <HoverLift>
+                  <button
+                    type="button"
+                    className="group block w-full text-left"
+                    onClick={() =>
+                      cat.categoryId > 0
+                        ? shop?.openCatalog({ categoryId: cat.categoryId })
+                        : shop?.openCategories()
+                    }
+                  >
+                    <div className="aspect-[3/4] overflow-hidden bg-[#f3f3f3]">
+                      {cat.image ? (
+                        <img
+                          src={cat.image}
+                          alt=""
+                          className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="mt-3 text-[14px] font-medium text-[#232323] group-hover:underline">{cat.label}</div>
+                  </button>
+                </HoverLift>
+              </Tilt3D>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
+      ) : null}
 
       {/* Footer */}
       <footer id="footer" className="border-t border-[#eee] bg-white text-[#232323]">
@@ -623,7 +751,7 @@ export function ShopMizu({ model }: { model: StorefrontRenderModel }) {
         </div>
         <div className={`${M.wide} flex flex-col gap-3 border-t border-[#eee] py-5 text-[12px] text-[#7a7a7a] sm:flex-row sm:items-center sm:justify-between`}>
           <div>
-            © {new Date().getFullYear()} {brand}. All Rights Reserved.
+            {footerCopy}
           </div>
           <FooterLinkList links={footerLegal} inline className="flex flex-wrap gap-4" itemClassName="hover:text-[#232323]" />
         </div>

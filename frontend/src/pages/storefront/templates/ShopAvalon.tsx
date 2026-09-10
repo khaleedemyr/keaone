@@ -4,13 +4,26 @@ import { STOREFRONT_PREVIEW_BANNER } from '../previewDraft'
 import { useShop } from '../commerce/StorefrontShop'
 import type { StorefrontRenderModel, StorefrontRenderProduct } from './renderTypes'
 import { FooterLinkList } from './FooterLinkList'
-import { readFooterColumn, readFooterLegal } from '../lib/footerLinks'
+import { parseFooterLinks, readFooterColumn, readFooterLegal } from '../lib/footerLinks'
+import { coerceNavForTemplate, handleShopNavClick, scrollToStorefrontSection, useStorefrontScrolled } from './storefrontNav'
+import { withDemoFallback, withDemoImage } from './storefrontDemo'
 import {
   AVALON_DEMO,
   AVALON_DEFAULT_CATS,
   AVALON_NEWEST_NAMES,
   AVALON_SALE_NAMES,
 } from './avalonDemo'
+import {
+  HeroEnter,
+  HoverLift,
+  Magnetic,
+  Parallax,
+  Reveal,
+  ScalePop,
+  Stagger,
+  StaggerItem,
+  Tilt3D,
+} from './storefrontMotion'
 
 /**
  * Avalon recreation from https://demo.anarieldesign.com/avalon/
@@ -78,7 +91,7 @@ function Shell({ model, children }: { model: StorefrontRenderModel; children: Re
       }}
     >
       {model.preview ? (
-        <div className="sticky top-0 z-50 border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
+        <div className="border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
           {STOREFRONT_PREVIEW_BANNER}
         </div>
       ) : null}
@@ -108,7 +121,16 @@ function AvalonButton({
         : 'border-0 bg-black text-white hover:opacity-85'
   if (href) {
     return (
-      <a href={href} className={`${base} ${styles}`}>
+      <a
+        href={href}
+        className={`${base} ${styles}`}
+        onClick={(e) => {
+          if (!href.startsWith('#')) return
+          e.preventDefault()
+          if (onClick) onClick()
+          else scrollToStorefrontSection(href)
+        }}
+      >
         {children}
       </a>
     )
@@ -127,7 +149,7 @@ function ProductCard({
   compareAt,
 }: {
   product: StorefrontRenderProduct
-  imageFallback: string
+  imageFallback?: string
   sale?: boolean
   compareAt?: number
 }) {
@@ -141,11 +163,13 @@ function ProductCard({
         onClick={() => shop?.openProduct(product)}
       >
         <div className="aspect-[3/4] w-full">
-          <img
-            src={img}
-            alt=""
-            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-          />
+          {img ? (
+            <img
+              src={img}
+              alt=""
+              className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+            />
+          ) : null}
         </div>
         {sale ? (
           <span
@@ -210,11 +234,13 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
   const content = theme(model)
   const c = colors(model)
   const shop = useShop()
+  const [navGlass, chromeRef] = useStorefrontScrolled(16)
   const brand = model.title || 'avalon'
 
-  const catalog = model.products?.length
-    ? model.products
-    : [
+  const catalog = withDemoFallback(
+    model,
+    model.products ?? [],
+    [
         ...demoProducts(AVALON_SALE_NAMES, [240000, 624000, 784000], { deal: true }),
         ...demoProducts(AVALON_NEWEST_NAMES, [624000, 240000, 1584000, 784000], { rated: true }).map(
           (p, i) => ({
@@ -223,7 +249,8 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
             image_url: AVALON_DEMO.products[(i + 3) % AVALON_DEMO.products.length],
           }),
         ),
-      ]
+      ],
+  )
 
   const saleProducts = (() => {
     const deals = catalog.filter((p) => p.is_deal)
@@ -243,7 +270,7 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
     'Free Delivery on orders over Rp 100.000. Don’t miss it!',
   )
   const heroImage =
-    typeof content.hero_image === 'string' && content.hero_image ? content.hero_image : AVALON_DEMO.hero
+    withDemoImage(model, typeof content.hero_image === 'string' ? content.hero_image : undefined, AVALON_DEMO.hero)
   const heroKicker = slotText(content, 'hero_kicker', 'Winter Sale')
   const heroBadge = slotText(content, 'hero_badge', '-40%')
   const heroHeadline = slotText(
@@ -261,9 +288,7 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
   )
 
   const collectionImage =
-    typeof content.collection_image === 'string' && content.collection_image
-      ? content.collection_image
-      : AVALON_DEMO.collection
+    withDemoImage(model, typeof content.collection_image === 'string' ? content.collection_image : undefined, AVALON_DEMO.collection)
   const collectionKicker = slotText(content, 'collection_kicker', 'New')
   const collectionTitle = slotText(content, 'collection_title', 'Collection')
   const collectionCta = slotText(content, 'collection_cta', 'Shop Now')
@@ -276,9 +301,7 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
   )
 
   const saleBannerImage =
-    typeof content.sale_banner_image === 'string' && content.sale_banner_image
-      ? content.sale_banner_image
-      : AVALON_DEMO.saleBanner
+    withDemoImage(model, typeof content.sale_banner_image === 'string' ? content.sale_banner_image : undefined, AVALON_DEMO.saleBanner)
   const saleBannerKicker = slotText(content, 'sale_banner_kicker', 'On Sale')
   const saleBannerTitle = slotText(content, 'sale_banner_title', 'Collection')
   const saleBannerCta = slotText(content, 'sale_banner_cta', 'Shop the Sale')
@@ -294,6 +317,8 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
     if (fromSlot.length > 0) {
       return fromSlot.slice(0, 5).map((row, index) => ({
         key: `cat-${index}`,
+        categoryId:
+          typeof row === 'object' && row && 'category_id' in row ? Number(row.category_id) || 0 : 0,
         label:
           typeof row === 'object' && row && 'label' in row && typeof row.label === 'string' && row.label.trim()
             ? row.label
@@ -301,14 +326,19 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
         image:
           typeof row === 'object' && row && 'image' in row && typeof row.image === 'string' && row.image
             ? row.image
-            : AVALON_DEMO.categories[index % AVALON_DEMO.categories.length]!,
+            : withDemoImage(model, undefined, AVALON_DEMO.categories[index % AVALON_DEMO.categories.length]!),
       }))
     }
-    return AVALON_DEFAULT_CATS.map((label, index) => ({
-      key: `demo-${index}`,
-      label,
-      image: AVALON_DEMO.categories[index]!,
-    }))
+    return withDemoFallback(
+      model,
+      [],
+      AVALON_DEFAULT_CATS.map((label, index) => ({
+        key: `demo-${index}`,
+        categoryId: 0,
+        label,
+        image: withDemoImage(model, undefined, AVALON_DEMO.categories[index]!),
+      })),
+    )
   })()
 
   const trusts = [1, 2, 3, 4].map((n) => ({
@@ -329,6 +359,7 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
     ),
   }))
 
+  const companyTitle = slotText(content, 'footer_company_title', 'Company')
   const companyBody = slotText(content, 'footer_company_body', 'Find a location nearest you.')
   const companyCta = slotText(content, 'footer_company_cta', 'See Our Stores')
   const footerCol1 = readFooterColumn(content, 1, {
@@ -341,18 +372,25 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
   })
   const footerCol3 = readFooterColumn(content, 3, {
     title: 'Social Media',
-    links: 'Twitter | #\nFacebook | #\nInstagram | #\nPinterest | #',
+    links:
+      'Twitter | https://twitter.com\nFacebook | https://facebook.com\nInstagram | https://instagram.com\nPinterest | https://pinterest.com',
   })
+  const headerSocial =
+    footerCol3.links.length > 0
+      ? footerCol3.links
+      : parseFooterLinks(
+          'Facebook | https://facebook.com\nInstagram | https://instagram.com\nPinterest | https://pinterest.com',
+        )
   const footerLegal = readFooterLegal(content, 'Privacy Policy | #\nTerms of Use | #')
+  const footerCopy = slotText(content, 'footer_copy', `© ${new Date().getFullYear()} ${brand}`)
 
-  const nav = [
-    { href: '#hero', label: 'Home' },
-    { href: '#sale', label: 'Shop' },
-    { href: '#collection', label: 'Collection' },
-    { href: '#newest', label: 'New' },
-    { href: '#cats', label: 'Categories' },
-    { href: '#footer', label: 'Contact' },
-  ]
+  const navDefault =
+    'Home | #hero\nShop | #sale\nCollection | #collection\nNew | #newest\nCategories | #cats\nContact | #footer'
+  const nav = coerceNavForTemplate(
+    parseFooterLinks(slotText(content, 'nav_links', navDefault)),
+    parseFooterLinks(navDefault),
+    ['hero', 'sale', 'collection', 'newest', 'cats', 'trust', 'footer'],
+  )
 
   return (
     <Shell model={model}>
@@ -362,14 +400,30 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-[#eee] bg-white">
+      <header
+        ref={chromeRef}
+        className={`sticky top-0 z-40 border-b transition-[background-color,border-color,backdrop-filter,box-shadow] duration-300 ${
+          navGlass
+            ? 'border-[#eee]/40 bg-white/55 shadow-sm backdrop-blur-md'
+            : 'border-[#eee] bg-white'
+        }`}
+      >
         <div className={`${A.wide} flex h-11 items-center justify-between text-[13px] text-[#4c4c4c]`}>
           <div className="hidden gap-3 sm:flex">
-            {['Facebook', 'Instagram', 'Pinterest'].map((s) => (
-              <span key={s} className="hover:text-black">
-                {s}
-              </span>
-            ))}
+            {headerSocial
+              .filter((s) => s.href)
+              .slice(0, 4)
+              .map((s) => (
+                <a
+                  key={s.label}
+                  href={s.href}
+                  target={s.href?.startsWith('http') ? '_blank' : undefined}
+                  rel="noreferrer"
+                  className="hover:text-black"
+                >
+                  {s.label}
+                </a>
+              ))}
           </div>
           <div className="ml-auto flex items-center gap-4">
             <button type="button" className="hover:text-black" onClick={() => shop?.openLogin()}>
@@ -381,7 +435,11 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
           </div>
         </div>
         <div className={`${A.wide} flex h-[72px] items-center justify-between gap-4`}>
-          <a href="#hero" className="text-[28px] font-bold tracking-tight lowercase text-black sm:text-[32px]">
+          <a
+            href="#hero"
+            className="text-[28px] font-bold tracking-tight lowercase text-black sm:text-[32px]"
+            onClick={(e) => handleShopNavClick(e, { href: '#hero' }, shop)}
+          >
             {model.logo_url ? (
               <img src={model.logo_url} alt="" className="h-9 w-auto max-w-[160px] object-contain" />
             ) : (
@@ -390,7 +448,12 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
           </a>
           <nav className="hidden items-center gap-7 text-[15px] font-medium text-black lg:flex">
             {nav.map((item) => (
-              <a key={item.label} href={item.href} className="transition hover:opacity-55">
+              <a
+                key={item.label}
+                href={item.href || '#hero'}
+                className="transition hover:opacity-55"
+                onClick={(e) => handleShopNavClick(e, item, shop)}
+              >
                 {item.label}
               </a>
             ))}
@@ -407,147 +470,191 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
 
       {/* Hero sale */}
       <section id="hero" className="relative min-h-[78vh] overflow-hidden bg-black text-white sm:min-h-[88vh]">
-        <img src={heroImage} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" />
+        <Parallax className="absolute inset-0">
+          {heroImage ? <img src={heroImage} alt="" className="h-[115%] w-full object-cover opacity-90" /> : null}
+        </Parallax>
         <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/25 to-transparent" />
         <div className={`${A.wide} relative z-10 flex min-h-[78vh] items-center py-16 sm:min-h-[88vh]`}>
-          <div className="max-w-xl">
+          <HeroEnter className="max-w-xl">
             <div className="flex flex-wrap items-end gap-3">
               <h1 className="text-[42px] font-bold leading-[1.1] sm:text-[56px] lg:text-[64px]">{heroKicker}</h1>
-              <span
-                className="mb-2 inline-block px-3 py-1 text-[22px] font-bold sm:text-[28px]"
-                style={{ background: c.primary || A.primary }}
-              >
-                {heroBadge}
-              </span>
+              <ScalePop className="mb-2 inline-block">
+                <span
+                  className="inline-block px-3 py-1 text-[22px] font-bold sm:text-[28px]"
+                  style={{ background: c.primary || A.primary }}
+                >
+                  {heroBadge}
+                </span>
+              </ScalePop>
             </div>
             <p className="mt-5 max-w-md text-[16px] leading-relaxed text-white/90 sm:text-[18px]">{heroHeadline}</p>
             <div className="mt-8">
-              <AvalonButton href="#sale" variant="light">
-                {heroCta}
-              </AvalonButton>
+              <Magnetic className="inline-block">
+                <AvalonButton onClick={() => shop?.openCatalog()} variant="light">
+                  {heroCta}
+                </AvalonButton>
+              </Magnetic>
             </div>
-          </div>
+          </HeroEnter>
         </div>
       </section>
 
       {/* On Sale */}
+      {saleProducts.length > 0 ? (
       <section id="sale" className="bg-white py-16 sm:py-20">
-        <div className={`${A.wide} mb-10 text-center`}>
+        <Reveal className={`${A.wide} mb-10 text-center`}>
           <h2 className="text-[32px] font-bold tracking-tight text-black sm:text-[40px]">{saleTitle}</h2>
           <p className="mx-auto mt-3 max-w-2xl text-[15px] leading-relaxed text-[#4c4c4c] sm:text-[16px]">{saleBody}</p>
-        </div>
-        <div className={`${A.wide} grid gap-8 sm:grid-cols-2 lg:grid-cols-3 lg:gap-10`}>
+        </Reveal>
+        <Stagger className={`${A.wide} grid gap-8 sm:grid-cols-2 lg:grid-cols-3 lg:gap-10`}>
           {saleProducts.map((p, i) => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              imageFallback={AVALON_DEMO.products[i % AVALON_DEMO.products.length]!}
-              sale
-              compareAt={Math.round(p.price * 1.25)}
-            />
+            <StaggerItem key={p.id}>
+              <Tilt3D className="relative">
+                <ProductCard
+                  product={p}
+                  imageFallback={withDemoImage(model, p.image_url, AVALON_DEMO.products[i % AVALON_DEMO.products.length]!)}
+                  sale
+                  compareAt={Math.round(p.price * 1.25)}
+                />
+              </Tilt3D>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
+      ) : null}
 
       {/* New Collection */}
       <section id="collection" className="relative min-h-[62vh] overflow-hidden bg-[#111] text-white sm:min-h-[70vh]">
-        <img src={collectionImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <Parallax className="absolute inset-0">
+          {collectionImage ? <img src={collectionImage} alt="" className="h-[115%] w-full object-cover" /> : null}
+        </Parallax>
         <div className="absolute inset-0 bg-black/40" />
-        <div className={`${A.wide} relative z-10 flex min-h-[62vh] flex-col items-center justify-center py-20 text-center sm:min-h-[70vh]`}>
+        <Reveal
+          className={`${A.wide} relative z-10 flex min-h-[62vh] flex-col items-center justify-center py-20 text-center sm:min-h-[70vh]`}
+        >
           <p className="text-[14px] font-semibold uppercase tracking-[0.2em] text-white/85">{collectionKicker}</p>
           <h2 className="mt-2 text-[44px] font-bold leading-none sm:text-[64px] lg:text-[72px]">{collectionTitle}</h2>
           <div className="mt-8">
-            <AvalonButton href="#newest" variant="light">
-              {collectionCta}
-            </AvalonButton>
+                <AvalonButton onClick={() => shop?.openCatalog()} variant="light">
+                  {collectionCta}
+                </AvalonButton>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* Newest Products */}
+      {newestProducts.length > 0 ? (
       <section id="newest" className="bg-white py-16 sm:py-20">
-        <div className={`${A.wide} mb-10 text-center`}>
+        <Reveal className={`${A.wide} mb-10 text-center`}>
           <h2 className="text-[32px] font-bold tracking-tight text-black sm:text-[40px]">{newestTitle}</h2>
           <p className="mx-auto mt-3 max-w-2xl text-[15px] leading-relaxed text-[#4c4c4c] sm:text-[16px]">{newestBody}</p>
-        </div>
-        <div className={`${A.wide} grid gap-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8`}>
+        </Reveal>
+        <Stagger className={`${A.wide} grid gap-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8`} stagger={0.08}>
           {newestProducts.map((p, i) => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              imageFallback={AVALON_DEMO.products[(i + 3) % AVALON_DEMO.products.length]!}
-            />
+            <StaggerItem key={p.id}>
+              <Tilt3D className="relative">
+                <ProductCard
+                  product={p}
+                  imageFallback={withDemoImage(model, p.image_url, AVALON_DEMO.products[(i + 3) % AVALON_DEMO.products.length]!)}
+                />
+              </Tilt3D>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
+      ) : null}
 
       {/* On Sale Collection banner */}
       <section className="relative min-h-[55vh] overflow-hidden bg-[#111] text-white sm:min-h-[62vh]">
-        <img src={saleBannerImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <Parallax className="absolute inset-0">
+          {saleBannerImage ? <img src={saleBannerImage} alt="" className="h-[115%] w-full object-cover" /> : null}
+        </Parallax>
         <div className="absolute inset-0 bg-black/45" />
-        <div className={`${A.wide} relative z-10 flex min-h-[55vh] flex-col items-center justify-center py-16 text-center sm:min-h-[62vh]`}>
+        <Reveal
+          className={`${A.wide} relative z-10 flex min-h-[55vh] flex-col items-center justify-center py-16 text-center sm:min-h-[62vh]`}
+        >
           <p className="text-[14px] font-semibold uppercase tracking-[0.2em] text-white/85">{saleBannerKicker}</p>
           <h2 className="mt-2 text-[44px] font-bold leading-none sm:text-[64px]">{saleBannerTitle}</h2>
           <div className="mt-8">
-            <AvalonButton href="#sale" variant="light">
+            <AvalonButton onClick={() => shop?.openCatalog()} variant="light">
               {saleBannerCta}
             </AvalonButton>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* Shop by Categories */}
+      {categoryItems.length > 0 ? (
       <section id="cats" className="bg-white py-16 sm:py-20">
-        <div className={`${A.wide} mb-10 text-center`}>
+        <Reveal className={`${A.wide} mb-10 text-center`}>
           <h2 className="text-[32px] font-bold tracking-tight text-black sm:text-[40px]">{catsTitle}</h2>
           <p className="mx-auto mt-3 max-w-2xl text-[15px] leading-relaxed text-[#4c4c4c] sm:text-[16px]">{catsBody}</p>
-        </div>
-        <div className={`${A.wide} grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 lg:gap-6`}>
+        </Reveal>
+        <Stagger className={`${A.wide} grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 lg:gap-6`} stagger={0.07}>
           {categoryItems.map((cat) => (
-            <a key={cat.key} href="#newest" className="group text-center">
-              <div className="aspect-square overflow-hidden bg-[#f5f5f5]">
-                <img
-                  src={cat.image}
-                  alt=""
-                  className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
-                />
-              </div>
-              <div className="mt-3 text-[15px] font-bold text-black group-hover:underline">{cat.label}</div>
-            </a>
+            <StaggerItem key={cat.key}>
+              <HoverLift>
+                <button
+                  type="button"
+                  className="group block w-full text-center"
+                  onClick={() =>
+                    cat.categoryId > 0
+                      ? shop?.openCatalog({ categoryId: cat.categoryId })
+                      : shop?.openCategories()
+                  }
+                >
+                  <div className="aspect-square overflow-hidden bg-[#f5f5f5]">
+                    {cat.image ? (
+                      <img
+                        src={cat.image}
+                        alt=""
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+                      />
+                    ) : null}
+                  </div>
+                  <div className="mt-3 text-[15px] font-bold text-black group-hover:underline">{cat.label}</div>
+                </button>
+              </HoverLift>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
+      ) : null}
 
       {/* Trust */}
       <section id="trust" className="border-y border-[#eee] bg-[#f5f5f5] py-12 sm:py-14">
-        <div className={`${A.wide} grid gap-8 sm:grid-cols-2 lg:grid-cols-4`}>
+        <Stagger className={`${A.wide} grid gap-8 sm:grid-cols-2 lg:grid-cols-4`} stagger={0.09}>
           {trusts.map((t) => (
-            <div key={t.title} className="text-center sm:text-left">
-              <div className="text-[16px] font-bold text-black">{t.title}</div>
-              <p className="mt-2 text-[14px] leading-relaxed text-[#4c4c4c]">{t.body}</p>
-            </div>
+            <StaggerItem key={t.title}>
+              <HoverLift className="text-center sm:text-left">
+                <div className="text-[16px] font-bold text-black">{t.title}</div>
+                <p className="mt-2 text-[14px] leading-relaxed text-[#4c4c4c]">{t.body}</p>
+              </HoverLift>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
 
       {/* Footer */}
       <footer id="footer" className="bg-white text-black">
-        <div className={`${A.wide} grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4`}>
+        <Reveal className={`${A.wide} grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4`}>
           <div>
-            <div className="text-[16px] font-bold">Company</div>
+            <div className="text-[16px] font-bold">{companyTitle}</div>
             <p className="mt-3 max-w-xs text-[14px] leading-relaxed text-[#4c4c4c]">{companyBody}</p>
-            <a href="#cats" className="mt-3 inline-block text-[14px] font-bold underline underline-offset-4">
+            <button
+              type="button"
+              className="mt-3 inline-block text-[14px] font-bold underline underline-offset-4"
+              onClick={() => shop?.openCategories()}
+            >
               {companyCta}
-            </a>
+            </button>
             <div className="mt-5 space-y-1 text-[14px] text-[#4c4c4c]">
-              {model.contact_phone ? <div>{model.contact_phone}</div> : <div>+391 (0)35 2568 4593</div>}
+              {model.contact_phone ? <div>{model.contact_phone}</div> : null}
               {model.contact_email ? (
                 <a href={`mailto:${model.contact_email}`} className="hover:text-black">
                   {model.contact_email}
                 </a>
-              ) : (
-                <div>hello@domain.com</div>
-              )}
+              ) : null}
             </div>
           </div>
           <div>
@@ -574,13 +681,13 @@ export function ShopAvalon({ model }: { model: StorefrontRenderModel }) {
               itemClassName="transition hover:text-black"
             />
           </div>
-        </div>
-        <div className={`${A.wide} flex flex-col gap-3 border-t border-[#eee] py-5 text-[13px] text-[#4c4c4c] sm:flex-row sm:items-center sm:justify-between`}>
+        </Reveal>
+        <Reveal delay={0.08} className={`${A.wide} flex flex-col gap-3 border-t border-[#eee] py-5 text-[13px] text-[#4c4c4c] sm:flex-row sm:items-center sm:justify-between`}>
           <div>
-            © {new Date().getFullYear()} {brand}
+            {footerCopy}
           </div>
           <FooterLinkList links={footerLegal} inline className="flex flex-wrap gap-4" itemClassName="hover:text-black" />
-        </div>
+        </Reveal>
       </footer>
     </Shell>
   )

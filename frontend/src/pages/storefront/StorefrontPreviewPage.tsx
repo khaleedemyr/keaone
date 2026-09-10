@@ -6,8 +6,8 @@ import { useI18n } from '../../i18n'
 import type { ApiOk } from '../../types'
 import { ShopChrome, StorefrontShopProvider } from './commerce/StorefrontShop'
 import { readStorefrontPreviewDraft } from './previewDraft'
-import { StorefrontSite, type StorefrontRenderModel, type StorefrontRenderProduct } from './templates/StorefrontSite'
-import type { StorefrontAdmin, StorefrontProductRow } from './types'
+import { StorefrontSite, type StorefrontRenderModel, type StorefrontRenderNews, type StorefrontRenderProduct } from './templates/StorefrontSite'
+import type { StorefrontAdmin, StorefrontNewsPostRow, StorefrontProductRow } from './types'
 
 export default function StorefrontPreviewPage() {
   const { t } = useI18n()
@@ -39,6 +39,11 @@ export default function StorefrontPreviewPage() {
                 available_qty: row.allocated_qty == null ? null : Math.max(0, row.allocated_qty - row.sold_qty),
                 category_id: row.product?.category_id ?? null,
                 image_url: row.product?.image_url ?? null,
+                images: (row.product?.images ?? [])
+                  .map((img) => ({ id: img.id, url: String(img.url || ''), is_primary: Boolean(img.is_primary) }))
+                  .filter((img) => img.url),
+                weight_gram: row.product?.weight_gram ?? null,
+                variant_attributes: row.product?.variant_attributes ?? [],
                 is_deal: Boolean(row.is_deal),
                 is_new_arrival: Boolean(row.is_new_arrival),
                 is_bestseller: Boolean(row.is_bestseller),
@@ -51,13 +56,39 @@ export default function StorefrontPreviewPage() {
           }
         }
 
+        let news: StorefrontRenderNews[] = []
+        const templateKey = draft?.template_key ?? sf.template_key
+        if (sf.has_news) {
+          try {
+            const list = await api.get<ApiOk<StorefrontNewsPostRow[]>>('/storefront/news?per_page=24', {
+              silent: true,
+            })
+            news = (list.data.data ?? [])
+              .filter((row) => row.is_published)
+              .map((row) => ({
+                id: row.id,
+                slug: row.slug,
+                title: row.title,
+                excerpt: row.excerpt ?? null,
+                body: row.body ?? null,
+                image_url: row.image_url ?? null,
+                tags: row.tags ?? null,
+                day: row.day ?? null,
+                month: row.month ?? null,
+                published_at: row.published_at ?? null,
+              }))
+          } catch {
+            news = []
+          }
+        }
+
         const draftTheme = draft?.theme_content
         const hasDraftTheme =
           draftTheme != null && typeof draftTheme === 'object' && Object.keys(draftTheme).length > 0
 
         setModel({
           site_kind: kind,
-          template_key: draft?.template_key ?? sf.template_key,
+          template_key: templateKey,
           title: draft?.title || sf.title || 'Toko',
           tagline: draft?.tagline ?? sf.tagline ?? '',
           about: draft?.about ?? sf.about ?? '',
@@ -73,6 +104,7 @@ export default function StorefrontPreviewPage() {
           // Prefer draft blocks when provided (incl. empty = legacy template). Else saved page.
           home_blocks: draft?.home_blocks !== undefined ? draft.home_blocks : (sf.home_blocks ?? []),
           products,
+          news,
           preview: true,
         })
       } catch (err) {

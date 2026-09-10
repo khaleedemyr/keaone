@@ -35,6 +35,7 @@ class Product extends Model
         'min_stock',
         'max_stock',
         'reorder_qty',
+        'weight_gram',
         'custom_fields',
         'is_active',
     ];
@@ -51,6 +52,7 @@ class Product extends Model
             'min_stock' => 'integer',
             'max_stock' => 'integer',
             'reorder_qty' => 'integer',
+            'weight_gram' => 'integer',
             'custom_fields' => 'array',
             'is_active' => 'boolean',
         ];
@@ -114,6 +116,16 @@ class Product extends Model
     public function bomItems(): HasMany
     {
         return $this->hasMany(ProductBomItem::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function variantAttributes(): HasMany
+    {
+        return $this->hasMany(ProductVariantAttribute::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function variantOptions(): HasMany
+    {
+        return $this->hasMany(ProductVariantOption::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function stockBalances(): HasMany

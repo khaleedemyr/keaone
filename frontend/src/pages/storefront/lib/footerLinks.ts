@@ -1,4 +1,4 @@
-export type FooterLinkAction = 'cart' | 'checkout' | 'account' | 'login'
+export type FooterLinkAction = 'cart' | 'checkout' | 'account' | 'login' | 'catalog' | 'categories'
 
 export type FooterLinkItem = {
   label: string
@@ -11,34 +11,36 @@ export type FooterColumn = {
   links: FooterLinkItem[]
 }
 
-const ACTIONS = new Set<FooterLinkAction>(['cart', 'checkout', 'account', 'login'])
+const ACTIONS = new Set<FooterLinkAction>(['cart', 'checkout', 'account', 'login', 'catalog', 'categories'])
 
 /**
  * Parse footer link lines.
  * Format per line: `Label | target`
- * target: `#anchor`, URL, or action token `cart` / `checkout` / `account` / `login`
+ * target: `#anchor`, URL, or action token `cart` / `checkout` / `account` / `login` / `catalog` / `categories`
  * Label-only lines use fallbackHref.
  */
 export function parseFooterLinks(raw: string, fallbackHref = '#'): FooterLinkItem[] {
-  return raw
+  const items: FooterLinkItem[] = []
+  raw
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
-    .map((line) => {
+    .forEach((line) => {
       const pipe = line.indexOf('|')
       if (pipe < 0) {
-        return { label: line, href: fallbackHref }
+        items.push({ label: line, href: fallbackHref })
+        return
       }
       const label = line.slice(0, pipe).trim()
       const target = line.slice(pipe + 1).trim().toLowerCase()
-      if (!label) return null
+      if (!label) return
       if (ACTIONS.has(target as FooterLinkAction)) {
-        return { label, action: target as FooterLinkAction }
+        items.push({ label, action: target as FooterLinkAction })
+        return
       }
-      if (!target) return { label, href: fallbackHref }
-      return { label, href: line.slice(pipe + 1).trim() }
+      items.push({ label, href: target ? line.slice(pipe + 1).trim() : fallbackHref })
     })
-    .filter((item): item is FooterLinkItem => !!item)
+  return items
 }
 
 function slotText(content: Record<string, unknown>, key: string, fallback: string) {

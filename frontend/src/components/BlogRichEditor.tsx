@@ -7,13 +7,21 @@ import Underline from '@tiptap/extension-underline'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { uploadBlogMedia } from '../api/platformBlog'
 import { useI18n } from '../i18n'
+import { TextAlign } from './tiptapTextAlign'
 import './blogEditor.css'
 
 type Props = {
   value: string
   onChange: (html: string) => void
-  postId: number | null
+  /** Platform blog: image upload needs saved post id. */
+  postId?: number | null
   onNeedSave?: () => void
+  /**
+   * Custom image uploader (e.g. storefront media).
+   * When set, images can be inserted without postId.
+   */
+  uploadImage?: (file: File) => Promise<{ url: string }>
+  placeholder?: string
 }
 
 function ToolbarButton({
@@ -21,11 +29,13 @@ function ToolbarButton({
   onClick,
   title,
   children,
+  disabled,
 }: {
   active?: boolean
   onClick: () => void
   title: string
   children: ReactNode
+  disabled?: boolean
 }) {
   return (
     <button
@@ -33,6 +43,7 @@ function ToolbarButton({
       className={`blog-editor-btn${active ? ' is-active' : ''}`}
       title={title}
       aria-label={title}
+      disabled={disabled}
       onClick={onClick}
     >
       {children}
@@ -40,7 +51,14 @@ function ToolbarButton({
   )
 }
 
-export function BlogRichEditor({ value, onChange, postId, onNeedSave }: Props) {
+export function BlogRichEditor({
+  value,
+  onChange,
+  postId = null,
+  onNeedSave,
+  uploadImage,
+  placeholder,
+}: Props) {
   const { t } = useI18n()
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -50,12 +68,13 @@ export function BlogRichEditor({ value, onChange, postId, onNeedSave }: Props) {
         heading: { levels: [2, 3, 4] },
       }),
       Underline,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Link.configure({
         openOnClick: false,
         HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
       }),
       Image.configure({ inline: false, allowBase64: false }),
-      Placeholder.configure({ placeholder: t('blogEditorPlaceholder') }),
+      Placeholder.configure({ placeholder: placeholder || t('blogEditorPlaceholder') }),
     ],
     content: value || '',
     editorProps: {
@@ -79,11 +98,16 @@ export function BlogRichEditor({ value, onChange, postId, onNeedSave }: Props) {
 
   async function onImagePick(file: File | null) {
     if (!file || !editor) return
-    if (!postId) {
-      onNeedSave?.()
-      return
-    }
     try {
+      if (uploadImage) {
+        const { url } = await uploadImage(file)
+        editor.chain().focus().setImage({ src: url, alt: file.name }).run()
+        return
+      }
+      if (!postId) {
+        onNeedSave?.()
+        return
+      }
       const { url } = await uploadBlogMedia(postId, file)
       editor.chain().focus().setImage({ src: url, alt: file.name }).run()
     } catch {
@@ -102,6 +126,9 @@ export function BlogRichEditor({ value, onChange, postId, onNeedSave }: Props) {
     }
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
   }
+
+  const canInsertImage = Boolean(uploadImage || postId)
+  const imageTitle = canInsertImage ? t('blogEditorImage') : t('blogEditorSaveFirstForImage')
 
   if (!editor) return null
 
@@ -146,6 +173,35 @@ export function BlogRichEditor({ value, onChange, postId, onNeedSave }: Props) {
         </ToolbarButton>
         <span className="blog-editor-sep" aria-hidden />
         <ToolbarButton
+          title={t('blogEditorAlignLeft')}
+          active={editor.isActive({ textAlign: 'left' })}
+          onClick={() => editor.chain().focus().setTextAlign('left').run()}
+        >
+          ⬅
+        </ToolbarButton>
+        <ToolbarButton
+          title={t('blogEditorAlignCenter')}
+          active={editor.isActive({ textAlign: 'center' })}
+          onClick={() => editor.chain().focus().setTextAlign('center').run()}
+        >
+          ≡
+        </ToolbarButton>
+        <ToolbarButton
+          title={t('blogEditorAlignRight')}
+          active={editor.isActive({ textAlign: 'right' })}
+          onClick={() => editor.chain().focus().setTextAlign('right').run()}
+        >
+          ➡
+        </ToolbarButton>
+        <ToolbarButton
+          title={t('blogEditorAlignJustify')}
+          active={editor.isActive({ textAlign: 'justify' })}
+          onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+        >
+          ≣
+        </ToolbarButton>
+        <span className="blog-editor-sep" aria-hidden />
+        <ToolbarButton
           title={t('blogEditorBulletList')}
           active={editor.isActive('bulletList')}
           onClick={() => editor.chain().focus().toggleBulletList().run()}
@@ -170,10 +226,7 @@ export function BlogRichEditor({ value, onChange, postId, onNeedSave }: Props) {
         <ToolbarButton title={t('blogEditorLink')} active={editor.isActive('link')} onClick={setLink}>
           🔗
         </ToolbarButton>
-        <ToolbarButton
-          title={postId ? t('blogEditorImage') : t('blogEditorSaveFirstForImage')}
-          onClick={() => fileRef.current?.click()}
-        >
+        <ToolbarButton title={imageTitle} onClick={() => fileRef.current?.click()} disabled={!canInsertImage && !onNeedSave}>
           🖼
         </ToolbarButton>
         <span className="blog-editor-sep" aria-hidden />

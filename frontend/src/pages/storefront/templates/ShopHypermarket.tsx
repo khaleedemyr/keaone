@@ -4,7 +4,20 @@ import { STOREFRONT_PREVIEW_BANNER } from '../previewDraft'
 import { useShop } from '../commerce/StorefrontShop'
 import type { StorefrontRenderModel, StorefrontRenderProduct } from './renderTypes'
 import { FooterLinkList } from './FooterLinkList'
-import { readFooterColumn, readFooterLegal } from '../lib/footerLinks'
+import { parseFooterLinks, readFooterColumn, readFooterLegal } from '../lib/footerLinks'
+import { coerceNavForTemplate, handleShopNavClick, useStorefrontScrolled } from './storefrontNav'
+import { withDemoFallback, withDemoImage } from './storefrontDemo'
+import {
+  HeroEnter,
+  HoverLift,
+  Magnetic,
+  Parallax,
+  Reveal,
+  ScalePop,
+  Stagger,
+  StaggerItem,
+  Tilt3D,
+} from './storefrontMotion'
 
 /** Soft product-like SVG demos so empty slots still look like the Hypermarket reference. */
 const DEMO_CAT = {
@@ -104,7 +117,7 @@ function Shell({ model, children }: { model: StorefrontRenderModel; children: Re
   return (
     <div className="min-h-screen font-sans antialiased" style={{ background: c.background, color: c.text }}>
       {model.preview ? (
-        <div className="sticky top-0 z-30 border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
+        <div className="border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
           {STOREFRONT_PREVIEW_BANNER}
         </div>
       ) : null}
@@ -152,23 +165,28 @@ function Stars({ rating = 0 }: { rating?: number }) {
   )
 }
 
-function ProductCard({ product }: { product: StorefrontRenderProduct }) {
+function ProductCard({ product, model }: { product: StorefrontRenderProduct; model: StorefrontRenderModel }) {
   const shop = useShop()
   const onSale = Boolean(product.is_deal)
+  const imageSrc = product.image_url || withDemoImage(model, product.image_url, DEMO_PRODUCT)
   return (
     <article className="group flex h-full flex-col bg-white text-center">
       <button type="button" className="relative block w-full text-left" onClick={() => shop?.openProduct(product)}>
         {onSale ? (
-          <span className="absolute left-3 top-3 z-10 rounded bg-[#e85d4c] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-            Sale
-          </span>
+          <ScalePop className="absolute left-3 top-3 z-10">
+            <span className="block rounded bg-[#e85d4c] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+              Sale
+            </span>
+          </ScalePop>
         ) : null}
         <div className="mx-auto flex aspect-square max-w-[220px] items-center justify-center bg-[#f7f7f7] p-6">
-          <img
-            src={product.image_url || DEMO_PRODUCT}
-            alt=""
-            className="max-h-full max-w-full object-contain transition duration-300 group-hover:scale-[1.03]"
-          />
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt=""
+              className="max-h-full max-w-full object-contain transition duration-300 group-hover:scale-[1.03]"
+            />
+          ) : null}
         </div>
         <div className="space-y-2 px-2 pb-1 pt-4">
           <Stars rating={product.avg_rating ?? 0} />
@@ -209,7 +227,8 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
   const c = colors(model)
   const content = theme(model)
   const shop = useShop()
-  const products = model.products?.length ? model.products : SAMPLE
+  const [navGlass, chromeRef] = useStorefrontScrolled(16)
+  const products = withDemoFallback(model, model.products ?? [], SAMPLE)
   const cartCount = shop?.cartCount ?? 0
 
   const bestsellersTitle = slotText(content, 'bestsellers_title', 'Best Sellers')
@@ -239,7 +258,14 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
     title: 'Quick Links',
     links: 'Home | #categories\nBest Sellers | #bestsellers\nTop Rated | #toprated\nCart | cart\nMy Account | account',
   })
+  const footerCol2 = readFooterColumn(content, 2, {
+    title: 'Customer Care',
+    links: `${model.contact_email || 'Email belum diisi'} | #footer\n${model.contact_address || 'Alamat belum diisi'} | #footer`,
+  })
+  const footerCol3Title = slotText(content, 'footer_col3_title', 'Payment Methods')
+  const footerPaymentFallback = slotText(content, 'footer_payment_fallback', 'Bank transfer after checkout')
   const footerLegal = readFooterLegal(content, 'Privacy Policy | #\nTerms of Use | #')
+  const categoryPricePrefix = slotText(content, 'category_price_prefix', 'Starting from')
 
   const trust = [
     {
@@ -261,10 +287,10 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
   ]
 
   const demoCats = [
-    { key: 'kitchen', label: 'Kitchen', image: DEMO_CAT.kitchen, starting: 11050 },
-    { key: 'books', label: 'Books', image: DEMO_CAT.books, starting: 20000 },
-    { key: 'office', label: 'Office', image: DEMO_CAT.office, starting: 18000 },
-    { key: 'play', label: 'Play', image: DEMO_CAT.play, starting: 15000 },
+    { key: 'kitchen', categoryId: 0, label: 'Kitchen', image: DEMO_CAT.kitchen, starting: 11050 },
+    { key: 'books', categoryId: 0, label: 'Books', image: DEMO_CAT.books, starting: 20000 },
+    { key: 'office', categoryId: 0, label: 'Office', image: DEMO_CAT.office, starting: 18000 },
+    { key: 'play', categoryId: 0, label: 'Play', image: DEMO_CAT.play, starting: 15000 },
   ]
 
   const categoryItems = (() => {
@@ -277,6 +303,7 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
         const matched = products.find((p) => p.category_id && catId && p.category_id === catId)
         return {
           key: `cat-${index}`,
+          categoryId: catId || 0,
           label:
             typeof row === 'object' && row && 'label' in row && typeof row.label === 'string' && row.label.trim()
               ? row.label
@@ -284,16 +311,16 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
           image:
             typeof row === 'object' && row && 'image' in row && typeof row.image === 'string' && row.image
               ? row.image
-              : demo.image,
-          starting: matched?.price ?? demo.starting,
+              : withDemoImage(model, undefined, demo.image),
+          starting: matched?.price ?? (model.preview ? demo.starting : null),
         }
       })
     }
-    return demoCats
+    return withDemoFallback(model, [], demoCats)
   })()
 
   // Pad to 4 tiles for the 2×2 composition.
-  while (categoryItems.length < 4) {
+  while (model.preview && categoryItems.length < 4) {
     categoryItems.push(demoCats[categoryItems.length]!)
   }
 
@@ -312,19 +339,26 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
       .map((w) => (w[0] ?? '').toUpperCase())
       .join(' / ') || 'H / M'
 
-  const nav = [
-    { href: '#categories', label: 'Home', active: true },
-    { href: '#bestsellers', label: 'Shop' },
-    { href: '#toprated', label: 'Pages' },
-    { href: '#brands', label: 'Elements' },
-    { href: '#trust', label: 'Blog' },
-  ]
+  const navDefault =
+    'Home | #categories\nShop | #bestsellers\nPages | #toprated\nElements | #brands\nBlog | #trust'
+  const nav = coerceNavForTemplate(
+    parseFooterLinks(slotText(content, 'nav_links', navDefault)),
+    parseFooterLinks(navDefault),
+    ['categories', 'bestsellers', 'toprated', 'brands', 'trust'],
+  )
 
   return (
     <Shell model={model}>
-      <header className="relative z-20 border-b border-transparent bg-white">
+      <header
+        ref={chromeRef}
+        className={`sticky top-0 z-40 border-b transition-[background-color,border-color,backdrop-filter,box-shadow] duration-300 ${
+          navGlass
+            ? 'border-black/5 bg-white/55 shadow-sm backdrop-blur-md'
+            : 'border-black/5 bg-white/95 backdrop-blur-md'
+        }`}
+      >
         <div className={`${HM_FRAME} grid grid-cols-[1fr_auto_1fr] items-center gap-3 py-5`}>
-          <a href="#categories" className="justify-self-start">
+          <a href="#categories" className="justify-self-start" onClick={(e) => handleShopNavClick(e, { href: '#categories' }, shop)}>
             {model.logo_url ? (
               <img src={model.logo_url} alt="" className="h-7 w-auto max-w-[140px] object-contain" />
             ) : (
@@ -337,12 +371,13 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
           </a>
 
           <nav className="hidden items-center gap-7 text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500 md:flex">
-            {nav.map((item) => (
+            {nav.map((item, index) => (
               <a
                 key={item.label}
-                href={item.href}
+                href={item.href || '#categories'}
                 className="transition hover:text-neutral-900"
-                style={item.active ? { color: c.primary } : undefined}
+                style={index === 0 ? { color: c.primary } : undefined}
+                onClick={(e) => handleShopNavClick(e, item, shop)}
               >
                 {item.label}
                 {item.label !== 'Home' && item.label !== 'Blog' ? (
@@ -382,59 +417,86 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
         </div>
       </header>
 
-      {/* 2×2 category tiles — title left, floating product image right */}
+      {categoryItems.length > 0 ? (
       <section id="categories" className={`${HM_FRAME_TIGHT} pb-4 pt-1`}>
-        <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-5">
-          {categoryItems.slice(0, 4).map((cat) => (
-            <a
-              key={cat.key}
-              href="#bestsellers"
-              className="group relative flex min-h-[220px] overflow-hidden bg-[#f6f6f6] px-7 py-8 transition hover:bg-[#f2f2f2] sm:min-h-[260px] lg:min-h-[300px] sm:px-10 sm:py-10"
-            >
-              <div className="relative z-10 max-w-[48%] pt-1">
-                <h2 className="text-[28px] font-light leading-none tracking-tight text-neutral-800 sm:text-[34px]">
-                  {cat.label}
-                </h2>
-                <p className="mt-3 text-[13px] font-normal text-neutral-400">
-                  Starting from {formatRupiah(cat.starting)}
-                </p>
-              </div>
-              <div className="pointer-events-none absolute inset-y-5 right-4 flex w-[52%] items-center justify-center sm:inset-y-6 sm:right-6">
-                <img
-                  src={cat.image}
-                  alt=""
-                  className="max-h-full max-w-full object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.08)] transition duration-500 group-hover:scale-[1.03]"
-                />
-              </div>
-            </a>
-          ))}
-        </div>
+        <HeroEnter>
+          <Stagger className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-5" stagger={0.08}>
+            {categoryItems.slice(0, 4).map((cat) => (
+              <StaggerItem key={cat.key}>
+                <Tilt3D className="relative">
+                  <button
+                    type="button"
+                    className="group relative flex min-h-[220px] w-full overflow-hidden bg-[#f6f6f6] px-7 py-8 text-left transition hover:bg-[#f2f2f2] sm:min-h-[260px] lg:min-h-[300px] sm:px-10 sm:py-10"
+                    onClick={() =>
+                      cat.categoryId > 0
+                        ? shop?.openCatalog({ categoryId: cat.categoryId })
+                        : shop?.openCategories()
+                    }
+                  >
+                    <div className="relative z-10 max-w-[48%] pt-1">
+                      <h2 className="text-[28px] font-light leading-none tracking-tight text-neutral-800 sm:text-[34px]">
+                        {cat.label}
+                      </h2>
+                      {cat.starting ? (
+                        <p className="mt-3 text-[13px] font-normal text-neutral-400">
+                          {categoryPricePrefix} {formatRupiah(cat.starting)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="pointer-events-none absolute inset-y-5 right-4 flex w-[52%] items-center justify-center sm:inset-y-6 sm:right-6">
+                      {cat.image ? (
+                        <img
+                          src={cat.image}
+                          alt=""
+                          className="max-h-full max-w-full object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.08)] transition duration-500 group-hover:scale-[1.03]"
+                        />
+                      ) : null}
+                    </div>
+                  </button>
+                </Tilt3D>
+              </StaggerItem>
+            ))}
+          </Stagger>
+        </HeroEnter>
       </section>
+      ) : null}
 
+      {bestsellers.length > 0 ? (
       <section id="bestsellers" className={`${HM_FRAME} py-12`}>
-        <h2 className="mb-10 text-center text-[28px] font-light tracking-tight text-neutral-800 sm:text-[32px]">
-          {bestsellersTitle}
-        </h2>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-4 lg:gap-x-8">
+        <Reveal>
+          <h2 className="mb-10 text-center text-[28px] font-light tracking-tight text-neutral-800 sm:text-[32px]">
+            {bestsellersTitle}
+          </h2>
+        </Reveal>
+        <Stagger className="grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-4 lg:gap-x-8" stagger={0.07}>
           {bestsellers.map((p) => (
-            <ProductCard key={`bs-${p.id}`} product={p} />
+            <StaggerItem key={`bs-${p.id}`}>
+              <HoverLift>
+                <ProductCard product={p} model={model} />
+              </HoverLift>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
+      ) : null}
 
       <section className="bg-[#1c1c1c] text-white">
         <div className={`${HM_FRAME} grid items-center gap-10 py-14 lg:grid-cols-2 lg:py-16`}>
-          <div className="flex aspect-[5/4] items-center justify-center bg-[#2a2a2a] p-10">
-            <img
-              src={typeof content.offer_image === 'string' && content.offer_image ? content.offer_image : DEMO_PRODUCT}
-              alt=""
-              className="max-h-full max-w-full object-contain"
-            />
-          </div>
-          <div className="space-y-5">
-            <div className="text-[12px] font-medium uppercase tracking-[0.22em]" style={{ color: c.accent }}>
-              {offerKicker}
-            </div>
+          <Reveal>
+            <Parallax offset={72} className="flex aspect-[5/4] items-center justify-center bg-[#2a2a2a] p-10">
+              <img
+                src={withDemoImage(model, typeof content.offer_image === 'string' ? content.offer_image : undefined, DEMO_PRODUCT)}
+                alt=""
+                className="max-h-full max-w-full object-contain"
+              />
+            </Parallax>
+          </Reveal>
+          <HeroEnter delay={0.1} className="space-y-5">
+            <ScalePop>
+              <div className="text-[12px] font-medium uppercase tracking-[0.22em]" style={{ color: c.accent }}>
+                {offerKicker}
+              </div>
+            </ScalePop>
             <h2 className="text-[30px] font-light leading-tight tracking-tight sm:text-[36px]">{offerTitle}</h2>
             <p className="max-w-md text-sm leading-relaxed text-white/55">{offerBody}</p>
             <div className="flex flex-wrap items-baseline gap-3">
@@ -443,7 +505,7 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
                 {offerNew}
               </span>
             </div>
-            <div className="flex flex-wrap gap-3 pt-1">
+            <Stagger className="flex flex-wrap gap-3 pt-1" stagger={0.06}>
               {(
                 [
                   ['Days', countdown.days],
@@ -452,63 +514,86 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
                   ['Secs', countdown.secs],
                 ] as const
               ).map(([label, value]) => (
-                <div key={label} className="min-w-[4.5rem] border border-white/15 bg-white/5 px-3 py-2.5 text-center">
-                  <div className="text-xl font-light tabular-nums tracking-wide">{value}</div>
-                  <div className="mt-0.5 text-[9px] uppercase tracking-[0.16em] text-white/40">{label}</div>
-                </div>
+                <StaggerItem key={label}>
+                  <div className="min-w-[4.5rem] border border-white/15 bg-white/5 px-3 py-2.5 text-center">
+                    <div className="text-xl font-light tabular-nums tracking-wide">{value}</div>
+                    <div className="mt-0.5 text-[9px] uppercase tracking-[0.16em] text-white/40">{label}</div>
+                  </div>
+                </StaggerItem>
               ))}
-            </div>
-            <a
-              href="#toprated"
-              className="inline-flex border border-white/30 px-6 py-2.5 text-[11px] font-medium uppercase tracking-[0.18em] text-white transition hover:bg-white hover:text-neutral-900"
-            >
-              {offerCta}
-            </a>
-          </div>
+            </Stagger>
+            <Magnetic className="inline-block">
+              <button
+                type="button"
+                className="inline-flex border border-white/30 px-6 py-2.5 text-[11px] font-medium uppercase tracking-[0.18em] text-white transition hover:bg-white hover:text-neutral-900"
+                onClick={() => shop?.openCatalog()}
+              >
+                {offerCta}
+              </button>
+            </Magnetic>
+          </HeroEnter>
         </div>
       </section>
 
+      {toprated.length > 0 ? (
       <section id="toprated" className={`${HM_FRAME} py-14`}>
-        <h2 className="mb-10 text-center text-[28px] font-light tracking-tight text-neutral-800 sm:text-[32px]">
-          {topratedTitle}
-        </h2>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-4 lg:gap-x-8">
+        <Reveal>
+          <h2 className="mb-10 text-center text-[28px] font-light tracking-tight text-neutral-800 sm:text-[32px]">
+            {topratedTitle}
+          </h2>
+        </Reveal>
+        <Stagger className="grid grid-cols-2 gap-x-6 gap-y-10 lg:grid-cols-4 lg:gap-x-8" stagger={0.06}>
           {toprated.map((p) => (
-            <ProductCard key={`tr-${p.id}`} product={p} />
+            <StaggerItem key={`tr-${p.id}`}>
+              <Tilt3D className="relative">
+                <ProductCard product={p} model={model} />
+              </Tilt3D>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
+      ) : null}
 
       <section id="brands" className="border-y border-neutral-100 bg-[#fafafa]">
         <div className={`${HM_FRAME} py-14`}>
-          <h2 className="mb-10 text-center text-[28px] font-light tracking-tight text-neutral-800 sm:text-[32px]">
-            {brandsTitle}
-          </h2>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <Reveal>
+            <h2 className="mb-10 text-center text-[28px] font-light tracking-tight text-neutral-800 sm:text-[32px]">
+              {brandsTitle}
+            </h2>
+          </Reveal>
+          <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" stagger={0.08}>
             {brandCards.map((text) => (
-              <div key={text} className="bg-white px-6 py-7 text-[13px] leading-relaxed text-neutral-500 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
-                {text}
-              </div>
+              <StaggerItem key={text}>
+                <HoverLift>
+                  <div className="bg-white px-6 py-7 text-[13px] leading-relaxed text-neutral-500 shadow-[0_1px_0_rgba(0,0,0,0.04)]">
+                    {text}
+                  </div>
+                </HoverLift>
+              </StaggerItem>
             ))}
-          </div>
+          </Stagger>
         </div>
       </section>
 
       <section id="trust" className={`${HM_FRAME} py-14`}>
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
-          {trust.map((item) => (
-            <div key={item.title} className="text-center sm:text-left">
-              <div
-                className="mx-auto mb-4 grid h-10 w-10 place-items-center rounded-full text-sm text-white sm:mx-0"
-                style={{ background: c.primary }}
-              >
-                ✓
-              </div>
-              <div className="text-[14px] font-medium text-neutral-800">{item.title}</div>
-              <div className="mt-1.5 text-[12px] leading-relaxed text-neutral-400">{item.body}</div>
-            </div>
-          ))}
-        </div>
+        <Reveal>
+          <Stagger className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4" stagger={0.07}>
+            {trust.map((item) => (
+              <StaggerItem key={item.title}>
+                <div className="text-center sm:text-left">
+                  <div
+                    className="mx-auto mb-4 grid h-10 w-10 place-items-center rounded-full text-sm text-white sm:mx-0"
+                    style={{ background: c.primary }}
+                  >
+                    ✓
+                  </div>
+                  <div className="text-[14px] font-medium text-neutral-800">{item.title}</div>
+                  <div className="mt-1.5 text-[12px] leading-relaxed text-neutral-400">{item.body}</div>
+                </div>
+              </StaggerItem>
+            ))}
+          </Stagger>
+        </Reveal>
       </section>
 
       <footer className="border-t border-neutral-100 bg-white">
@@ -532,18 +617,19 @@ export function ShopHypermarket({ model }: { model: StorefrontRenderModel }) {
             />
           </div>
           <div>
-            <div className="text-[12px] font-medium uppercase tracking-[0.14em] text-neutral-800">Customer Care</div>
-            <div className="mt-3 space-y-1.5 text-[12px] text-neutral-400">
-              <div>{model.contact_email || 'Email belum diisi'}</div>
-              <div>{model.contact_address || 'Alamat belum diisi'}</div>
-            </div>
+            <div className="text-[12px] font-medium uppercase tracking-[0.14em] text-neutral-800">{footerCol2.title}</div>
+            <FooterLinkList
+              links={footerCol2.links}
+              className="mt-3 space-y-1.5 text-[12px] text-neutral-400"
+              itemClassName="transition hover:text-neutral-700"
+            />
           </div>
           <div>
-            <div className="text-[12px] font-medium uppercase tracking-[0.14em] text-neutral-800">Payment Methods</div>
+            <div className="text-[12px] font-medium uppercase tracking-[0.14em] text-neutral-800">{footerCol3Title}</div>
             <div className="mt-3 text-[12px] leading-relaxed text-neutral-400">
               {(model.bank_accounts?.length ?? 0) > 0
                 ? model.bank_accounts!.map((b) => `${b.bank_name}`).join(' · ')
-                : 'Bank transfer after checkout'}
+                : footerPaymentFallback}
             </div>
           </div>
         </div>

@@ -17,30 +17,217 @@ export function StorefrontTemplatePreview({ templateKey, title, tagline, primary
   const brand = title.trim() || 'Brand'
   const line = tagline.trim() || 'Tagline singkat usaha Anda'
 
-  if (templateKey === 'landing_studio') {
+  if (templateKey === 'landing_ellipse') {
+    const ink = primary || '#272727'
     return (
-      <div className="overflow-hidden rounded-xl border bg-white text-[10px] text-slate-700 shadow-sm">
-        <div className="flex items-center justify-between border-b px-2 py-1.5">
-          <span className="font-semibold" style={{ color: primary }}>
-            {brand}
-          </span>
-          <div className="flex gap-1.5 text-slate-400">
-            <span>Work</span>
-            <span>About</span>
-            <span>Contact</span>
+      <div className="overflow-hidden rounded-xl border bg-white text-[10px] text-[#272727] shadow-sm">
+        <div className="flex min-h-[120px]">
+          <div className="flex w-[52px] shrink-0 flex-col border-r border-black/5 bg-white px-1.5 py-2">
+            <div className="mb-2 text-[7px] font-extrabold" style={{ color: ink }}>
+              {brand.slice(0, 6)}
+            </div>
+            <div className="mt-auto space-y-1">
+              {['About', 'Award', 'Gall', 'Svc'].map((label, i) => (
+                <div key={label} className="flex items-center gap-0.5">
+                  <Swatch className="h-px w-2" style={{ background: ink }} />
+                  <span className="text-[5px]" style={{ color: i === 0 ? ink : '#8a8a8a' }}>
+                    {label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="relative px-2 py-3" style={{ background: `linear-gradient(120deg, ${ink}0d, #fff)` }}>
+              <div className="text-[12px] leading-[1.05]" style={{ color: ink }}>
+                Hello.
+                <br />I call me
+                <br />
+                {brand.slice(0, 8)}
+              </div>
+            </div>
+            <div className="flex items-end gap-1 px-2 py-1.5">
+              {[0, 1, 2].map((i) => (
+                <Swatch
+                  key={i}
+                  className="flex-1"
+                  style={{
+                    height: 28 + i * 8,
+                    borderRadius: 999,
+                    background: i % 2 ? accent + '55' : ink + '28',
+                  }}
+                />
+              ))}
+              <div className="ml-1 flex-1 space-y-0.5">
+                <div className="h-1 w-full rounded bg-slate-200" />
+                <div className="h-1 w-3/4 rounded bg-slate-200" />
+                <Swatch className="mt-1 h-2 w-10" style={{ background: ink }} />
+              </div>
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-5 gap-1 p-2">
-          <div className="col-span-2 space-y-1 py-2">
-            <div className="text-xs font-bold leading-tight">{brand}</div>
-            <div className="text-slate-500">{line}</div>
-            <Swatch className="mt-2 h-5 w-16 rounded" style={{ background: primary }} />
-          </div>
-          <div className="col-span-3 grid grid-cols-2 gap-1">
-            {[0, 1, 2, 3].map((i) => (
-              <Swatch key={i} className="aspect-[4/3] rounded" style={{ background: i % 2 ? accent + '55' : primary + '33' }} />
+      </div>
+    )
+  }
+
+  if (templateKey === 'landing_structura') {
+    const ink = primary || '#272727'
+    return (
+      <div className="overflow-hidden rounded-xl border bg-white text-[10px] text-[#272727] shadow-sm">
+        <div className="flex min-h-[118px]">
+          {/* Left vertical side menu */}
+          <div className="flex w-14 shrink-0 flex-col justify-center gap-1.5 border-r border-black/5 bg-[#fafafa] px-1.5 py-2">
+            {['Home', 'Svc', 'Skill', 'Team', 'Port', 'Cnt'].map((label, i) => (
+              <div key={label} className="flex items-center gap-1">
+                <Swatch className="h-[2px]" style={{ width: i === 0 ? 10 : 5, background: ink }} />
+                <span className="text-[5px] font-semibold" style={{ color: i === 0 ? ink : '#8a8a8a' }}>
+                  {label}
+                </span>
+              </div>
             ))}
           </div>
+          <div className="min-w-0 flex-1">
+            <div className="relative px-2 py-2.5" style={{ background: `linear-gradient(135deg, ${ink}08, #fff)` }}>
+              <div className="text-[11px] font-normal leading-[1.05]" style={{ fontFamily: 'Georgia, serif', color: ink }}>
+                Do things
+                <br />
+                that matter
+              </div>
+              <div className="mt-1 max-w-[85%] text-[5px] leading-tight text-[#8a8a8a]">{line.slice(0, 48)}</div>
+              <Swatch className="mt-1.5 h-3 w-14 border" style={{ borderColor: ink }} />
+            </div>
+            <div className="flex gap-1 px-2 py-1">
+              {[0, 1, 2].map((i) => (
+                <Swatch
+                  key={i}
+                  className="aspect-square flex-1"
+                  style={{ background: i % 2 ? accent + '44' : ink + '22', boxShadow: `2px 2px 0 ${ink}` }}
+                />
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-1 border-t px-2 py-1.5">
+              <div className="col-span-1" />
+              <Swatch className="col-span-1 aspect-square border bg-white" style={{ borderColor: ink + '22' }} />
+              <Swatch className="col-span-1 h-3 self-end" style={{ background: ink }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (templateKey === 'landing_medidove') {
+    const pink = primary || '#e12454'
+    const dark = '#223645'
+    return (
+      <div className="overflow-hidden rounded-xl border bg-white text-[10px] text-[#223645] shadow-sm">
+        <div className="flex items-center justify-between border-b px-2 py-1 text-[6px] text-slate-500">
+          <span>+1 800…</span>
+          <span style={{ color: pink }}>Appointment</span>
+        </div>
+        <div className="flex items-center justify-between px-2 py-1.5">
+          <span className="text-[11px] font-extrabold" style={{ color: dark }}>
+            {brand.slice(0, 8)}
+            <span style={{ color: pink }}>.</span>
+          </span>
+          <Swatch className="h-4 w-14 rounded-sm" style={{ background: pink }} />
+        </div>
+        <div className="relative h-16 overflow-hidden" style={{ background: dark }}>
+          <Swatch className="absolute inset-0 opacity-40" style={{ background: `linear-gradient(120deg, ${pink}55, ${dark})` }} />
+          <div className="relative z-10 flex h-full flex-col justify-center px-2 text-white">
+            <div className="text-[6px]" style={{ color: pink }}>
+              We are here for your care
+            </div>
+            <div className="mt-0.5 max-w-[90%] text-[9px] font-bold leading-tight">{line}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-1 bg-[#f4f9ff] p-1.5">
+          {[0, 1, 2].map((i) => (
+            <Swatch key={i} className="aspect-[5/3]" style={{ background: i % 2 ? '#e8eef5' : '#dbeafe' }} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (templateKey === 'landing_oneex') {
+    return (
+      <div className="overflow-hidden rounded-xl border bg-black text-[10px] text-white shadow-sm">
+        <div className="relative h-[118px] overflow-hidden">
+          <Swatch className="absolute inset-0 opacity-70" style={{ background: 'linear-gradient(135deg,#1a1a1a,#333)' }} />
+          <div className="absolute inset-0 bg-black/50" />
+          <div className="relative z-10 flex h-full flex-col items-center justify-center px-2 text-center">
+            <div className="text-[5px] uppercase tracking-[0.25em] text-white/80">Ex Nihilo&apos;s</div>
+            <div className="mt-1 text-[16px] font-bold uppercase leading-none tracking-tight">{brand.slice(0, 8) || 'Oneex'}</div>
+            <div className="mt-2 flex items-center gap-1.5 text-[5px] uppercase tracking-[0.2em] text-white/85">
+              <span className="h-px w-3 bg-white/70" />
+              Live demos
+              <span className="h-px w-3 bg-white/70" />
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (templateKey === 'landing_prompt') {
+    const blue = primary || '#335EEA'
+    return (
+      <div className="overflow-hidden rounded-xl border bg-white text-[10px] shadow-sm">
+        <div className="flex items-center justify-between border-b px-2 py-1.5">
+          <span className="text-[11px] font-extrabold" style={{ color: blue }}>
+            {brand.slice(0, 8)}
+          </span>
+          <Swatch className="h-4 w-10 rounded-md" style={{ background: blue }} />
+        </div>
+        <div className="relative h-[72px] overflow-hidden" style={{ background: `linear-gradient(135deg, ${blue}22, #f8fafc 50%, #0EA5E922)` }}>
+          <div className="relative z-10 flex h-full flex-col justify-center px-2">
+            <div className="text-[5px] font-semibold uppercase tracking-wider" style={{ color: blue }}>
+              SaaS Platform
+            </div>
+            <div className="mt-0.5 max-w-[85%] text-[9px] font-bold leading-tight text-slate-900">{line}</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-1 bg-slate-50 p-1.5">
+          {[0, 1, 2].map((i) => (
+            <Swatch key={i} className="aspect-[5/3] rounded-sm" style={{ background: i === 1 ? `${blue}33` : '#e2e8f0' }} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (templateKey === 'landing_canun') {
+    const gold = primary || '#C9A227'
+    const navy = accent || '#1B2336'
+    return (
+      <div className="overflow-hidden rounded-xl border bg-white text-[10px] shadow-sm">
+        <div className="flex items-center justify-between px-2 py-1 text-[5px] text-white" style={{ background: navy }}>
+          <span className="opacity-80">Call 24/7</span>
+          <span style={{ color: gold }}>Consult</span>
+        </div>
+        <div className="flex items-center justify-between border-b px-2 py-1.5">
+          <span className="text-[11px] font-bold" style={{ color: navy, fontFamily: 'Georgia, serif' }}>
+            {brand.slice(0, 8)}
+            <span style={{ color: gold }}>.</span>
+          </span>
+          <Swatch className="h-4 w-12" style={{ background: gold }} />
+        </div>
+        <div className="relative h-[70px] overflow-hidden" style={{ background: navy }}>
+          <div className="absolute inset-0 opacity-40" style={{ background: `linear-gradient(90deg, ${navy}, transparent)` }} />
+          <div className="relative z-10 flex h-full flex-col justify-center px-2 text-white">
+            <div className="text-[5px] font-semibold uppercase tracking-[0.18em]" style={{ color: gold }}>
+              We Fight For Justice
+            </div>
+            <div className="mt-0.5 max-w-[90%] text-[9px] font-semibold leading-tight" style={{ fontFamily: 'Georgia, serif' }}>
+              {line}
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-1 bg-[#F5F3EE] p-1.5">
+          {[0, 1, 2, 3].map((i) => (
+            <Swatch key={i} className="aspect-[4/3]" style={{ background: i === 0 ? `${gold}55` : '#e8e4dc' }} />
+          ))}
         </div>
       </div>
     )
@@ -295,29 +482,30 @@ export function StorefrontTemplatePreview({ templateKey, title, tagline, primary
     )
   }
 
-  // landing_minimal (default)
+  // landing_dilabs (default fallback)
+  const orange = primary || '#FF5A1F'
+  const navy = '#0B0C2A'
   return (
-    <div className="overflow-hidden rounded-xl border bg-white text-[10px] text-slate-700 shadow-sm">
-      <div className="flex items-center justify-between px-2 py-1.5">
-        <span className="font-semibold" style={{ color: primary }}>
-          {brand}
+    <div className="overflow-hidden rounded-xl border bg-white text-[10px] shadow-sm">
+      <div className="flex items-center justify-between border-b px-2 py-1.5">
+        <span className="text-[11px] font-extrabold" style={{ color: navy }}>
+          {brand.slice(0, 7)}
+          <span style={{ color: orange }}>.</span>
         </span>
-        <div className="flex gap-1.5 text-slate-400">
-          <span>Layanan</span>
-          <span>Kontak</span>
+        <Swatch className="h-4 w-12 rounded-full" style={{ background: orange }} />
+      </div>
+      <div className="relative h-[72px] overflow-hidden" style={{ background: navy }}>
+        <Swatch className="absolute -right-4 -top-4 h-16 w-16 rounded-full opacity-40" style={{ background: orange }} />
+        <div className="relative z-10 flex h-full flex-col justify-center px-2 text-white">
+          <div className="text-[5px] uppercase tracking-wider" style={{ color: orange }}>
+            Creative agency
+          </div>
+          <div className="mt-0.5 max-w-[85%] text-[9px] font-bold leading-tight">{line}</div>
         </div>
       </div>
-      <div className="relative px-3 py-5 text-center" style={{ background: `linear-gradient(135deg, ${primary}22, ${accent}18)` }}>
-        <div className="text-xs font-bold">{brand}</div>
-        <div className="mt-1 text-slate-500">{line}</div>
-        <Swatch className="mx-auto mt-2 h-5 w-20 rounded-full" style={{ background: primary }} />
-      </div>
-      <div className="grid grid-cols-3 gap-1 p-2">
+      <div className="grid grid-cols-3 gap-1 bg-[#F5F3F0] p-1.5">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="rounded border p-1.5 text-center">
-            <Swatch className="mx-auto mb-1 h-4 w-4 rounded-full" style={{ background: i === 1 ? accent : primary + '66' }} />
-            <div className="mx-auto h-1 w-8 rounded bg-slate-200" />
-          </div>
+          <Swatch key={i} className="aspect-[5/3] rounded-sm" style={{ background: i % 2 ? '#e7e2dc' : '#ddd6ce' }} />
         ))}
       </div>
     </div>

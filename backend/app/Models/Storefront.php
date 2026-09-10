@@ -76,9 +76,19 @@ class Storefront extends Model
         return $this->hasMany(StorefrontProduct::class);
     }
 
+    public function newsPosts(): HasMany
+    {
+        return $this->hasMany(StorefrontNewsPost::class);
+    }
+
     public function orders(): HasMany
     {
         return $this->hasMany(StorefrontOrder::class);
+    }
+
+    public function inquiries(): HasMany
+    {
+        return $this->hasMany(StorefrontInquiry::class);
     }
 
     public function outlet(): BelongsTo

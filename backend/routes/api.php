@@ -103,12 +103,15 @@ Route::prefix('v1')->group(function () {
     Route::get('public/purchase-requisitions/{shareToken}', [PublicPurchaseRequisitionController::class, 'show']);
     Route::get('public/invites/{token}', [PublicCompanyInviteController::class, 'show']);
     Route::get('public/storefront', [PublicStorefrontController::class, 'show']);
+    Route::get('public/storefront/news', [PublicStorefrontController::class, 'news']);
     Route::get('public/storefront/products', [PublicStorefrontController::class, 'products']);
     Route::get('public/storefront/products/{productId}', [PublicStorefrontController::class, 'showProduct'])
         ->whereNumber('productId');
     Route::get('public/storefront/products/{productId}/reviews', [PublicStorefrontController::class, 'productReviews'])
         ->whereNumber('productId');
     Route::post('public/storefront/orders', [PublicStorefrontController::class, 'placeOrder']);
+    Route::post('public/storefront/inquiries', [PublicStorefrontController::class, 'submitInquiry'])
+        ->middleware('throttle:storefront-inquiry');
     Route::get('public/storefront/shipping/destinations', [PublicStorefrontController::class, 'searchShippingDestinations']);
     Route::post('public/storefront/shipping/cost', [PublicStorefrontController::class, 'calculateShipping']);
     Route::post('public/storefront/auth/register', [StorefrontCustomerAuthController::class, 'register'])
@@ -311,6 +314,8 @@ Route::prefix('v1')->group(function () {
             Route::post('products/{product}/images', [ProductController::class, 'storeImages']);
             Route::post('products/{product}/images/{product_image}/primary', [ProductController::class, 'setPrimary']);
             Route::delete('products/{product}/images/{product_image}', [ProductController::class, 'destroyImage']);
+            Route::post('products/{product}/variant-options/{option}/image', [ProductController::class, 'storeVariantOptionImage']);
+            Route::delete('products/{product}/variant-options/{option}/image', [ProductController::class, 'destroyVariantOptionImage']);
             Route::get('products/{product}', [ProductController::class, 'show']);
             Route::put('products/{product}', [ProductController::class, 'update']);
             Route::delete('products/{product}', [ProductController::class, 'destroy']);
@@ -613,6 +618,14 @@ Route::prefix('v1')->group(function () {
             Route::put('storefront/products/{storefrontProduct}', [StorefrontController::class, 'updateProduct']);
             Route::delete('storefront/products/{storefrontProduct}', [StorefrontController::class, 'destroyProduct']);
             Route::get('storefront/product-options', [StorefrontController::class, 'productOptions']);
+            Route::get('storefront/news', [StorefrontController::class, 'newsPosts']);
+            Route::post('storefront/news', [StorefrontController::class, 'storeNewsPost']);
+            Route::put('storefront/news/{storefrontNewsPost}', [StorefrontController::class, 'updateNewsPost']);
+            Route::delete('storefront/news/{storefrontNewsPost}', [StorefrontController::class, 'destroyNewsPost']);
+            Route::get('storefront/inquiries', [StorefrontController::class, 'inquiries']);
+            Route::get('storefront/inquiries/{storefrontInquiry}', [StorefrontController::class, 'showInquiry']);
+            Route::post('storefront/inquiries/{storefrontInquiry}/read', [StorefrontController::class, 'markInquiryRead']);
+            Route::post('storefront/inquiries/{storefrontInquiry}/archive', [StorefrontController::class, 'archiveInquiry']);
             Route::get('storefront/orders', [StorefrontController::class, 'orders']);
             Route::post('storefront/orders', [StorefrontController::class, 'placeOrder']);
             Route::get('storefront/shipping/destinations', [StorefrontController::class, 'searchShippingDestinations']);

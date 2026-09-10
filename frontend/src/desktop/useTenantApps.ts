@@ -67,7 +67,7 @@ export function useTenantApps() {
         ? (['finance'] as TenantAppId[])
         : []),
       ...(me?.modules?.storefront &&
-      canAny(['storefrontsetup', 'storefrontdomain', 'storefrontproducts', 'storefrontorders', 'storefrontpages'], 'view')
+      canAny(['storefrontsetup', 'storefrontdomain', 'storefrontproducts', 'storefrontorders', 'storefrontpages', 'storefrontnews', 'storefrontinquiries'], 'view')
         ? (['storefront'] as TenantAppId[])
         : []),
       ...(canAny(['departments', 'positions', 'joblevels', 'users'], 'view') ? (['hr'] as TenantAppId[]) : []),

@@ -131,7 +131,7 @@ export default function StorefrontOrders() {
         <label className="min-w-40 flex-1 space-y-1 text-sm">
           <span className="text-muted">{t('storefrontOrderSearch')}</span>
           <input
-            className="input w-full"
+            className="field w-full"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t('storefrontOrderSearchPlaceholder')}
@@ -139,7 +139,7 @@ export default function StorefrontOrders() {
         </label>
         <label className="w-48 space-y-1 text-sm">
           <span className="text-muted">{t('storefrontOrderFilterStatus')}</span>
-          <select className="input w-full" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <select className="field w-full" value={status} onChange={(e) => setStatus(e.target.value)}>
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value || 'all'} value={opt.value}>
                 {t(opt.label)}
@@ -154,7 +154,7 @@ export default function StorefrontOrders() {
           <p className="text-sm text-muted">{t('storefrontEmptyOrders')}</p>
         ) : (
           rows.map((row) => {
-            const ship = row.shipping_snapshot
+            const shipping = row.shipping_snapshot
             return (
               <div key={row.id} className="rounded-2xl border px-3 py-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -200,13 +200,13 @@ export default function StorefrontOrders() {
                       {t('storefrontOrderAddress')}: {row.customer_address}
                     </div>
                   ) : null}
-                  {ship ? (
+                  {shipping ? (
                     <div>
-                      {t('storefrontOrderShipping')}: {formatRupiah(row.shipping_cost ?? ship.cost ?? 0)}
-                      {ship.courier_name || ship.courier
-                        ? ` · ${(ship.courier_name || ship.courier || '').toUpperCase()} ${ship.service || ''}`
+                      {t('storefrontOrderShipping')}: {formatRupiah(row.shipping_cost ?? shipping.cost ?? 0)}
+                      {shipping.courier_name || shipping.courier
+                        ? ` · ${(shipping.courier_name || shipping.courier || '').toUpperCase()} ${shipping.service || ''}`
                         : ''}
-                      {ship.destination_label ? ` · ${ship.destination_label}` : ''}
+                      {shipping.destination_label ? ` · ${shipping.destination_label}` : ''}
                     </div>
                   ) : (row.shipping_cost ?? 0) > 0 ? (
                     <div>

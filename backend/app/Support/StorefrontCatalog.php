@@ -56,6 +56,13 @@ class StorefrontCatalog
         return null;
     }
 
+    public static function templateHas(string $templateKey, string $flag): bool
+    {
+        $template = self::template($templateKey);
+
+        return (bool) ($template[$flag] ?? false);
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
@@ -305,16 +312,123 @@ class StorefrontCatalog
         $about = is_string($meta['about'] ?? null) ? $meta['about'] : '';
 
         return match ($templateKey) {
-            'landing_studio' => [
+            'landing_structura' => [
                 self::newBlock('hero', [
                     'image' => $tc['hero_image'] ?? null,
-                    'headline' => $title,
-                    'subheadline' => $tagline,
-                    'cta' => $tc['hero_cta'] ?? '',
+                    'headline' => (string) ($tc['hero_headline'] ?? ($tagline !== '' ? $tagline : $title)),
+                    'subheadline' => (string) ($tc['hero_body'] ?? $about),
+                    'cta' => $tc['hero_cta'] ?? 'Get promotions',
                 ]),
                 self::newBlock('gallery', [
-                    'images' => $tc['gallery'] ?? [],
-                    'title' => 'Work',
+                    'images' => $tc['portfolio_gallery'] ?? ($tc['strip_gallery'] ?? []),
+                    'title' => $tc['portfolio_title'] ?? 'Portfolio',
+                ]),
+                self::newBlock('rich_text', [
+                    'title' => $tc['services_title'] ?? 'Services',
+                    'body' => $tc['services_intro'] ?? $about,
+                ]),
+                self::newBlock('contact'),
+            ],
+            'landing_ellipse' => [
+                self::newBlock('hero', [
+                    'image' => $tc['hero_image'] ?? null,
+                    'headline' => (string) ($tc['hero_headline'] ?? ($tagline !== '' ? $tagline : $title)),
+                    'subheadline' => (string) ($tc['hero_rotate_text'] ?? $about),
+                    'cta' => $tc['about_cta_1'] ?? 'Read more',
+                ]),
+                self::newBlock('gallery', [
+                    'images' => $tc['gallery'] ?? ($tc['about_gallery'] ?? []),
+                    'title' => $tc['gallery_title'] ?? 'Gallery',
+                ]),
+                self::newBlock('rich_text', [
+                    'title' => $tc['services_title'] ?? 'Services',
+                    'body' => $tc['services_intro'] ?? $about,
+                ]),
+                self::newBlock('contact'),
+            ],
+            'landing_medidove' => [
+                self::newBlock('hero', [
+                    'image' => $tc['hero_image'] ?? null,
+                    'headline' => (string) ($tc['hero_headline'] ?? ($tagline !== '' ? $tagline : $title)),
+                    'subheadline' => (string) ($tc['hero_body'] ?? $about),
+                    'cta' => $tc['hero_cta'] ?? 'Make Appointment',
+                    'style' => 'cover',
+                ]),
+                self::newBlock('rich_text', [
+                    'title' => $tc['about_title'] ?? 'About',
+                    'body' => $tc['about_body'] ?? $about,
+                ]),
+                self::newBlock('category_split', [
+                    'title' => $tc['dept_title'] ?? 'Departments',
+                    'items' => self::themeCategoriesToItems($tc),
+                ]),
+                self::newBlock('contact'),
+            ],
+            'landing_dilabs' => [
+                self::newBlock('hero', [
+                    'image' => $tc['hero_image'] ?? null,
+                    'headline' => (string) ($tc['hero_headline'] ?? ($tagline !== '' ? $tagline : $title)),
+                    'subheadline' => (string) ($tc['hero_body'] ?? $about),
+                    'cta' => $tc['hero_cta'] ?? 'Start a project',
+                    'style' => 'cover',
+                ]),
+                self::newBlock('rich_text', [
+                    'title' => $tc['about_title'] ?? 'About',
+                    'body' => $tc['about_body'] ?? $about,
+                ]),
+                self::newBlock('gallery', [
+                    'images' => $tc['projects_gallery'] ?? [],
+                    'title' => $tc['projects_title'] ?? 'Projects',
+                ]),
+                self::newBlock('contact'),
+            ],
+            'landing_oneex' => [
+                self::newBlock('hero', [
+                    'image' => $tc['hero_image'] ?? null,
+                    'headline' => (string) ($tc['hero_headline'] ?? ($tagline !== '' ? $tagline : $title)),
+                    'subheadline' => (string) ($tc['hero_body'] ?? $about),
+                    'cta' => $tc['hero_cta'] ?? 'Discover',
+                    'style' => 'cover',
+                ]),
+                self::newBlock('rich_text', [
+                    'title' => $tc['about_title'] ?? 'About',
+                    'body' => $tc['about_body'] ?? $about,
+                ]),
+                self::newBlock('gallery', [
+                    'images' => $tc['works_gallery'] ?? [],
+                    'title' => $tc['works_title'] ?? 'Works',
+                ]),
+                self::newBlock('contact'),
+            ],
+            'landing_prompt' => [
+                self::newBlock('hero', [
+                    'image' => $tc['hero_image'] ?? null,
+                    'headline' => (string) ($tc['hero_headline'] ?? ($tagline !== '' ? $tagline : $title)),
+                    'subheadline' => (string) ($tc['hero_body'] ?? $about),
+                    'cta' => $tc['hero_cta'] ?? 'View Demos',
+                    'style' => 'cover',
+                ]),
+                self::newBlock('rich_text', [
+                    'title' => $tc['features_title'] ?? 'Features',
+                    'body' => $tc['features_body'] ?? $about,
+                ]),
+                self::newBlock('contact'),
+            ],
+            'landing_canun' => [
+                self::newBlock('hero', [
+                    'image' => $tc['hero_image'] ?? null,
+                    'headline' => (string) ($tc['hero_headline'] ?? ($tagline !== '' ? $tagline : $title)),
+                    'subheadline' => (string) ($tc['hero_body'] ?? $about),
+                    'cta' => $tc['hero_cta'] ?? 'Contact Us Now',
+                    'style' => 'cover',
+                ]),
+                self::newBlock('rich_text', [
+                    'title' => $tc['practice_title'] ?? 'Practice Areas',
+                    'body' => $tc['practice_body'] ?? $about,
+                ]),
+                self::newBlock('gallery', [
+                    'images' => $tc['cases_gallery'] ?? ($tc['attorneys_gallery'] ?? []),
+                    'title' => $tc['cases_title'] ?? 'Cases',
                 ]),
                 self::newBlock('contact'),
             ],

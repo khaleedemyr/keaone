@@ -65,6 +65,7 @@ export function buildErpSearchEntries(
   hasModule: HasModuleFn,
   settings?: Settings | null,
   storefrontSiteKind?: 'landing' | 'shop' | null,
+  storefrontHasNews?: boolean,
 ): ErpSearchEntry[] {
   const entries: ErpSearchEntry[] = []
 
@@ -143,6 +144,7 @@ export function buildErpSearchEntries(
       for (const item of STOREFRONT_NAV_ITEMS) {
         if (!can(item.menu, 'view')) continue
         if (item.shopOnly && storefrontSiteKind === 'landing') continue
+        if (item.newsOnly && !storefrontHasNews) continue
         pushEntry(entries, appId, appLabel, item.id, t(item.label))
       }
       continue

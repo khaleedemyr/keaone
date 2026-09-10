@@ -100,10 +100,15 @@ export default function StorefrontDesigner() {
                 id: row.product_id,
                 product_id: row.product_id,
                 name: row.product?.name ?? `Produk #${row.product_id}`,
-                description: null,
+                description: row.product?.description ?? null,
                 price: row.override_price ?? row.product?.sell_price ?? 0,
                 category_id: row.product?.category_id ?? null,
                 image_url: row.product?.image_url ?? null,
+                images: (row.product?.images ?? [])
+                  .map((img) => ({ id: img.id, url: String(img.url || ''), is_primary: Boolean(img.is_primary) }))
+                  .filter((img) => img.url),
+                weight_gram: row.product?.weight_gram ?? null,
+                variant_attributes: row.product?.variant_attributes ?? [],
                 is_deal: Boolean(row.is_deal),
                 is_new_arrival: Boolean(row.is_new_arrival),
                 is_bestseller: Boolean(row.is_bestseller),
@@ -306,7 +311,7 @@ export default function StorefrontDesigner() {
     const ship = page?.shipping
     openStorefrontPreview({
       site_kind: page?.site_kind || 'landing',
-      template_key: page?.template_key || 'landing_minimal',
+      template_key: page?.template_key || 'landing_dilabs',
       title: page?.title_site || 'Toko',
       tagline: page?.tagline || '',
       about: page?.about || '',
@@ -386,7 +391,7 @@ export default function StorefrontDesigner() {
             <section className="overflow-hidden rounded-3xl border border-line bg-white xl:col-span-5">
               <div className="border-b border-line px-4 py-2 text-xs text-muted">{t('storefrontLivePreview')}</div>
               <div className="max-h-[78vh] overflow-auto">
-                <div className="origin-top scale-[0.85]">
+                <div style={{ zoom: 0.85 }}>
                   {nexoraPreviewModel ? (
                     <StorefrontShopProvider model={nexoraPreviewModel}>
                       <ShopChrome model={nexoraPreviewModel}>
@@ -515,7 +520,7 @@ export default function StorefrontDesigner() {
         <section className="overflow-hidden rounded-3xl border border-line bg-white xl:col-span-5">
           <div className="border-b border-line px-4 py-2 text-xs text-muted">{t('storefrontLivePreview')}</div>
           <div className="max-h-[78vh] overflow-auto">
-            <div className="origin-top scale-[0.85]">
+            <div style={{ zoom: 0.85 }}>
               <StorefrontBlockRenderer model={previewModel} blocks={blocks} />
             </div>
           </div>
@@ -619,7 +624,7 @@ function BlockPropsEditor({
           <label className="block space-y-1">
             <span className="text-muted">{t('storefrontBlockStyle')}</span>
             <select
-              className="input w-full"
+              className="field w-full"
               disabled={disabled}
               value={p.style || (block.type === 'hero' ? 'standard' : 'collection')}
               onChange={(e) => onPatch({ style: e.target.value })}
@@ -652,7 +657,7 @@ function BlockPropsEditor({
                 type="number"
                 min={1}
                 max={24}
-                className="input w-full"
+                className="field w-full"
                 disabled={disabled}
                 value={p.limit ?? 8}
                 onChange={(e) => onPatch({ limit: Number(e.target.value) || 8 })}
@@ -784,7 +789,7 @@ function BlockPropsEditor({
         <label className="block space-y-1">
           <span className="text-muted">{t('storefrontSpacerSize')}</span>
           <select
-            className="input w-full"
+            className="field w-full"
             disabled={disabled}
             value={p.size || 'md'}
             onChange={(e) => onPatch({ size: e.target.value as 'sm' | 'md' | 'lg' })}
@@ -819,7 +824,7 @@ function TextField({
   return (
     <label className="block space-y-1">
       <span className="text-muted">{label}</span>
-      <input className="input w-full" disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)} />
+      <input className="field w-full" disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   )
 }
@@ -838,7 +843,7 @@ function TextAreaField({
   return (
     <label className="block space-y-1">
       <span className="text-muted">{label}</span>
-      <textarea className="input min-h-24 w-full" disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)} />
+      <textarea className="field min-h-24 w-full" disabled={disabled} value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   )
 }
@@ -872,6 +877,11 @@ function ImageField({
             {t('storefrontRemoveImage')}
           </button>
         ) : null}
+      </div>
+      <div className="space-y-0.5 text-[11px] leading-snug text-muted">
+        <p>{t('storefrontImageFormats', { mb: '5' })}</p>
+        <p>{t('storefrontImageHintDefault')}</p>
+        <p>{t('storefrontImageSingleHint')}</p>
       </div>
     </div>
   )

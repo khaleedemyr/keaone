@@ -62,6 +62,8 @@ const MENU_LABEL: Record<string, MsgKey> = {
   storefrontproducts: 'menuStorefrontProducts',
   storefrontorders: 'menuStorefrontOrders',
   storefrontpages: 'menuStorefrontPages',
+  storefrontnews: 'menuStorefrontNews',
+  storefrontinquiries: 'menuStorefrontInquiries',
   cafetables: 'menuCafeTables',
   billing: 'menuBilling',
   logs: 'menuLogs',

@@ -18,7 +18,7 @@ const PURIFY_OPTS: Config = {
     'br',
     'hr',
   ],
-  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'class'],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'class', 'style'],
 }
 
 export function isHtmlBody(body: string): boolean {

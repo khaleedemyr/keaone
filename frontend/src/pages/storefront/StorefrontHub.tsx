@@ -4,7 +4,13 @@ import { useI18n, type MsgKey } from '../../i18n'
 import type { ApiOk } from '../../types'
 import type { StorefrontAdmin } from './types'
 
-type HubSection = 'storefrontsetup' | 'storefrontdomain' | 'storefrontproducts' | 'storefrontorders'
+type HubSection =
+  | 'storefrontsetup'
+  | 'storefrontdomain'
+  | 'storefrontproducts'
+  | 'storefrontorders'
+  | 'storefrontnews'
+  | 'storefrontinquiries'
 
 type HubStep = {
   key: string

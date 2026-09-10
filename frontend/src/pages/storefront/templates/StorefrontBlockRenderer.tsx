@@ -7,6 +7,8 @@ import { EDITORIAL_DEMO } from './editorialDemo'
 import { ProductSocialMeta } from './ProductSocialMeta'
 import type { StorefrontRenderProduct } from './StorefrontSite'
 import { useShop } from '../commerce/StorefrontShop'
+import { withDemoFallback, withDemoImage } from './storefrontDemo'
+import { storefrontFixed } from './storefrontNav'
 
 export type BlockRendererModel = {
   title: string
@@ -132,14 +134,15 @@ function Shell({
   const navText = lightOnHero ? '#ffffff' : c.text
   const previewOffset = model.preview ? 'top-9' : 'top-0'
   const shop = useShop()
+  const pin = storefrontFixed(model.preview)
   const barClass = !overlayHero
     ? 'relative border-b border-black/5 bg-transparent'
     : navSolid
-      ? `fixed inset-x-0 z-40 border-b border-neutral-200/35 bg-white/50 shadow-sm backdrop-blur-xl ${previewOffset}`
-      : `fixed inset-x-0 z-40 bg-gradient-to-b from-black/55 via-black/25 to-transparent ${previewOffset}`
+      ? `${pin} inset-x-0 z-40 border-b border-neutral-200/35 bg-white/50 shadow-sm backdrop-blur-xl ${previewOffset}`
+      : `${pin} inset-x-0 z-40 bg-gradient-to-b from-black/55 via-black/25 to-transparent ${previewOffset}`
 
   return (
-    <div className="min-h-screen" style={{ background: c.background, color: c.text }}>
+    <div className="relative min-h-screen" style={{ background: c.background, color: c.text }}>
       {model.preview ? (
         <div className="sticky top-0 z-50 border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
           {STOREFRONT_PREVIEW_BANNER}
@@ -192,10 +195,10 @@ function HeroBlock({ model, props }: { model: BlockRendererModel; props: Storefr
   const fullbleed = props.style === 'fullbleed'
 
   if (fullbleed) {
-    const image = props.image || EDITORIAL_DEMO.hero
+    const image = withDemoImage(model, props.image, EDITORIAL_DEMO.hero)
     return (
       <section className="relative h-[100svh] min-h-[560px] w-full overflow-hidden text-white">
-        <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        {image ? <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
         <div className="absolute inset-0 bg-black/30" />
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center px-6 text-center">
           <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">{headline}</h1>
@@ -249,7 +252,7 @@ function ProductGridBlock({
 }) {
   const shop = useShop()
   const c = colors(model)
-  const all = model.products?.length ? model.products : SAMPLE_PRODUCTS
+  const all = withDemoFallback(model, model.products ?? [], SAMPLE_PRODUCTS)
   const filtered =
     categoryId && categoryId > 0 ? all.filter((p) => (p.category_id ?? null) === categoryId) : all
   const products = filtered.slice(0, props.limit || 8)
@@ -287,7 +290,7 @@ function ProductGridBlock({
             >
               <div className="aspect-[3/4] overflow-hidden">
                 <MediaFill
-                  src={p.image_url || EDITORIAL_DEMO.products[i % EDITORIAL_DEMO.products.length]}
+                  src={withDemoImage(model, p.image_url, EDITORIAL_DEMO.products[i % EDITORIAL_DEMO.products.length]!)}
                   fallback={`${c.primary}18`}
                 />
               </div>
@@ -311,10 +314,12 @@ function ProductGridBlock({
 }
 
 function CategoryTilesBlock({
+  model,
   props,
   activeCategoryId,
   onSelect,
 }: {
+  model: BlockRendererModel
   props: StorefrontBlockProps
   activeCategoryId?: number | null
   onSelect: (categoryId: number, label: string) => void
@@ -322,10 +327,18 @@ function CategoryTilesBlock({
   const items =
     Array.isArray(props.items) && props.items.length > 0
       ? props.items
-      : [
-          { category_id: 0, label: props.left_label || 'Kategori 1', image: props.left_image || EDITORIAL_DEMO.women },
-          { category_id: 0, label: props.right_label || 'Kategori 2', image: props.right_image || EDITORIAL_DEMO.men },
-        ]
+      : withDemoFallback(model, [], [
+          {
+            category_id: 0,
+            label: props.left_label || 'Kategori 1',
+            image: withDemoImage(model, props.left_image, EDITORIAL_DEMO.women),
+          },
+          {
+            category_id: 0,
+            label: props.right_label || 'Kategori 2',
+            image: withDemoImage(model, props.right_image, EDITORIAL_DEMO.men),
+          },
+        ])
 
   const count = items.length
   const cols =
@@ -339,7 +352,7 @@ function CategoryTilesBlock({
       <div className={`grid min-h-[42vh] ${cols}`}>
         {items.map((item, index) => {
           const label = item.label?.trim() || `Kategori ${index + 1}`
-          const image = item.image || EDITORIAL_DEMO.gallery[index % EDITORIAL_DEMO.gallery.length]
+          const image = withDemoImage(model, item.image, EDITORIAL_DEMO.gallery[index % EDITORIAL_DEMO.gallery.length]!)
           const active = item.category_id > 0 && activeCategoryId === item.category_id
           return (
             <button
@@ -350,11 +363,13 @@ function CategoryTilesBlock({
               }}
               className={`group relative min-h-[36vh] overflow-hidden text-left ${active ? 'ring-4 ring-inset ring-white/80' : ''}`}
             >
-              <img
-                src={image}
-                alt={label}
-                className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]"
-              />
+              {image ? (
+                <img
+                  src={image}
+                  alt={label}
+                  className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-[1.03]"
+                />
+              ) : null}
               <div className="absolute inset-0 bg-black/25" />
               <div className="absolute inset-0 grid place-items-center px-4 text-center text-2xl font-medium tracking-wide text-white sm:text-3xl">
                 {label}
@@ -387,7 +402,13 @@ function renderBlock(
       return <Carousel slides={Array.isArray(props.slides) ? props.slides : []} />
     case 'gallery': {
       const images =
-        Array.isArray(props.images) && props.images.length > 0 ? props.images : EDITORIAL_DEMO.gallery.slice(0, 6)
+        withDemoFallback(
+          model,
+          Array.isArray(props.images)
+            ? props.images.filter((src): src is string => typeof src === 'string' && src.trim().length > 0)
+            : [],
+          EDITORIAL_DEMO.gallery.slice(0, 6),
+        )
       return (
         <section className="mx-auto max-w-6xl px-5 py-12">
           {props.title ? <h2 className="mb-3 text-center text-xl font-semibold">{props.title}</h2> : null}
@@ -430,12 +451,13 @@ function renderBlock(
       )
     case 'category_split':
       return (
-        <CategoryTilesBlock props={props} activeCategoryId={ctx.categoryId} onSelect={ctx.onSelectCategory} />
+        <CategoryTilesBlock model={model} props={props} activeCategoryId={ctx.categoryId} onSelect={ctx.onSelectCategory} />
       )
     case 'banner': {
       const image =
-        props.image ||
-        (props.style === 'shoppable' ? EDITORIAL_DEMO.shoppable : EDITORIAL_DEMO.collection)
+        props.style === 'shoppable'
+          ? withDemoImage(model, props.image, EDITORIAL_DEMO.shoppable)
+          : withDemoImage(model, props.image, EDITORIAL_DEMO.collection)
       if (props.style === 'compact') {
         return (
           <div className="mx-auto max-w-3xl overflow-hidden px-4 pt-4">
@@ -453,7 +475,7 @@ function renderBlock(
       }
       return (
         <section className="relative min-h-[70vh] overflow-hidden text-white">
-          <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          {image ? <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" /> : null}
           <div className="absolute inset-0 bg-black/30" />
           <div className="relative z-10 flex min-h-[70vh] flex-col items-center justify-center px-6 text-center">
             <h2 className="text-3xl font-medium tracking-tight sm:text-5xl">{props.title || model.tagline || model.title}</h2>

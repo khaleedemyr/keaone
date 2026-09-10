@@ -93,7 +93,9 @@ export function moduleForMenu(menu: string): ModuleKey | null {
     menu === 'storefrontdomain' ||
     menu === 'storefrontproducts' ||
     menu === 'storefrontorders' ||
-    menu === 'storefrontpages'
+    menu === 'storefrontpages' ||
+    menu === 'storefrontnews' ||
+    menu === 'storefrontinquiries'
   ) {
     return 'storefront'
   }

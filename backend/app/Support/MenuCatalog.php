@@ -74,6 +74,8 @@ class MenuCatalog
             self::menu('storefrontsetup', ['view', 'edit']),
             self::menu('storefrontdomain', self::ACTIONS),
             self::menu('storefrontproducts', self::ACTIONS),
+            self::menu('storefrontnews', self::ACTIONS),
+            self::menu('storefrontinquiries', ['view', 'edit']),
             self::menu('storefrontorders', ['view', 'edit']),
             self::menu('storefrontpages', self::ACTIONS),
             self::menu('approvals', ['view', 'edit']),

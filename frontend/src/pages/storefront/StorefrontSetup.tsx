@@ -11,10 +11,11 @@ import { mergeThemeContent, themeForTemplateSwitch } from './lib/themeDefaults'
 import { StorefrontTemplatePreview } from './StorefrontTemplatePreview'
 import { StorefrontThemeFields } from './StorefrontThemeFields'
 import { openStorefrontPreview } from './previewDraft'
-import { StorefrontSite, type StorefrontRenderModel, type StorefrontRenderProduct } from './templates/StorefrontSite'
+import { StorefrontSite, type StorefrontRenderModel, type StorefrontRenderNews, type StorefrontRenderProduct } from './templates/StorefrontSite'
 import type {
   StorefrontAdmin,
   StorefrontBankAccount,
+  StorefrontNewsPostRow,
   StorefrontProductRow,
   StorefrontShipping,
   StorefrontShippingDestination,
@@ -89,7 +90,7 @@ export default function StorefrontSetup() {
   const [logoBusy, setLogoBusy] = useState(false)
   const [error, setError] = useState('')
   const [siteKind, setSiteKind] = useState<StorefrontSiteKind>('landing')
-  const [templateKey, setTemplateKey] = useState('landing_minimal')
+  const [templateKey, setTemplateKey] = useState('landing_dilabs')
   const [status, setStatus] = useState('draft')
   const [title, setTitle] = useState('')
   const [tagline, setTagline] = useState('')
@@ -129,6 +130,7 @@ export default function StorefrontSetup() {
   const [templates, setTemplates] = useState<StorefrontAdmin['templates']>({ landing: [], shop: [] })
   const [hasVisibleProduct, setHasVisibleProduct] = useState(false)
   const [previewProducts, setPreviewProducts] = useState<StorefrontRenderProduct[]>([])
+  const [previewNews, setPreviewNews] = useState<StorefrontRenderNews[]>([])
   const [collapsedPanels, setCollapsedPanels] = useState<SetupCollapsed>(() => readSetupCollapsed())
 
   const panelSpans = useMemo(() => setupPanelSpans(collapsedPanels), [collapsedPanels])
@@ -219,10 +221,15 @@ export default function StorefrontSetup() {
                 id: row.product_id,
                 product_id: row.product_id,
                 name: row.product?.name ?? `Produk #${row.product_id}`,
-                description: null,
+                description: row.product?.description ?? null,
                 price: row.override_price ?? row.product?.sell_price ?? 0,
                 category_id: row.product?.category_id ?? null,
                 image_url: row.product?.image_url ?? null,
+                images: (row.product?.images ?? [])
+                  .map((img) => ({ id: img.id, url: String(img.url || ''), is_primary: Boolean(img.is_primary) }))
+                  .filter((img) => img.url),
+                weight_gram: row.product?.weight_gram ?? null,
+                variant_attributes: row.product?.variant_attributes ?? [],
                 is_deal: Boolean(row.is_deal),
                 is_new_arrival: Boolean(row.is_new_arrival),
                 is_bestseller: Boolean(row.is_bestseller),
@@ -238,6 +245,33 @@ export default function StorefrontSetup() {
       } else {
         setHasVisibleProduct(true)
         setPreviewProducts([])
+      }
+      if (sf.has_news) {
+        try {
+          const list = await api.get<ApiOk<StorefrontNewsPostRow[]>>('/storefront/news?per_page=24', {
+            silent: true,
+          })
+          setPreviewNews(
+            (list.data.data ?? [])
+              .filter((row) => row.is_published)
+              .map((row) => ({
+                id: row.id,
+                slug: row.slug,
+                title: row.title,
+                excerpt: row.excerpt ?? null,
+                body: row.body ?? null,
+                image_url: row.image_url ?? null,
+                tags: row.tags ?? null,
+                day: row.day ?? null,
+                month: row.month ?? null,
+                published_at: row.published_at ?? null,
+              })),
+          )
+        } catch {
+          setPreviewNews([])
+        }
+      } else {
+        setPreviewNews([])
       }
     } catch (err) {
       feedback.error(apiMessage(err, t('loadFailed')))
@@ -272,6 +306,7 @@ export default function StorefrontSetup() {
       brand_colors: brandColors,
       theme_content: themeContent,
       products: previewProducts,
+      news: previewNews,
       preview: true,
     }),
     [
@@ -288,6 +323,7 @@ export default function StorefrontSetup() {
       brandColors,
       themeContent,
       previewProducts,
+      previewNews,
     ],
   )
 
@@ -478,10 +514,10 @@ export default function StorefrontSetup() {
 
         <section className="glass rounded-3xl p-5">
           <div className="mb-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <label className="block space-y-1 text-sm">
-              <span className="text-muted">{t('storefrontSiteKind')}</span>
+            <label className="field-block">
+              <span>{t('storefrontSiteKind')}</span>
               <select
-                className="input w-full"
+                className="field"
                 disabled={!canEdit}
                 value={siteKind}
                 onChange={(e) => {
@@ -498,10 +534,10 @@ export default function StorefrontSetup() {
                 <option value="shop">{t('storefrontKindShop')}</option>
               </select>
             </label>
-            <label className="block space-y-1 text-sm">
-              <span className="text-muted">{t('storefrontStatus')}</span>
+            <label className="field-block">
+              <span>{t('storefrontStatus')}</span>
               <select
-                className="input w-full"
+                className="field"
                 disabled={!canEdit}
                 value={status}
                 onChange={(e) => {
@@ -535,13 +571,13 @@ export default function StorefrontSetup() {
                 </ul>
               </div>
             ) : null}
-            <label className="block space-y-1 text-sm md:col-span-2 xl:col-span-1">
-              <span className="text-muted">{t('name')}</span>
-              <input className="input w-full" disabled={!canEdit} value={title} onChange={(e) => setTitle(e.target.value)} />
+            <label className="field-block md:col-span-2 xl:col-span-1">
+              <span>{t('name')}</span>
+              <input className="field" disabled={!canEdit} value={title} onChange={(e) => setTitle(e.target.value)} />
             </label>
-            <label className="block space-y-1 text-sm md:col-span-2 xl:col-span-1">
-              <span className="text-muted">{t('storefrontTagline')}</span>
-              <input className="input w-full" disabled={!canEdit} value={tagline} onChange={(e) => setTagline(e.target.value)} />
+            <label className="field-block md:col-span-2 xl:col-span-1">
+              <span>{t('storefrontTagline')}</span>
+              <input className="field" disabled={!canEdit} value={tagline} onChange={(e) => setTagline(e.target.value)} />
             </label>
           </div>
 
@@ -602,11 +638,11 @@ export default function StorefrontSetup() {
               </button>
             </div>
 
-            <div className="space-y-2 rounded-2xl border border-line p-3">
-              <div className="text-sm text-muted">{t('storefrontLogo')}</div>
+            <div className="space-y-3 rounded-2xl border border-line bg-fill/40 p-4">
+              <div className="text-sm font-medium text-fg">{t('storefrontLogo')}</div>
               {logoUrl ? (
                 <div className="flex items-center gap-3">
-                  <img src={logoUrl} alt="" className="h-14 w-14 rounded-xl object-cover ring-1 ring-black/5" />
+                  <img src={logoUrl} alt="" className="h-16 w-16 rounded-2xl object-cover ring-1 ring-black/5" />
                   {canEdit ? (
                     <button type="button" className="btn-ghost text-sm" disabled={logoBusy} onClick={() => void onLogoRemove()}>
                       {t('storefrontRemoveImage')}
@@ -614,76 +650,95 @@ export default function StorefrontSetup() {
                   ) : null}
                 </div>
               ) : (
-                <div className="text-xs text-muted">{t('storefrontNoImage')}</div>
+                <div className="grid h-28 place-items-center rounded-2xl border border-dashed border-line bg-fill text-xs text-muted">
+                  {t('storefrontNoImage')}
+                </div>
               )}
               {canEdit ? (
-                <label className="btn-ghost inline-flex cursor-pointer text-sm">
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    disabled={logoBusy}
-                    onChange={(e) => void onLogoChange(e.target.files?.[0])}
-                  />
-                  {logoBusy ? t('storefrontUploading') : t('storefrontUploadLogo')}
-                </label>
+                <div className="space-y-1.5">
+                  <label className="btn-ghost inline-flex cursor-pointer text-sm">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      disabled={logoBusy}
+                      onChange={(e) => void onLogoChange(e.target.files?.[0])}
+                    />
+                    {logoBusy ? t('storefrontUploading') : t('storefrontUploadLogo')}
+                  </label>
+                  <div className="space-y-0.5 text-[11px] leading-snug text-muted">
+                    <p>{t('storefrontImageFormats', { mb: '4' })}</p>
+                    <p>{t('storefrontImageHintLogo')}</p>
+                    <p>{t('storefrontImageSingleHint')}</p>
+                  </div>
+                </div>
               ) : null}
             </div>
 
-            <div className="space-y-2 rounded-2xl border border-line p-3">
-              <div className="text-sm font-medium">{t('storefrontBrandColors')}</div>
-              {(
-                [
-                  ['primary', t('storefrontColorPrimary')],
-                  ['accent', t('storefrontColorAccent')],
-                  ['background', t('storefrontColorBackground')],
-                  ['text', t('storefrontColorText')],
-                ] as const
-              ).map(([key, label]) => (
-                <label key={key} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-muted">{label}</span>
-                  <input
-                    type="color"
-                    disabled={!canEdit}
-                    value={brandColors[key]}
-                    onChange={(e) => setBrandColors((prev) => ({ ...prev, [key]: e.target.value }))}
-                    className="h-9 w-14 cursor-pointer rounded border border-line bg-transparent"
-                  />
-                </label>
-              ))}
+            <div className="space-y-3 rounded-2xl border border-line bg-fill/40 p-4">
+              <div className="text-sm font-medium text-fg">{t('storefrontBrandColors')}</div>
+              <div className="grid gap-2">
+                {(
+                  [
+                    ['primary', t('storefrontColorPrimary')],
+                    ['accent', t('storefrontColorAccent')],
+                    ['background', t('storefrontColorBackground')],
+                    ['text', t('storefrontColorText')],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label
+                    key={key}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-line bg-fill px-3 py-2 text-sm"
+                  >
+                    <span className="text-muted">{label}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] uppercase text-muted">{brandColors[key]}</span>
+                      <input
+                        type="color"
+                        disabled={!canEdit}
+                        value={brandColors[key]}
+                        onChange={(e) => setBrandColors((prev) => ({ ...prev, [key]: e.target.value }))}
+                        className="h-9 w-12 cursor-pointer rounded-lg border border-line bg-transparent p-0.5"
+                      />
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
 
-            <label className="block space-y-1 text-sm">
-              <span className="text-muted">{t('storefrontAbout')}</span>
-              <textarea className="input min-h-28 w-full" disabled={!canEdit} value={about} onChange={(e) => setAbout(e.target.value)} />
+            <label className="field-block">
+              <span>{t('storefrontAbout')}</span>
+              <textarea className="field min-h-28" disabled={!canEdit} value={about} onChange={(e) => setAbout(e.target.value)} />
             </label>
 
-            <div className="space-y-2 rounded-2xl border border-line p-3">
-              <div className="text-sm font-medium">{t('storefrontContactSection')}</div>
-              <p className="text-xs text-muted">{t('storefrontContactBlockHint')}</p>
-              <label className="block space-y-1 text-sm">
-                <span className="text-muted">{t('email')}</span>
+            <div className="space-y-3 rounded-2xl border border-line bg-fill/40 p-4">
+              <div>
+                <div className="text-sm font-medium text-fg">{t('storefrontContactSection')}</div>
+                <p className="mt-1 text-xs text-muted">{t('storefrontContactBlockHint')}</p>
+              </div>
+              <label className="field-block">
+                <span>{t('email')}</span>
                 <input
-                  className="input w-full"
+                  className="field"
                   type="email"
                   disabled={!canEdit}
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
                 />
               </label>
-              <label className="block space-y-1 text-sm">
-                <span className="text-muted">{t('phone')}</span>
+              <label className="field-block">
+                <span>{t('phone')}</span>
                 <input
-                  className="input w-full"
+                  className="field"
                   disabled={!canEdit}
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
                 />
               </label>
-              <label className="block space-y-1 text-sm">
-                <span className="text-muted">{t('address')}</span>
+              <label className="field-block">
+                <span>{t('address')}</span>
                 <textarea
-                  className="input min-h-20 w-full"
+                  className="field min-h-20"
                   disabled={!canEdit}
                   value={contactAddress}
                   onChange={(e) => setContactAddress(e.target.value)}
@@ -691,22 +746,22 @@ export default function StorefrontSetup() {
               </label>
             </div>
 
-            <div className="space-y-2 rounded-2xl border border-line p-3">
-              <div className="text-sm font-medium">{t('storefrontSeoSection')}</div>
-              <label className="block space-y-1 text-sm">
-                <span className="text-muted">{t('storefrontSeoTitle')}</span>
+            <div className="space-y-3 rounded-2xl border border-line bg-fill/40 p-4">
+              <div className="text-sm font-medium text-fg">{t('storefrontSeoSection')}</div>
+              <label className="field-block">
+                <span>{t('storefrontSeoTitle')}</span>
                 <input
-                  className="input w-full"
+                  className="field"
                   disabled={!canEdit}
                   value={seoTitle}
                   onChange={(e) => setSeoTitle(e.target.value)}
                   placeholder={title || undefined}
                 />
               </label>
-              <label className="block space-y-1 text-sm">
-                <span className="text-muted">{t('storefrontSeoDescription')}</span>
+              <label className="field-block">
+                <span>{t('storefrontSeoDescription')}</span>
                 <textarea
-                  className="input min-h-20 w-full"
+                  className="field min-h-20"
                   disabled={!canEdit}
                   value={seoDescription}
                   onChange={(e) => setSeoDescription(e.target.value)}
@@ -722,7 +777,7 @@ export default function StorefrontSetup() {
                   <label className="block space-y-1 text-sm">
                     <span className="text-muted">{t('storefrontOutlet')}</span>
                     <select
-                      className="input w-full"
+                      className="field w-full"
                       disabled={!canEdit}
                       value={outletId === '' ? '' : String(outletId)}
                       onChange={(e) => {
@@ -745,7 +800,7 @@ export default function StorefrontSetup() {
                   <label className="block space-y-1 text-sm">
                     <span className="text-muted">{t('storefrontWarehouse')}</span>
                     <select
-                      className="input w-full"
+                      className="field w-full"
                       disabled={!canEdit}
                       value={warehouseId === '' ? '' : String(warehouseId)}
                       onChange={(e) => setWarehouseId(e.target.value === '' ? '' : Number(e.target.value))}
@@ -762,7 +817,7 @@ export default function StorefrontSetup() {
                   <label className="block space-y-1 text-sm">
                     <span className="text-muted">{t('storefrontPriceChannel')}</span>
                     <select
-                      className="input w-full"
+                      className="field w-full"
                       disabled={!canEdit}
                       value={priceChannelId === '' ? '' : String(priceChannelId)}
                       onChange={(e) => setPriceChannelId(e.target.value === '' ? '' : Number(e.target.value))}
@@ -829,21 +884,21 @@ export default function StorefrontSetup() {
                       className="grid gap-2 rounded-2xl border p-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-center"
                     >
                       <input
-                        className="input min-w-0"
+                        className="field min-w-0"
                         placeholder={t('storefrontBankName')}
                         disabled={!canEdit}
                         value={bank.bank_name}
                         onChange={(e) => updateBank(index, { bank_name: e.target.value })}
                       />
                       <input
-                        className="input min-w-0"
+                        className="field min-w-0"
                         placeholder={t('storefrontAccountName')}
                         disabled={!canEdit}
                         value={bank.account_name}
                         onChange={(e) => updateBank(index, { account_name: e.target.value })}
                       />
                       <input
-                        className="input min-w-0"
+                        className="field min-w-0"
                         placeholder={t('storefrontAccountNumber')}
                         disabled={!canEdit}
                         value={bank.account_number}
@@ -924,7 +979,7 @@ export default function StorefrontSetup() {
                           <div className="space-y-2">
                             <div className="flex gap-2">
                               <input
-                                className="input flex-1"
+                                className="field flex-1"
                                 disabled={!canEdit}
                                 placeholder={t('storefrontShippingSearchPlaceholder')}
                                 value={originQuery}
@@ -1016,7 +1071,7 @@ export default function StorefrontSetup() {
                         </span>
                         <div className="relative max-w-[180px]">
                           <input
-                            className="input w-full pr-14"
+                            className="field w-full pr-14"
                             type="number"
                             min={1}
                             max={30000}
@@ -1118,13 +1173,12 @@ export default function StorefrontSetup() {
                 </div>
                 <div className="max-h-[70vh] overflow-auto bg-white">
                   <div
-                    className="origin-top-left"
                     style={
                       collapsedPanels.content
-                        ? { width: '108.7%', transform: 'scale(0.92)', transformOrigin: 'top left' }
+                        ? { zoom: 0.92 }
                         : collapsedPanels.brand
-                          ? { width: '117.6%', transform: 'scale(0.85)', transformOrigin: 'top left' }
-                          : { width: '128.205%', transform: 'scale(0.78)', transformOrigin: 'top left' }
+                          ? { zoom: 0.85 }
+                          : { zoom: 0.78 }
                     }
                   >
                     <StorefrontShopProvider model={livePreviewModel}>

@@ -4,7 +4,21 @@ import { STOREFRONT_PREVIEW_BANNER } from '../previewDraft'
 import { useShop } from '../commerce/StorefrontShop'
 import type { StorefrontRenderModel, StorefrontRenderProduct } from './renderTypes'
 import { FooterLinkList } from './FooterLinkList'
-import { readFooterColumn, readFooterLegal } from '../lib/footerLinks'
+import { parseFooterLinks, readFooterColumn, readFooterLegal } from '../lib/footerLinks'
+import { coerceNavForTemplate, handleShopNavClick } from './storefrontNav'
+import { withDemoFallback, withDemoImage } from './storefrontDemo'
+import {
+  Float,
+  HeroEnter,
+  HoverLift,
+  Magnetic,
+  Parallax,
+  Reveal,
+  ScalePop,
+  Stagger,
+  StaggerItem,
+  Tilt3D,
+} from './storefrontMotion'
 
 /**
  * Capsule recreation from https://capsule.merchantsbestfriends.com/
@@ -185,7 +199,7 @@ function Shell({ model, children }: { model: StorefrontRenderModel; children: Re
       }}
     >
       {model.preview ? (
-        <div className="sticky top-0 z-50 border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
+        <div className="border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
           {STOREFRONT_PREVIEW_BANNER}
         </div>
       ) : null}
@@ -194,18 +208,41 @@ function Shell({ model, children }: { model: StorefrontRenderModel; children: Re
   )
 }
 
-function BtnPrimary({ href, children }: { href: string; children: ReactNode }) {
+function BtnPrimary({
+  href,
+  children,
+  onClick,
+}: {
+  href: string
+  children: ReactNode
+  onClick?: () => void
+}) {
   return (
     <a
       href={href}
       className="inline-flex items-center justify-center bg-black px-4 py-2.5 text-[12px] font-extrabold uppercase tracking-[0.06em] text-white transition hover:bg-neutral-800"
+      onClick={(e) => {
+        if (!onClick) return
+        e.preventDefault()
+        onClick()
+      }}
     >
       {children}
     </a>
   )
 }
 
-function BtnSecondary({ href, children, light = false }: { href: string; children: ReactNode; light?: boolean }) {
+function BtnSecondary({
+  href,
+  children,
+  light = false,
+  onClick,
+}: {
+  href: string
+  children: ReactNode
+  light?: boolean
+  onClick?: () => void
+}) {
   return (
     <a
       href={href}
@@ -214,6 +251,11 @@ function BtnSecondary({ href, children, light = false }: { href: string; childre
           ? 'border-white text-white hover:bg-white hover:text-black'
           : 'border-black text-black hover:bg-black hover:text-white'
       }`}
+      onClick={(e) => {
+        if (!onClick) return
+        e.preventDefault()
+        onClick()
+      }}
     >
       {children}
     </a>
@@ -226,19 +268,22 @@ function ProductCard({
   imageFallback,
 }: {
   product: StorefrontRenderProduct
-  brandHint: string
-  imageFallback: string
+  brandHint?: string
+  imageFallback?: string
 }) {
   const shop = useShop()
+  const imageSrc = product.image_url || imageFallback
   return (
     <article className="group flex h-full min-w-0 flex-col bg-[#f4f4f4]">
       <div className="relative aspect-[3/4] overflow-hidden bg-[#efefef]">
         <button type="button" className="grid h-full w-full place-items-center p-4 text-left" onClick={() => shop?.openProduct(product)}>
-          <img
-            src={product.image_url || imageFallback}
-            alt=""
-            className="max-h-full max-w-full object-contain transition duration-500 group-hover:scale-[1.02]"
-          />
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt=""
+              className="max-h-full max-w-full object-contain transition duration-500 group-hover:scale-[1.02]"
+            />
+          ) : null}
         </button>
         <button
           type="button"
@@ -250,7 +295,7 @@ function ProductCard({
         </button>
       </div>
       <div className="flex flex-1 flex-col gap-0.5 px-0 pb-2 pt-3">
-        <div className="text-[11px] text-[#8a8a8a]">{brandHint}</div>
+        {brandHint ? <div className="text-[11px] text-[#8a8a8a]">{brandHint}</div> : null}
         <button type="button" className="text-left" onClick={() => shop?.openProduct(product)}>
           <h3 className="text-[14px] font-semibold leading-snug text-black">{product.name}</h3>
         </button>
@@ -264,9 +309,11 @@ function ProductCard({
 function ProductCarousel({
   products,
   id,
+  model,
 }: {
   products: StorefrontRenderProduct[]
   id: string
+  model: StorefrontRenderModel
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const scrollBy = (dir: -1 | 1) => {
@@ -298,18 +345,28 @@ function ProductCarousel({
       <div
         id={id}
         ref={ref}
-        className="flex overflow-x-auto scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        style={{ gap: '1px' }}
+        className="overflow-x-auto scroll-smooth [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {products.map((p, i) => (
-          <div
-            key={`${id}-${p.id}`}
-            data-card
-            className="w-[calc((100%-1px)/2)] shrink-0 sm:w-[calc((100%-2px)/3)] lg:w-[calc((100%-3px)/4)] xl:w-[calc((100%-5px)/6)]"
-          >
-            <ProductCard product={p} brandHint={BRANDS[i % BRANDS.length]!} imageFallback={DEMO_PRODUCT_IMGS[i % DEMO_PRODUCT_IMGS.length]!} />
-          </div>
-        ))}
+        <Stagger className="flex gap-[1px]" stagger={0.06}>
+          {products.map((p, i) => (
+            <StaggerItem
+              key={`${id}-${p.id}`}
+              className="w-[calc((100%-1px)/2)] shrink-0 sm:w-[calc((100%-2px)/3)] lg:w-[calc((100%-3px)/4)] xl:w-[calc((100%-5px)/6)]"
+            >
+              <div data-card className="h-full">
+                <Tilt3D className="relative h-full" maxTilt={10}>
+                  <HoverLift className="h-full">
+                    <ProductCard
+                      product={p}
+                      brandHint={model.preview ? BRANDS[i % BRANDS.length]! : undefined}
+                      imageFallback={withDemoImage(model, p.image_url, DEMO_PRODUCT_IMGS[i % DEMO_PRODUCT_IMGS.length]!)}
+                    />
+                  </HoverLift>
+                </Tilt3D>
+              </div>
+            </StaggerItem>
+          ))}
+        </Stagger>
       </div>
     </div>
   )
@@ -318,26 +375,26 @@ function ProductCarousel({
 function SectionHeader({
   title,
   body,
-  actionHref,
   actionLabel = 'Shop all',
+  onAction,
 }: {
   title: string
   body?: string
-  actionHref?: string
   actionLabel?: string
+  onAction?: () => void
 }) {
   return (
-    <div className={CAP.frame}>
+    <Reveal className={CAP.frame}>
       <div className="flex items-start justify-between gap-4">
         <h2 className="text-[28px] font-semibold leading-none tracking-tight text-black sm:text-[32px]">{title}</h2>
-        {actionHref ? (
-          <a href={actionHref} className="shrink-0 pt-1 text-[14px] font-medium text-black">
+        {onAction ? (
+          <button type="button" onClick={onAction} className="shrink-0 pt-1 text-[14px] font-medium text-black">
             {actionLabel}
-          </a>
+          </button>
         ) : null}
       </div>
       {body ? <p className="mt-3 max-w-xl text-[14px] leading-relaxed text-[#525252]">{body}</p> : null}
-    </div>
+    </Reveal>
   )
 }
 
@@ -349,8 +406,7 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
   const [activeCat, setActiveCat] = useState(0)
 
   const catalog = useMemo(() => {
-    if (model.products?.length) return model.products
-    return DEMO_PRODUCT_NAMES.map((name, i) => ({
+    const demoProducts = DEMO_PRODUCT_NAMES.map((name, i) => ({
       id: -(i + 1),
       name,
       description: '',
@@ -359,7 +415,8 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
       is_new_arrival: i < 8,
       is_bestseller: i % 2 === 0,
     }))
-  }, [model.products])
+    return withDemoFallback(model, model.products ?? [], demoProducts)
+  }, [model])
 
   const latest = (() => {
     const hits = catalog.filter((p) => p.is_new_arrival)
@@ -382,6 +439,9 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
     'Core pieces upgraded with stronger materials and refined tailoring. Made to perform consistently across seasons.',
   )
   const campaignCta = slotText(content, 'campaign_cta', 'Shop Collection')
+  const campaignFeatureLabels = lines(
+    slotText(content, 'campaign_feature_labels', 'Lightweight Comfort\nDurable Finish\nEveryday Fit'),
+  )
   const bestsellersTitle = slotText(content, 'bestsellers_title', 'Bestsellers')
   const bestsellersBody = slotText(
     content,
@@ -394,19 +454,34 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
   const heroSlides = useMemo(() => {
     const fromSlot = Array.isArray(content.hero_slides) ? content.hero_slides : []
     const slides = fromSlot
-      .filter((s): s is { image?: string; title?: string } => !!s && typeof s === 'object')
+      .filter((s) => !!s && typeof s === 'object')
       .map((s, i) => ({
-        image: typeof s.image === 'string' && s.image ? s.image : DEMO_HERO_IMGS[i % DEMO_HERO_IMGS.length]!,
-        title: (typeof s.title === 'string' && s.title.trim()) || DEFAULT_HERO[i] || DEFAULT_HERO[0]!,
+        image:
+          'image' in s && typeof s.image === 'string' && s.image
+            ? s.image
+            : withDemoImage(model, undefined, DEMO_HERO_IMGS[i % DEMO_HERO_IMGS.length]!),
+        title:
+          ('title' in s && typeof s.title === 'string' && s.title.trim()) ||
+          DEFAULT_HERO[i] ||
+          DEFAULT_HERO[0]!,
       }))
+      .filter((s) => model.preview || s.image)
     if (slides.length) return slides.slice(0, 3)
     const single = typeof content.hero_image === 'string' && content.hero_image ? content.hero_image : null
     const headline = slotText(content, 'hero_headline', DEFAULT_HERO[0]!)
+    if (!model.preview) {
+      return [
+        {
+          image: withDemoImage(model, single, DEMO_HERO_IMGS[0]!),
+          title: headline,
+        },
+      ]
+    }
     return DEFAULT_HERO.map((title, i) => ({
-      image: i === 0 && single ? single : DEMO_HERO_IMGS[i]!,
+      image: withDemoImage(model, i === 0 ? single : undefined, DEMO_HERO_IMGS[i]!),
       title: i === 0 ? headline : title,
     }))
-  }, [content])
+  }, [content, model])
 
   useEffect(() => {
     const onScroll = () => setNavSolid(window.scrollY > 40)
@@ -434,6 +509,8 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
     if (fromSlot.length > 0) {
       return fromSlot.slice(0, 3).map((row, index) => ({
         key: `cat-${index}`,
+        categoryId:
+          typeof row === 'object' && row && 'category_id' in row ? Number(row.category_id) || 0 : 0,
         label:
           typeof row === 'object' && row && 'label' in row && typeof row.label === 'string' && row.label.trim()
             ? row.label
@@ -442,15 +519,20 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
         image:
           typeof row === 'object' && row && 'image' in row && typeof row.image === 'string' && row.image
             ? row.image
-            : DEMO_CAT_IMGS[index] || DEMO_CAT_IMGS[0]!,
+            : withDemoImage(model, undefined, DEMO_CAT_IMGS[index] ?? DEMO_CAT_IMGS[0]!),
       }))
     }
-    return DEFAULT_CATS.map((cat, index) => ({
+    return withDemoFallback(
+      model,
+      [],
+      DEFAULT_CATS.map((cat, index) => ({
       key: `demo-${index}`,
+      categoryId: 0,
       label: cat.label,
       body: categoryBodies[index] || cat.body,
-      image: DEMO_CAT_IMGS[index]!,
-    }))
+      image: withDemoImage(model, undefined, DEMO_CAT_IMGS[index]!),
+      })),
+    )
   })()
 
   const reviews = lines(
@@ -467,24 +549,23 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
         title: title || 'Review',
         quote: quote || line,
         name: name || '',
-        image: catalog[i]?.image_url || DEMO_PRODUCT_IMGS[i]!,
+        image: withDemoImage(model, catalog[i]?.image_url, DEMO_PRODUCT_IMGS[i]!),
       }
     })
 
-  const storyTitles = lines(
+  const storiesCta = slotText(content, 'stories_cta', 'Read all')
+  const stories = lines(
     slotText(
       content,
-      'stories_titles',
-      "This Is What the New Street Era Looks Like\nBuilt Different: The Rules Are Changing\nThe Standard Just Moved — And It’s Not Moving Back\nThis Isn’t a Trend Cycle. It’s a Shift in Direction.",
+      'stories_items',
+      "This Is What the New Street Era Looks Like | March 9, 2026 | Streetwear is entering a sharper, more intentional phase.\nBuilt Different: The Rules Are Changing | March 9, 2026 | Today’s direction favors clarity, structure, and a distinct point of view.\nThe Standard Just Moved | March 9, 2026 | The new benchmark is precision, restraint, and confidence.\nThis Is Not a Trend Cycle | March 9, 2026 | Seasonal updates are giving way to long-term change.",
     ),
-  ).slice(0, 4)
-
-  const storyBodies = [
-    'Streetwear is entering a sharper, more intentional phase. Clean cuts, stronger silhouettes, and deliberate design now…',
-    'Fashion is no longer about blending in. Today’s direction favors clarity, structure, and a distinct point…',
-    'What once felt progressive now feels outdated. The new benchmark is precision, restraint, and confidence in…',
-    'Seasonal updates are giving way to long-term change. Design choices now reflect a deeper evolution in…',
-  ]
+  )
+    .slice(0, 4)
+    .map((line) => {
+      const [title, date, excerpt] = line.split('|').map((part) => part.trim())
+      return { title: title || line, date: date || '', excerpt: excerpt || '' }
+    })
 
   const storyImages = (Array.isArray(content.gallery) ? content.gallery : []).filter(
     (u): u is string => typeof u === 'string' && !!u,
@@ -515,13 +596,14 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
     links: 'Cart | cart\nCheckout | checkout\nMy Account | account\nBlog | #stories\nAbout | #hero\nContact | #stories',
   })
   const footerLegal = readFooterLegal(content, 'Privacy Policy | #\nTerms of Use | #')
+  const footerTagline = slotText(content, 'footer_tagline', 'Minimal, effortless essentials.')
 
-  const nav = [
-    { href: '#drop', label: 'Catalog' },
-    { href: '#categories', label: 'Shop' },
-    { href: '#bestsellers', label: 'Most popular' },
-    { href: '#stories', label: 'Blog' },
-  ]
+  const navDefault = 'Catalog | #drop\nShop | #categories\nMost popular | #bestsellers\nBlog | #stories'
+  const nav = coerceNavForTemplate(
+    parseFooterLinks(slotText(content, 'nav_links', navDefault)),
+    parseFooterLinks(navDefault),
+    ['hero', 'drop', 'categories', 'bestsellers', 'stories'],
+  )
 
   const active = heroSlides[slide] ?? heroSlides[0]!
 
@@ -540,6 +622,7 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
             className={`justify-self-start text-[15px] font-semibold tracking-[0.04em] uppercase ${
               navSolid ? 'text-black' : 'text-white'
             }`}
+            onClick={(e) => handleShopNavClick(e, { href: '#hero' }, shop)}
           >
             {model.logo_url ? (
               <img
@@ -557,7 +640,12 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
             }`}
           >
             {nav.map((item) => (
-              <a key={item.label} href={item.href} className="opacity-90 transition hover:opacity-100">
+              <a
+                key={item.label}
+                href={item.href || '#'}
+                className="opacity-90 transition hover:opacity-100"
+                onClick={(e) => handleShopNavClick(e, item, shop)}
+              >
                 {item.label}
               </a>
             ))}
@@ -583,98 +671,135 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
       {/* Hero slider — full bleed, content stick-bottom, uppercase */}
       <section id="hero" className="relative min-h-[100svh] overflow-hidden bg-black text-white">
         <div className="absolute inset-0">
-          {heroSlides.map((s, i) => (
-            <img
-              key={s.title + i}
-              src={s.image}
-              alt=""
-              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
-                i === slide ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-          ))}
+          <Parallax offset={110} className="h-full w-full">
+            {heroSlides.map((s, i) => (
+              s.image ? (
+                <img
+                  key={s.title + i}
+                  src={s.image}
+                  alt=""
+                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+                    i === slide ? 'opacity-100' : 'opacity-0'
+                  }`}
+                />
+              ) : null
+            ))}
+          </Parallax>
           <div className="absolute inset-0 bg-black/40" />
         </div>
         <div className={`${CAP.frame} relative z-10 flex min-h-[100svh] flex-col justify-end pb-16 pt-28 sm:pb-20`}>
-          <h1 className="max-w-[18ch] text-[34px] font-medium uppercase leading-[1.08] tracking-tight sm:text-[42px] lg:text-[48px]">
-            {active.title}
-          </h1>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <BtnPrimary href="#categories">{heroCta}</BtnPrimary>
-            <BtnSecondary href="#drop" light>
-              {heroCtaSecondary}
-            </BtnSecondary>
-          </div>
-          {heroSlides.length > 1 ? (
-            <div className="mt-10 flex gap-2">
-              {heroSlides.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  aria-label={`Slide ${i + 1}`}
-                  className={`h-[2px] w-8 transition ${i === slide ? 'bg-white' : 'bg-white/40'}`}
-                  onClick={() => setSlide(i)}
-                />
-              ))}
+          <HeroEnter key={active.title}>
+            <h1 className="max-w-[18ch] text-[34px] font-medium uppercase leading-[1.08] tracking-tight sm:text-[42px] lg:text-[48px]">
+              {active.title}
+            </h1>
+          </HeroEnter>
+          <HeroEnter delay={0.14}>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Magnetic>
+                <BtnPrimary href="#categories" onClick={() => shop?.openCategories()}>
+                  {heroCta}
+                </BtnPrimary>
+              </Magnetic>
+              <Magnetic>
+                <BtnSecondary href="#drop" light onClick={() => shop?.openCatalog()}>
+                  {heroCtaSecondary}
+                </BtnSecondary>
+              </Magnetic>
             </div>
+          </HeroEnter>
+          {heroSlides.length > 1 ? (
+            <HeroEnter delay={0.28}>
+              <div className="mt-10 flex gap-2">
+                {heroSlides.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Slide ${i + 1}`}
+                    className={`h-[2px] w-8 transition ${i === slide ? 'bg-white' : 'bg-white/40'}`}
+                    onClick={() => setSlide(i)}
+                  />
+                ))}
+              </div>
+            </HeroEnter>
           ) : null}
         </div>
       </section>
 
-      {/* Latest Drop — carousel 6-up / gap 2px */}
-      <section id="drop" className="bg-[#f4f4f4] py-12 sm:py-14">
-        <SectionHeader title={dropTitle} actionHref="#bestsellers" />
-        <div className={`${CAP.frame} mt-7`}>
-          <ProductCarousel products={latest} id="cap-drop" />
-        </div>
-      </section>
+      {latest.length > 0 ? (
+        <section id="drop" className="bg-[#f4f4f4] py-12 sm:py-14">
+          <SectionHeader title={dropTitle} onAction={() => shop?.openCatalog()} />
+          <div className={`${CAP.frame} mt-7`}>
+            <ProductCarousel products={latest} id="cap-drop" model={model} />
+          </div>
+        </section>
+      ) : null}
 
       {/* FW’25 campaign — centered editorial + feature icons + carousel */}
       <section className="bg-white py-14 sm:py-16">
-        <div className={`${CAP.content} px-4 text-center`}>
+        <Reveal className={`${CAP.content} px-4 text-center`}>
           <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-black">{campaignKicker}</p>
           <h2 className="mt-4 text-[28px] font-medium uppercase leading-tight tracking-tight sm:text-[36px] lg:text-[42px]">
             {campaignTitle}
           </h2>
           <p className="mt-5 text-[15px] leading-relaxed text-[#525252]">{campaignBody}</p>
-          <div className="mt-10 grid grid-cols-3 gap-4">
+          <Stagger className="mt-10 grid grid-cols-3 gap-4" stagger={0.08}>
             {[0, 1, 2].map((i) => (
-              <div key={i} className="text-center">
-                <div className="mx-auto mb-3 aspect-square max-w-[88px] overflow-hidden bg-[#f4f4f4]">
-                  {typeof content.campaign_image === 'string' && content.campaign_image && i === 1 ? (
-                    <img src={content.campaign_image} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <img src={DEMO_PRODUCT_IMGS[i]!} alt="" className="h-full w-full object-cover opacity-90" />
-                  )}
-                </div>
-                <div className="text-[12px] text-[#525252]">Lightweight Comfort</div>
-              </div>
+              <StaggerItem key={i}>
+                <Float amplitude={10} duration={3.6 + i * 0.4} className="text-center">
+                  <Tilt3D className="relative mx-auto mb-3 aspect-square max-w-[88px] overflow-hidden bg-[#f4f4f4]" maxTilt={8}>
+                    {withDemoImage(
+                      model,
+                      i === 1 && typeof content.campaign_image === 'string' ? content.campaign_image : undefined,
+                      DEMO_PRODUCT_IMGS[i]!,
+                    ) ? (
+                      <img
+                        src={withDemoImage(
+                          model,
+                          i === 1 && typeof content.campaign_image === 'string' ? content.campaign_image : undefined,
+                          DEMO_PRODUCT_IMGS[i]!,
+                        )}
+                        alt=""
+                        className="h-full w-full object-cover opacity-90"
+                      />
+                    ) : null}
+                  </Tilt3D>
+                  <div className="text-[12px] text-[#525252]">{campaignFeatureLabels[i] || campaignFeatureLabels[0] || ''}</div>
+                </Float>
+              </StaggerItem>
             ))}
-          </div>
-        </div>
-        <div className={`${CAP.frame} mt-12`}>
-          <ProductCarousel products={campaignProducts} id="cap-campaign" />
-        </div>
-        <div className="mt-10 flex justify-center">
-          <BtnPrimary href="#bestsellers">{campaignCta}</BtnPrimary>
-        </div>
+          </Stagger>
+        </Reveal>
+        {campaignProducts.length > 0 ? (
+          <Reveal delay={0.1} className={`${CAP.frame} mt-12`}>
+            <ProductCarousel products={campaignProducts} id="cap-campaign" model={model} />
+          </Reveal>
+        ) : null}
+        <Reveal delay={0.15} className="mt-10 flex justify-center">
+          <Magnetic>
+            <BtnPrimary href="#bestsellers" onClick={() => shop?.openCatalog()}>
+              {campaignCta}
+            </BtnPrimary>
+          </Magnetic>
+        </Reveal>
       </section>
 
-      {/* Categories — full-bleed tabbed banner (demo: left tabs + body + white CTA) */}
+      {categoryItems.length > 0 ? (
       <section id="categories" className="relative min-h-[78vh] overflow-hidden bg-neutral-900 text-white sm:min-h-[88vh]">
-        {categoryItems.map((cat, i) => (
-          <img
-            key={cat.key}
-            src={cat.image}
-            alt=""
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${
-              i === activeCat ? 'opacity-100' : 'opacity-0'
-            }`}
-          />
-        ))}
+        {categoryItems.map((cat, i) =>
+          cat.image ? (
+            <img
+              key={cat.key}
+              src={cat.image}
+              alt=""
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${
+                i === activeCat ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+          ) : null,
+        )}
         <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/25 to-transparent" />
         <div className={`${CAP.frame} relative z-10 flex min-h-[78vh] flex-col justify-center py-16 sm:min-h-[88vh]`}>
-          <div className="max-w-md">
+          <Reveal className="max-w-md" y={48}>
             <div className="flex flex-wrap gap-6 sm:gap-8">
               {categoryItems.map((cat, i) => (
                 <button
@@ -692,23 +817,32 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
             <p className="mt-8 max-w-[280px] text-[14px] leading-relaxed text-white/90 sm:mt-10 sm:max-w-[300px] sm:text-[15px]">
               {categoryItems[activeCat]?.body}
             </p>
-            <a
-              href="#bestsellers"
-              className="mt-8 inline-flex bg-white px-5 py-3 text-[12px] font-extrabold uppercase tracking-[0.08em] text-black transition hover:bg-neutral-100"
-            >
-              Shop Collection
-            </a>
-          </div>
+            <Magnetic className="mt-8 inline-block">
+              <button
+                type="button"
+                className="inline-flex bg-white px-5 py-3 text-[12px] font-extrabold uppercase tracking-[0.08em] text-black transition hover:bg-neutral-100"
+                onClick={() => {
+                  const cat = categoryItems[activeCat]
+                  if (cat?.categoryId) shop?.openCatalog({ categoryId: cat.categoryId })
+                  else shop?.openCategories()
+                }}
+              >
+                Shop Collection
+              </button>
+            </Magnetic>
+          </Reveal>
         </div>
       </section>
+      ) : null}
 
-      {/* Bestsellers */}
-      <section id="bestsellers" className="bg-[#f4f4f4] py-12 sm:py-14">
-        <SectionHeader title={bestsellersTitle} body={bestsellersBody} actionHref="#drop" />
-        <div className={`${CAP.frame} mt-7`}>
-          <ProductCarousel products={bestsellers} id="cap-best" />
-        </div>
-      </section>
+      {bestsellers.length > 0 ? (
+        <section id="bestsellers" className="bg-[#f4f4f4] py-12 sm:py-14">
+          <SectionHeader title={bestsellersTitle} body={bestsellersBody} onAction={() => shop?.openCatalog()} />
+          <div className={`${CAP.frame} mt-7`}>
+            <ProductCarousel products={bestsellers} id="cap-best" model={model} />
+          </div>
+        </section>
+      ) : null}
 
       {/* Promo pair — Sale (product on black) + New Drop (lifestyle), badge top, underline CTA */}
       <section className="grid lg:grid-cols-2">
@@ -722,7 +856,7 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
               'High-performance footwear built with advanced cushioning, responsive support, and durable construction.',
             ),
             cta: slotText(content, 'sale_cta', 'Explore sale'),
-            image: typeof content.sale_image === 'string' ? content.sale_image : DEMO_SALE_PRODUCT,
+            image: withDemoImage(model, typeof content.sale_image === 'string' ? content.sale_image : undefined, DEMO_SALE_PRODUCT),
             mode: 'product' as const,
           },
           {
@@ -734,31 +868,38 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
               'New season pieces added to the collection, available in updated colors and fits.',
             ),
             cta: slotText(content, 'newdrop_cta', 'Explore sale'),
-            image: typeof content.newdrop_image === 'string' ? content.newdrop_image : DEMO_HERO_IMGS[2]!,
+            image: withDemoImage(model, typeof content.newdrop_image === 'string' ? content.newdrop_image : undefined, DEMO_HERO_IMGS[2]!),
             mode: 'lifestyle' as const,
           },
-        ].map((card) => (
-          <div
+        ].map((card, cardIndex) => (
+          <Reveal
             key={card.title}
+            as="div"
+            delay={cardIndex * 0.1}
+            x={cardIndex === 0 ? -32 : 32}
             className={`relative flex min-h-[520px] flex-col items-center overflow-hidden px-6 pb-10 pt-8 text-center text-white sm:min-h-[560px] sm:px-10 sm:pb-12 sm:pt-10 ${
               card.mode === 'product' ? 'bg-black' : 'bg-neutral-900'
             }`}
           >
             {card.mode === 'lifestyle' ? (
               <>
-                <img src={card.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                <Parallax offset={60} className="absolute inset-0 h-full w-full">
+                  {card.image ? <img src={card.image} alt="" className="h-full w-full object-cover" /> : null}
+                </Parallax>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/25" />
               </>
             ) : null}
 
-            <div className="relative z-10 inline-flex bg-white px-2.5 py-1 text-[11px] font-medium text-black">
+            <ScalePop delay={0.15} className="relative z-10 inline-flex bg-white px-2.5 py-1 text-[11px] font-medium text-black">
               {card.kicker}
-            </div>
+            </ScalePop>
 
             {card.mode === 'product' ? (
-              <div className="relative z-10 flex flex-1 items-center justify-center py-8">
-                <img src={card.image} alt="" className="max-h-[240px] w-auto max-w-[70%] object-contain sm:max-h-[280px]" />
-              </div>
+              <HoverLift className="relative z-10 flex flex-1 items-center justify-center py-8">
+                <Tilt3D className="relative" maxTilt={12}>
+                  {card.image ? <img src={card.image} alt="" className="max-h-[240px] w-auto max-w-[70%] object-contain sm:max-h-[280px]" /> : null}
+                </Tilt3D>
+              </HoverLift>
             ) : (
               <div className="relative z-10 flex-1" />
             )}
@@ -766,61 +907,77 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
             <div className="relative z-10 mt-auto max-w-md">
               <h3 className="text-[26px] font-semibold uppercase leading-tight tracking-tight sm:text-[32px]">{card.title}</h3>
               <p className="mt-3 text-[13px] leading-relaxed text-white/80 sm:text-[14px]">{card.body}</p>
-              <a href="#drop" className="mt-5 inline-block text-[14px] text-white underline underline-offset-4">
-                {card.cta}
-              </a>
+              <Magnetic className="mt-5 inline-block">
+                <button
+                  type="button"
+                  className="inline-block text-[14px] text-white underline underline-offset-4"
+                  onClick={() => shop?.openCatalog()}
+                >
+                  {card.cta}
+                </button>
+              </Magnetic>
             </div>
-          </div>
+          </Reveal>
         ))}
       </section>
 
       {/* Rated by Customers — quote + product thumb */}
       <section className="bg-white py-14 sm:py-16">
-        <h2 className={`${CAP.frame} text-[28px] font-medium tracking-tight sm:text-[32px]`}>{reviewsTitle}</h2>
-        <div className={`${CAP.frame} mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4`}>
+        <Reveal className={`${CAP.frame} text-[28px] font-medium tracking-tight sm:text-[32px]`}>
+          <h2>{reviewsTitle}</h2>
+        </Reveal>
+        <Stagger className={`${CAP.frame} mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4`} stagger={0.08}>
           {reviews.map((r) => (
-            <blockquote key={r.title} className="flex flex-col">
-              <p className="text-[16px] font-medium text-[#525252]">{r.title}</p>
-              <p className="mt-3 flex-1 text-[18px] leading-snug text-black sm:text-[20px]">“{r.quote}”</p>
-              <p className="mt-6 text-[13px] text-[#525252]">{r.name}</p>
-              <div className="mt-4 aspect-[3/4] max-w-[120px] overflow-hidden bg-[#ececec]">
-                <img src={r.image} alt="" className="h-full w-full object-cover" />
-              </div>
-            </blockquote>
+            <StaggerItem key={r.title} as="article">
+              <HoverLift className="h-full">
+                <blockquote className="flex h-full flex-col">
+                  <p className="text-[16px] font-medium text-[#525252]">{r.title}</p>
+                  <p className="mt-3 flex-1 text-[18px] leading-snug text-black sm:text-[20px]">“{r.quote}”</p>
+                  <p className="mt-6 text-[13px] text-[#525252]">{r.name}</p>
+                  <Tilt3D className="relative mt-4 aspect-[3/4] max-w-[120px] overflow-hidden bg-[#ececec]" maxTilt={8}>
+                    {r.image ? <img src={r.image} alt="" className="h-full w-full object-cover" /> : null}
+                  </Tilt3D>
+                </blockquote>
+              </HoverLift>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
 
       {/* Latest Stories */}
       <section id="stories" className="bg-[#f4f4f4] py-14 sm:py-16">
-        <div className={`${CAP.frame} flex items-end justify-between gap-4`}>
+        <Reveal className={`${CAP.frame} flex items-end justify-between gap-4`}>
           <h2 className="text-[28px] font-medium tracking-tight sm:text-[32px]">{storiesTitle}</h2>
-          <span className="text-[13px] font-medium text-black">Read all</span>
-        </div>
-        <div className={`${CAP.frame} mt-8 grid gap-[1px] sm:grid-cols-2 lg:grid-cols-4`}>
-          {storyTitles.map((title, i) => (
-            <article key={title} className="bg-white">
-              <div className="aspect-[4/3] overflow-hidden bg-[#e8e8e8]">
-                {storyImages[i] ? (
-                  <img src={storyImages[i]} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="h-full w-full" style={{ background: `hsl(30 6% ${72 - i * 5}%)` }} />
-                )}
-              </div>
-              <div className="p-4 sm:p-5">
-                <div className="text-[12px] text-[#525252]">March 9, 2026</div>
-                <h3 className="mt-2 text-[16px] font-medium leading-snug text-black">{title}</h3>
-                <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-[#525252]">{storyBodies[i]}</p>
-              </div>
-            </article>
+          <span className="text-[13px] font-medium text-black">{storiesCta}</span>
+        </Reveal>
+        <Stagger className={`${CAP.frame} mt-8 grid gap-[1px] sm:grid-cols-2 lg:grid-cols-4`} stagger={0.07}>
+          {stories.map((story, i) => (
+            <StaggerItem key={story.title} as="article" className="bg-white">
+              <HoverLift className="h-full">
+                <div className="aspect-[4/3] overflow-hidden bg-[#e8e8e8]">
+                  {storyImages[i] ? (
+                    <Parallax offset={36} className="h-full w-full">
+                      <img src={storyImages[i]} alt="" className="h-full w-full object-cover" />
+                    </Parallax>
+                  ) : (
+                    <div className="h-full w-full" style={{ background: `hsl(30 6% ${72 - i * 5}%)` }} />
+                  )}
+                </div>
+                <div className="p-4 sm:p-5">
+                  {story.date ? <div className="text-[12px] text-[#525252]">{story.date}</div> : null}
+                  <h3 className="mt-2 text-[16px] font-medium leading-snug text-black">{story.title}</h3>
+                  {story.excerpt ? <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-[#525252]">{story.excerpt}</p> : null}
+                </div>
+              </HoverLift>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
 
       {/* Footer — trust bar + black brand footer (demo match) */}
       <footer className="bg-black text-white">
         <div className="border-b border-white/10 bg-[#1a1a1a]">
-          <div className={`${CAP.frame} flex flex-wrap items-center justify-center gap-y-2 py-3.5 text-[12px] text-white/90 lg:justify-between lg:text-[13px]`}>
+          <Reveal className={`${CAP.frame} flex flex-wrap items-center justify-center gap-y-2 py-3.5 text-[12px] text-white/90 lg:justify-between lg:text-[13px]`}>
             {trust.map((item, i) => (
               <div key={item} className="contents">
                 {i > 0 ? (
@@ -834,7 +991,7 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
                 </span>
               </div>
             ))}
-          </div>
+          </Reveal>
         </div>
 
         <div className={`${CAP.frame} flex flex-col gap-12 py-14 lg:flex-row lg:items-start lg:justify-between lg:gap-20 lg:py-16`}>
@@ -846,6 +1003,7 @@ export function ShopCapsule({ model }: { model: StorefrontRenderModel }) {
                 {(model.title || 'capsule').toLowerCase().replace(/\.$/, '')}.
               </div>
             )}
+            {footerTagline ? <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-white/55">{footerTagline}</p> : null}
           </div>
           <div className="grid grid-cols-2 gap-10 sm:grid-cols-3 sm:gap-14 lg:gap-16">
             {[footerCol1, footerCol2, footerCol3].map((col) => (

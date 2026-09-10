@@ -9,9 +9,11 @@ use App\Models\Product;
 use App\Models\ProductBomItem;
 use App\Models\ProductImage;
 use App\Models\ProductUnit;
+use App\Models\ProductVariantOption;
 use App\Models\StockBalance;
 use App\Models\SubCategory;
 use App\Models\Unit;
+use App\Services\ProductVariantService;
 use App\Support\CurrentCompany;
 use App\Support\TenantCache;
 use Illuminate\Http\JsonResponse;
@@ -254,16 +256,17 @@ class ProductController extends Controller
     {
         $this->ensureCan('products', 'create');
 
-        [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits] = $this->validated($request);
+        [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits, $variantAttributes] = $this->validated($request);
         $initialQty = (int) $request->integer('initial_qty', 0);
 
-        $product = DB::transaction(function () use ($data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits, $initialQty) {
+        $product = DB::transaction(function () use ($data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits, $variantAttributes, $initialQty) {
             $product = Product::query()->create($data);
             $this->syncOutletPrices($product, $outletPrices);
             $this->syncChannelPrices($product, $channelPrices);
             $this->syncChoices($product, $choiceIds);
             $this->syncBom($product, $bomItems);
             app(\App\Services\ProductUnitService::class)->sync($product, $productUnits);
+            app(ProductVariantService::class)->sync($product, $variantAttributes);
             $this->ensureBalance($product, $initialQty, 'opening');
 
             return $product;
@@ -278,15 +281,16 @@ class ProductController extends Controller
     {
         $this->ensureCan('products', 'edit');
 
-        [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits] = $this->validated($request, $product->id);
+        [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits, $variantAttributes] = $this->validated($request, $product->id);
 
-        $product = DB::transaction(function () use ($product, $data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits) {
+        $product = DB::transaction(function () use ($product, $data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits, $variantAttributes) {
             $product->update($data);
             $this->syncOutletPrices($product, $outletPrices);
             $this->syncChannelPrices($product, $channelPrices);
             $this->syncChoices($product, $choiceIds);
             $this->syncBom($product, $bomItems);
             app(\App\Services\ProductUnitService::class)->sync($product, $productUnits);
+            app(ProductVariantService::class)->sync($product, $variantAttributes);
 
             return $product;
         });
@@ -377,6 +381,30 @@ class ProductController extends Controller
         return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
     }
 
+    public function storeVariantOptionImage(Request $request, Product $product, ProductVariantOption $option): JsonResponse
+    {
+        $this->ensureCanAny([['products', 'create'], ['products', 'edit']]);
+        abort_unless((int) $option->product_id === (int) $product->id, 404);
+
+        $request->validate([
+            'image' => ['required', 'file', 'image', 'max:4096'],
+        ]);
+
+        app(ProductVariantService::class)->storeOptionImage($product, $option, $request->file('image'));
+
+        return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
+    }
+
+    public function destroyVariantOptionImage(Product $product, ProductVariantOption $option): JsonResponse
+    {
+        $this->ensureCanAny([['products', 'edit'], ['products', 'delete']]);
+        abort_unless((int) $option->product_id === (int) $product->id, 404);
+
+        app(ProductVariantService::class)->clearOptionImage($product, $option);
+
+        return $this->ok($this->serialize($this->withRelations($product), $this->qty($product)));
+    }
+
     private function markPrimary(Product $product, ProductImage $image): void
     {
         $product->images()->update(['is_primary' => false]);
@@ -457,6 +485,7 @@ class ProductController extends Controller
             'min_stock' => ['sometimes', 'integer', 'min:0'],
             'max_stock' => ['sometimes', 'integer', 'min:0'],
             'reorder_qty' => ['sometimes', 'integer', 'min:0'],
+            'weight_gram' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'custom_fields' => ['nullable', 'array'],
             'is_active' => ['sometimes', 'boolean'],
             'choice_ids' => ['nullable', 'array'],
@@ -476,6 +505,18 @@ class ProductController extends Controller
                 'integer',
                 Rule::exists('units', 'id')->where('company_id', $companyId),
             ],
+            'variant_attributes' => ['nullable', 'array', 'max:10'],
+            'variant_attributes.*.id' => ['nullable', 'integer'],
+            'variant_attributes.*.name' => ['required_with:variant_attributes', 'string', 'max:80'],
+            'variant_attributes.*.show_in_storefront' => ['sometimes', 'boolean'],
+            'variant_attributes.*.sort_order' => ['nullable', 'integer', 'min:0'],
+            'variant_attributes.*.options' => ['required_with:variant_attributes', 'array', 'min:1', 'max:50'],
+            'variant_attributes.*.options.*.id' => ['nullable', 'integer'],
+            'variant_attributes.*.options.*.name' => ['required', 'string', 'max:80'],
+            'variant_attributes.*.options.*.extra_price' => ['nullable', 'integer', 'min:0'],
+            'variant_attributes.*.options.*.sort_order' => ['nullable', 'integer', 'min:0'],
+            'variant_attributes.*.options.*.is_active' => ['sometimes', 'boolean'],
+            'variant_attributes.*.options.*.clear_image' => ['sometimes', 'boolean'],
         ]);
 
         if (array_key_exists('sku', $data)) {
@@ -599,12 +640,23 @@ class ProductController extends Controller
         }
         unset($data['channel_prices']);
 
+        if (array_key_exists('weight_gram', $data)) {
+            $data['weight_gram'] = $data['weight_gram'] !== null && $data['weight_gram'] !== ''
+                ? max(0, (int) $data['weight_gram'])
+                : null;
+        }
+
         if (array_key_exists('custom_fields', $data) || ! $id) {
             $data['custom_fields'] = app(\App\Services\CustomFieldService::class)
                 ->normalize('product', $data['custom_fields'] ?? []);
         }
 
-        return [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits];
+        $variantAttributes = array_key_exists('variant_attributes', $data)
+            ? array_values($data['variant_attributes'] ?? [])
+            : ($id ? null : []);
+        unset($data['variant_attributes']);
+
+        return [$data, $outletPrices, $choiceIds, $bomItems, $channelPrices, $productUnits, $variantAttributes];
     }
 
     /**
@@ -813,7 +865,7 @@ class ProductController extends Controller
      */
     private function relationList(): array
     {
-        return ['category', 'subCategory', 'itemType', 'unitMaster', 'productUnits.unitMaster', 'images', 'outletPrices', 'channelPrices.priceChannel', 'choices.choiceType', 'bomItems.component', 'bomItems.unitMaster', 'preferredSupplier:id,name'];
+        return ['category', 'subCategory', 'itemType', 'unitMaster', 'productUnits.unitMaster', 'images', 'outletPrices', 'channelPrices.priceChannel', 'choices.choiceType', 'bomItems.component', 'bomItems.unitMaster', 'preferredSupplier:id,name', 'variantAttributes.options'];
     }
 
     private function withRelations(Product $product): Product
@@ -1007,12 +1059,14 @@ class ProductController extends Controller
             'min_stock' => $product->min_stock,
             'max_stock' => (int) ($product->max_stock ?? 0),
             'reorder_qty' => (int) ($product->reorder_qty ?? 0),
+            'weight_gram' => $product->weight_gram !== null ? (int) $product->weight_gram : null,
             'custom_fields' => $product->custom_fields,
             'is_active' => $product->is_active,
             'stock_qty' => $qty,
             'choice_ids' => $this->choiceIds($product),
             'choice_types' => $this->choiceGroups($product),
             'bom_items' => $this->serializeBom($product),
+            'variant_attributes' => app(ProductVariantService::class)->serialize($product),
         ];
     }
 

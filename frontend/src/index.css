@@ -125,7 +125,9 @@ body {
   backdrop-filter: blur(22px);
 }
 
-.field {
+/* `.input` is a storefront alias of `.field` (same chrome). Prefer `.field` in new code. */
+.field,
+.input {
   @apply mt-1.5 w-full rounded-xl border py-2.5 text-sm outline-none transition;
   border-color: var(--line);
   background: var(--field-bg);
@@ -142,21 +144,37 @@ body {
   @apply mb-1.5 block text-muted;
 }
 
-.field.field-icon-left {
+.field.field-icon-left,
+.input.field-icon-left {
   padding-left: 2.75rem;
 }
 
-.field.field-icon-both {
+.field.field-icon-both,
+.input.field-icon-both {
   padding-left: 2.75rem;
   padding-right: 2.75rem;
 }
 
-.field:focus {
+.field:focus,
+.input:focus {
   border-color: rgba(62, 232, 197, 0.55);
   box-shadow: 0 0 0 4px rgba(62, 232, 197, 0.12);
 }
 
-.field option {
+.field:disabled,
+.input:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+textarea.field,
+textarea.input {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.field option,
+.input option {
   background: var(--page);
   color: var(--fg);
 }

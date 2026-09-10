@@ -96,6 +96,8 @@ const MENU_LABEL: Record<string, MsgKey> = {
   storefrontproducts: 'menuStorefrontProducts',
   storefrontorders: 'menuStorefrontOrders',
   storefrontpages: 'menuStorefrontPages',
+  storefrontnews: 'menuStorefrontNews',
+  storefrontinquiries: 'menuStorefrontInquiries',
 }
 
 const ACTIONS: { id: AclAction; label: MsgKey }[] = [
@@ -118,7 +120,7 @@ const ROLE_GROUPS: { id: string; label: MsgKey; menus: string[] }[] = [
   {
     id: 'storefront',
     label: 'appStorefront',
-    menus: ['storefrontsetup', 'storefrontpages', 'storefrontdomain', 'storefrontproducts', 'storefrontorders'],
+    menus: ['storefrontsetup', 'storefrontpages', 'storefrontdomain', 'storefrontinquiries', 'storefrontnews', 'storefrontproducts', 'storefrontorders'],
   },
   { id: 'approvals', label: 'appApprovals', menus: ['approvals'] },
   { id: 'hr', label: 'appHr', menus: ['users', 'departments', 'positions', 'joblevels'] },

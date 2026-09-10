@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { api, apiMessage } from '../../../api/client'
 import { formatRupiah } from '../../../lib/money'
 import type { ApiOk } from '../../../types'
@@ -11,8 +13,10 @@ import {
   readCart,
   setCartLineQty,
   upsertCartLine,
+  variantLineKey,
   writeCart,
   type StorefrontCartLine,
+  type StorefrontSelectedOption,
 } from '../lib/cart'
 import {
   clearCustomerSession,
@@ -22,6 +26,8 @@ import {
   type StorefrontCustomer,
 } from '../lib/customerSession'
 import { STOREFRONT_PREVIEW_BANNER } from '../previewDraft'
+import { ShopCatalogPage, ShopCategoriesPage } from '../templates/ShopCatalogPages'
+import { Reveal } from '../templates/storefrontMotion'
 
 /** Public (tenant-host) API options — skip ERP auth, send storefront host. */
 function publicApiConfig(
@@ -43,7 +49,37 @@ function publicApiConfig(
   }
 }
 
-export type ShopView = 'home' | 'product' | 'cart' | 'checkout' | 'success' | 'login' | 'register' | 'account'
+export type ShopView =
+  | 'home'
+  | 'catalog'
+  | 'categories'
+  | 'product'
+  | 'cart'
+  | 'checkout'
+  | 'success'
+  | 'login'
+  | 'register'
+  | 'account'
+
+function syncShopBrowseQuery(view: 'home' | 'catalog' | 'categories', categoryId?: number | null) {
+  if (typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+  if (view === 'catalog') {
+    url.searchParams.set('view', 'catalog')
+    if (categoryId) url.searchParams.set('category', String(categoryId))
+    else url.searchParams.delete('category')
+  } else if (view === 'categories') {
+    url.searchParams.set('view', 'categories')
+    url.searchParams.delete('category')
+  } else {
+    const current = url.searchParams.get('view')
+    if (current === 'catalog' || current === 'categories') {
+      url.searchParams.delete('view')
+      url.searchParams.delete('category')
+    }
+  }
+  window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+}
 
 export type PlacedOrderSummary = {
   number: string
@@ -96,16 +132,24 @@ type ShopContextValue = {
   customerOrders: CustomerOrderRow[]
   busy: boolean
   error: string
+  catalogCategoryId: number | null
   openHome: () => void
+  openCatalog: (opts?: { categoryId?: number | null }) => void
+  openCategories: () => void
+  openBrowseBack: () => void
   openProduct: (product: StorefrontRenderProduct) => void
   openCart: () => void
   openCheckout: () => void
   openLogin: () => void
   openRegister: () => void
   openAccount: () => void
-  addToCart: (product: StorefrontRenderProduct, qty?: number) => void
-  setQty: (productId: number, qty: number) => void
-  removeLine: (productId: number) => void
+  addToCart: (
+    product: StorefrontRenderProduct,
+    qty?: number,
+    selectedOptions?: StorefrontSelectedOption[],
+  ) => void
+  setQty: (lineKey: string, qty: number) => void
+  removeLine: (lineKey: string) => void
   clearError: () => void
   login: (email: string, password: string, remember?: boolean) => Promise<boolean>
   register: (form: {
@@ -155,6 +199,8 @@ export function StorefrontShopProvider({
     : `sf-live-${host || 'store'}`
   const [view, setView] = useState<ShopView>('home')
   const [product, setProduct] = useState<StorefrontRenderProduct | null>(null)
+  const [catalogCategoryId, setCatalogCategoryId] = useState<number | null>(null)
+  const [browseReturn, setBrowseReturn] = useState<'home' | 'catalog' | 'categories'>('home')
   const [cart, setCart] = useState<StorefrontCartLine[]>(() => readCart(scope))
   const [order, setOrder] = useState<PlacedOrderSummary | null>(null)
   const [customer, setCustomer] = useState<StorefrontCustomer | null>(() => readCustomer(scope))
@@ -163,6 +209,28 @@ export function StorefrontShopProvider({
   const [error, setError] = useState('')
   const checkoutUuidRef = useRef<string | null>(null)
   const placeInFlightRef = useRef(false)
+  const viewRef = useRef<ShopView>('home')
+  viewRef.current = view
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const browse = params.get('view')
+    if (browse === 'catalog') {
+      const raw = Number(params.get('category') || 0)
+      setCatalogCategoryId(raw > 0 ? raw : null)
+      setBrowseReturn('catalog')
+      setView('catalog')
+      setProduct(null)
+      return
+    }
+    if (browse === 'categories') {
+      setCatalogCategoryId(null)
+      setBrowseReturn('categories')
+      setView('categories')
+      setProduct(null)
+    }
+  }, [])
 
   useEffect(() => {
     writeCart(scope, cart)
@@ -228,16 +296,72 @@ export function StorefrontShopProvider({
   const openHome = useCallback(() => {
     setView('home')
     setProduct(null)
+    setCatalogCategoryId(null)
+    setBrowseReturn('home')
     setError('')
+    syncShopBrowseQuery('home')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
-  const openProduct = useCallback((next: StorefrontRenderProduct) => {
-    setProduct(next)
-    setView('product')
+  const openCatalog = useCallback((opts?: { categoryId?: number | null }) => {
+    const nextCategory =
+      opts && 'categoryId' in opts ? (opts.categoryId && opts.categoryId > 0 ? opts.categoryId : null) : null
+    const staying = viewRef.current === 'catalog'
+    setCatalogCategoryId(nextCategory)
+    setBrowseReturn('catalog')
+    setProduct(null)
+    setView('catalog')
     setError('')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    syncShopBrowseQuery('catalog', nextCategory)
+    if (!staying) window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
+
+  const openCategories = useCallback(() => {
+    const staying = viewRef.current === 'categories'
+    setCatalogCategoryId(null)
+    setBrowseReturn('categories')
+    setProduct(null)
+    setView('categories')
+    setError('')
+    syncShopBrowseQuery('categories')
+    if (!staying) window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
+  const openBrowseBack = useCallback(() => {
+    if (browseReturn === 'catalog') {
+      setProduct(null)
+      setView('catalog')
+      setError('')
+      syncShopBrowseQuery('catalog', catalogCategoryId)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    if (browseReturn === 'categories') {
+      setProduct(null)
+      setView('categories')
+      setError('')
+      syncShopBrowseQuery('categories')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    openHome()
+  }, [browseReturn, catalogCategoryId, openHome])
+
+  const openProduct = useCallback(
+    (next: StorefrontRenderProduct) => {
+      setBrowseReturn((prev) => {
+        if (view === 'catalog') return 'catalog'
+        if (view === 'categories') return 'categories'
+        if (view === 'product') return prev
+        return 'home'
+      })
+      setProduct(next)
+      setView('product')
+      setError('')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    },
+    [view],
+  )
 
   const openCart = useCallback(() => {
     setView('cart')
@@ -271,34 +395,54 @@ export function StorefrontShopProvider({
     void refreshOrders()
   }, [refreshOrders])
 
-  const addToCart = useCallback((item: StorefrontRenderProduct, qty = 1) => {
-    if (item.id <= 0) {
-      setError('Produk demo tidak bisa ditambahkan. Tambahkan produk asli di menu Produk toko.')
-      return
-    }
-    if (item.available_qty != null && item.available_qty <= 0) {
-      setError('Stok habis.')
-      return
-    }
-    setError('')
-    setCart((prev) =>
-      upsertCartLine(prev, {
-        product_id: item.id,
-        name: item.name,
-        price: item.price,
-        qty,
-        image_url: item.image_url,
-        available_qty: item.available_qty ?? null,
-      }),
-    )
+  const addToCart = useCallback(
+    (item: StorefrontRenderProduct, qty = 1, selectedOptions?: StorefrontSelectedOption[]) => {
+      if (item.id <= 0) {
+        setError('Produk demo tidak bisa ditambahkan. Tambahkan produk asli di menu Produk toko.')
+        return
+      }
+      const attrs = (item.variant_attributes ?? []).filter((attr) => (attr.options ?? []).length > 0)
+      if (attrs.length > 0 && (!selectedOptions || selectedOptions.length < attrs.length)) {
+        setProduct(item)
+        setView('product')
+        setError(selectedOptions && selectedOptions.length > 0 ? 'Lengkapi pilihan produk.' : '')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
+      if (item.available_qty != null && item.available_qty <= 0) {
+        setError('Stok habis.')
+        return
+      }
+      const extra = (selectedOptions ?? []).reduce((sum, opt) => sum + Math.max(0, opt.extra_price || 0), 0)
+      const imageFromOpt = [...(selectedOptions ?? [])].reverse().find((opt) => opt.image_url)?.image_url
+      const variant_label =
+        selectedOptions && selectedOptions.length > 0
+          ? selectedOptions.map((opt) => `${opt.attribute_name}: ${opt.option_name}`).join(', ')
+          : null
+      setError('')
+      setCart((prev) =>
+        upsertCartLine(prev, {
+          product_id: item.id,
+          line_key: variantLineKey(item.id, selectedOptions),
+          name: item.name,
+          price: item.price + extra,
+          qty,
+          image_url: imageFromOpt || item.image_url,
+          available_qty: item.available_qty ?? null,
+          selected_options: selectedOptions ?? [],
+          variant_label,
+        }),
+      )
+    },
+    [],
+  )
+
+  const setQty = useCallback((lineKey: string, qty: number) => {
+    setCart((prev) => setCartLineQty(prev, lineKey, qty))
   }, [])
 
-  const setQty = useCallback((productId: number, qty: number) => {
-    setCart((prev) => setCartLineQty(prev, productId, qty))
-  }, [])
-
-  const removeLine = useCallback((productId: number) => {
-    setCart((prev) => prev.filter((line) => line.product_id !== productId))
+  const removeLine = useCallback((lineKey: string) => {
+    setCart((prev) => prev.filter((line) => line.line_key !== lineKey))
   }, [])
 
   const login = useCallback(
@@ -399,7 +543,14 @@ export function StorefrontShopProvider({
         const body = {
           ...form,
           client_uuid: checkoutUuidRef.current,
-          items: cart.map((line) => ({ product_id: line.product_id, qty: line.qty })),
+          items: cart.map((line) => ({
+            product_id: line.product_id,
+            qty: line.qty,
+            selected_options: (line.selected_options ?? []).map((opt) => ({
+              attribute_id: opt.attribute_id,
+              option_id: opt.option_id,
+            })),
+          })),
         }
         const path = model.preview ? '/storefront/orders' : '/public/storefront/orders'
         const { data } = await api.post<
@@ -488,7 +639,11 @@ export function StorefrontShopProvider({
       customerOrders,
       busy,
       error,
+      catalogCategoryId,
       openHome,
+      openCatalog,
+      openCategories,
+      openBrowseBack,
       openProduct,
       openCart,
       openCheckout,
@@ -515,7 +670,11 @@ export function StorefrontShopProvider({
       customerOrders,
       busy,
       error,
+      catalogCategoryId,
       openHome,
+      openCatalog,
+      openCategories,
+      openBrowseBack,
       openProduct,
       openCart,
       openCheckout,
@@ -547,6 +706,12 @@ export function ShopChrome({
   const shop = useShop()
   if (!shop) return children
 
+  if (shop.view === 'catalog') {
+    return <ShopCatalogPage model={model} />
+  }
+  if (shop.view === 'categories') {
+    return <ShopCategoriesPage model={model} />
+  }
   if (shop.view === 'product' && shop.product) {
     if (model.template_key === 'shop_avalon') {
       return <AvalonProductDetailPage model={model} product={shop.product} />
@@ -628,7 +793,7 @@ function ShopShell({
             <span className="truncate text-[13px] font-medium tracking-tight group-hover:opacity-70">{model.title}</span>
           </button>
           <nav className="hidden items-center gap-6 text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-500 md:flex">
-            <button type="button" className="hover:text-neutral-900" onClick={() => shop?.openHome()}>
+            <button type="button" className="hover:text-neutral-900" onClick={() => shop?.openBrowseBack()}>
               Shop
             </button>
             <span className="text-neutral-900">{title}</span>
@@ -645,16 +810,34 @@ function ShopShell({
           </nav>
           <button
             type="button"
-            className="relative rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-[12px] font-medium tracking-wide shadow-sm transition hover:border-black/20 hover:shadow"
+            className="relative inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-3.5 py-1.5 text-[12px] font-medium tracking-wide text-neutral-800 shadow-sm transition hover:border-black/20 hover:shadow"
             onClick={() => shop?.openCart()}
+            aria-label={`Cart${(shop?.cartCount ?? 0) > 0 ? `, ${shop?.cartCount} item` : ''}`}
           >
-            Cart
-            <span
-              className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white"
-              style={{ background: c.primary }}
-            >
-              {shop?.cartCount ?? 0}
-            </span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M6.5 8h11l-1.05 10.2a1.5 1.5 0 01-1.49 1.3H9.04a1.5 1.5 0 01-1.49-1.3L6.5 8z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M9 8V7.2A3 3 0 0112 4.2 3 3 0 0115 7.2V8"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+              <path d="M5 8h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            <span>Cart</span>
+            {(shop?.cartCount ?? 0) > 0 ? (
+              <span
+                className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9px] font-bold"
+                style={{ background: c.primary, color: '#ffffff' }}
+              >
+                {shop!.cartCount > 99 ? '99+' : shop!.cartCount}
+              </span>
+            ) : null}
           </button>
         </div>
       </header>
@@ -705,6 +888,9 @@ function ProductImage({
   className?: string
 }) {
   const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
   if (!src || failed) {
     return (
       <div
@@ -853,6 +1039,366 @@ function RelatedGrid({
   )
 }
 
+function productGalleryUrls(product: StorefrontRenderProduct): string[] {
+  const fromList = (product.images ?? [])
+    .map((img) => String(img.url || '').trim())
+    .filter(Boolean)
+  if (fromList.length > 0) return fromList
+  return product.image_url ? [product.image_url] : []
+}
+
+function ImageZoomLightbox({
+  open,
+  src,
+  alt,
+  images,
+  index,
+  onClose,
+  onIndexChange,
+}: {
+  open: boolean
+  src: string | null
+  alt: string
+  images: string[]
+  index: number
+  onClose: () => void
+  onIndexChange?: (index: number) => void
+}) {
+  const reduce = useReducedMotion()
+  const [mounted, setMounted] = useState(false)
+  const [scale, setScale] = useState(1)
+  const [localIndex, setLocalIndex] = useState(index)
+  const list = images.length > 0 ? images : src ? [src] : []
+  const currentSrc = list[localIndex] || src
+  const canNav = list.length > 1
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    setLocalIndex(index >= 0 ? index : 0)
+    setScale(1)
+  }, [open, index])
+
+  useEffect(() => {
+    setScale(1)
+  }, [currentSrc])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onClose()
+      }
+      if (e.key === 'ArrowLeft' && canNav) goTo(localIndex - 1)
+      if (e.key === 'ArrowRight' && canNav) goTo(localIndex + 1)
+      if (e.key === '+' || e.key === '=') setScale((s) => Math.min(4, Number((s + 0.5).toFixed(1))))
+      if (e.key === '-' || e.key === '_') setScale((s) => Math.max(1, Number((s - 0.5).toFixed(1))))
+    }
+    window.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [open, canNav, localIndex, list.length, onClose])
+
+  function goTo(next: number) {
+    if (!canNav) return
+    const i = (next + list.length) % list.length
+    setLocalIndex(i)
+    onIndexChange?.(i)
+  }
+
+  if (!mounted) return null
+
+  return createPortal(
+    <AnimatePresence>
+      {open && currentSrc ? (
+        <motion.div
+          className="fixed inset-0 z-[99999]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Foto produk"
+        >
+          {/* Full-screen dim — click to close */}
+          <div className="absolute inset-0 bg-black/90" onClick={onClose} />
+
+          {/* Close — always visible, high contrast */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-4 top-4 z-[100] flex h-12 w-12 items-center justify-center rounded-full bg-white text-[28px] leading-none text-black shadow-lg transition hover:scale-105 sm:right-6 sm:top-6"
+            aria-label="Tutup"
+          >
+            ×
+          </button>
+
+          {/* Counter */}
+          {canNav ? (
+            <div className="pointer-events-none absolute left-1/2 top-5 z-[100] -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-[12px] font-medium tabular-nums text-white backdrop-blur-sm">
+              {localIndex + 1} / {list.length}
+            </div>
+          ) : null}
+
+          {/* Prev / Next — solid, obvious */}
+          {canNav ? (
+            <>
+              <button
+                type="button"
+                onClick={() => goTo(localIndex - 1)}
+                className="absolute left-3 top-1/2 z-[100] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[28px] leading-none text-black shadow-lg transition hover:scale-105 sm:left-5"
+                aria-label="Sebelumnya"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                onClick={() => goTo(localIndex + 1)}
+                className="absolute right-3 top-1/2 z-[100] flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[28px] leading-none text-black shadow-lg transition hover:scale-105 sm:right-5"
+                aria-label="Berikutnya"
+              >
+                ›
+              </button>
+            </>
+          ) : null}
+
+          {/* Image only — does not block controls */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-14 sm:p-16">
+            <motion.img
+              key={currentSrc}
+              src={currentSrc}
+              alt={alt}
+              drag={scale > 1}
+              dragConstraints={{ left: -280, right: 280, top: -280, bottom: 280 }}
+              dragElastic={0.1}
+              onDoubleClick={(e) => {
+                e.stopPropagation()
+                setScale((s) => (s > 1 ? 1 : 2.5))
+              }}
+              initial={reduce ? false : { opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className={`pointer-events-auto max-h-[85vh] max-w-[min(92vw,1100px)] select-none object-contain ${
+                scale > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+
+          {/* Zoom bar */}
+          <div className="absolute bottom-5 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-2 rounded-full bg-white p-1.5 shadow-lg">
+            <button
+              type="button"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-xl text-black transition hover:bg-neutral-100"
+              aria-label="Zoom out"
+              onClick={() => setScale((s) => Math.max(1, Number((s - 0.5).toFixed(1))))}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="min-w-[3.25rem] px-1 text-center text-[12px] font-semibold tabular-nums text-neutral-700"
+              aria-label="Reset zoom"
+              onClick={() => setScale(1)}
+            >
+              {Math.round(scale * 100)}%
+            </button>
+            <button
+              type="button"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-xl text-black transition hover:bg-neutral-100"
+              aria-label="Zoom in"
+              onClick={() => setScale((s) => Math.min(4, Number((s + 0.5).toFixed(1))))}
+            >
+              +
+            </button>
+            <div className="mx-1 h-6 w-px bg-neutral-200" />
+            <button
+              type="button"
+              className="rounded-full px-3 py-2 text-[12px] font-semibold text-neutral-800 transition hover:bg-neutral-100"
+              onClick={onClose}
+            >
+              Tutup
+            </button>
+          </div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>,
+    document.body,
+  )
+}
+
+function ProductGallery({
+  product,
+  coverSrc,
+  activeIndex,
+  onSelectIndex,
+  primary,
+  aspectClass = 'aspect-[5/4] sm:aspect-[4/3] lg:min-h-[520px] lg:aspect-auto',
+  imageClass = 'h-full min-h-[320px] w-full object-cover lg:min-h-[520px]',
+}: {
+  product: StorefrontRenderProduct
+  coverSrc: string | null
+  activeIndex: number
+  onSelectIndex: (index: number) => void
+  primary: string
+  aspectClass?: string
+  imageClass?: string
+}) {
+  const gallery = productGalleryUrls(product)
+  const reduce = useReducedMotion()
+  const coverKey = coverSrc || `fallback-${product.id}`
+  const [zoomOpen, setZoomOpen] = useState(false)
+  const [zoomIdx, setZoomIdx] = useState(0)
+
+  const zoomImages = useMemo(() => {
+    const list = [...gallery]
+    if (coverSrc && !list.includes(coverSrc)) list.unshift(coverSrc)
+    if (list.length === 0 && coverSrc) return [coverSrc]
+    return list
+  }, [gallery, coverSrc])
+
+  function openZoom() {
+    if (zoomImages.length === 0) return
+    const idx = coverSrc ? zoomImages.indexOf(coverSrc) : Math.max(0, activeIndex)
+    setZoomIdx(idx >= 0 ? idx : 0)
+    setZoomOpen(true)
+  }
+
+  function handleZoomIndex(next: number) {
+    setZoomIdx(next)
+    const src = zoomImages[next]
+    if (!src) return
+    const gi = gallery.indexOf(src)
+    if (gi >= 0) onSelectIndex(gi)
+  }
+
+  return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        onClick={openZoom}
+        disabled={zoomImages.length === 0}
+        aria-label="Perbesar foto produk"
+        className="group relative block w-full overflow-hidden rounded-[28px] bg-neutral-100 text-left shadow-[0_28px_70px_rgba(0,0,0,0.1)] ring-1 ring-black/5 transition hover:ring-black/15 disabled:cursor-default"
+      >
+        <div className={`relative ${aspectClass}`}>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={coverKey}
+              className="absolute inset-0"
+              initial={reduce ? false : { opacity: 0, scale: 1.04 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={reduce ? undefined : { opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <ProductImage src={coverSrc} alt={product.name} primary={primary} className={imageClass} />
+            </motion.div>
+          </AnimatePresence>
+        </div>
+        {coverSrc ? (
+          <span className="pointer-events-none absolute bottom-4 right-4 inline-flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-medium text-white opacity-90 backdrop-blur-md transition group-hover:bg-black/70 sm:opacity-0 sm:group-hover:opacity-100">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M16.5 16.5L20 20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M11 8.5v5M8.5 11h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            Lihat
+          </span>
+        ) : null}
+      </button>
+      {gallery.length > 1 ? (
+        <div className="flex gap-2.5 overflow-x-auto pb-1">
+          {gallery.map((src, index) => {
+            const selected = index === activeIndex
+            return (
+              <motion.button
+                key={`${src}-${index}`}
+                type="button"
+                whileHover={reduce ? undefined : { y: -2 }}
+                whileTap={reduce ? undefined : { scale: 0.96 }}
+                onClick={() => onSelectIndex(index)}
+                onDoubleClick={() => {
+                  onSelectIndex(index)
+                  setZoomIdx(zoomImages.indexOf(src) >= 0 ? zoomImages.indexOf(src) : index)
+                  setZoomOpen(true)
+                }}
+                aria-label={`Foto ${index + 1}`}
+                aria-pressed={selected}
+                className={`relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-2xl transition-shadow sm:h-20 sm:w-20 ${
+                  selected
+                    ? 'ring-2 ring-neutral-900 ring-offset-2 shadow-md'
+                    : 'ring-1 ring-black/10 hover:ring-neutral-400'
+                }`}
+              >
+                <img src={src} alt="" className="h-full w-full object-cover" />
+              </motion.button>
+            )
+          })}
+        </div>
+      ) : null}
+
+      <ImageZoomLightbox
+        open={zoomOpen}
+        src={zoomImages[zoomIdx] || coverSrc}
+        alt={product.name}
+        images={zoomImages}
+        index={zoomIdx}
+        onClose={() => setZoomOpen(false)}
+        onIndexChange={zoomImages.length > 1 ? handleZoomIndex : undefined}
+      />
+    </div>
+  )
+}
+
+function VariantOptionButton({
+  active,
+  name,
+  imageUrl,
+  extraPrice,
+  onClick,
+}: {
+  active: boolean
+  name: string
+  imageUrl?: string | null
+  extraPrice: number
+  onClick: () => void
+}) {
+  const reduce = useReducedMotion()
+  return (
+    <motion.button
+      type="button"
+      whileTap={reduce ? undefined : { scale: 0.97 }}
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[13px] font-medium transition-all duration-200 ${
+        active
+          ? 'border-neutral-900 bg-neutral-900 shadow-[0_8px_20px_rgba(0,0,0,0.18)]'
+          : 'border-black/10 bg-white hover:border-black/25 hover:shadow-sm'
+      }`}
+      style={{ color: active ? '#ffffff' : '#374151' }}
+    >
+      {imageUrl ? (
+        <span className="inline-block h-5 w-5 shrink-0 overflow-hidden rounded-full ring-1 ring-black/10">
+          <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+        </span>
+      ) : null}
+      <span>{name}</span>
+      {extraPrice > 0 ? (
+        <span className="text-[12px] font-normal opacity-80">+{formatRupiah(extraPrice)}</span>
+      ) : null}
+    </motion.button>
+  )
+}
+
 function ProductDetailPage({
   model,
   product,
@@ -862,59 +1408,185 @@ function ProductDetailPage({
 }) {
   const shop = useShop()
   const c = brand(model)
+  const reduce = useReducedMotion()
   const [qty, setQty] = useState(1)
   const [added, setAdded] = useState(false)
+  const [selected, setSelected] = useState<Record<number, number>>({})
+  const [galleryIndex, setGalleryIndex] = useState(0)
+  /** When true, user picked a gallery thumb — don't override with variant image. */
+  const [preferGallery, setPreferGallery] = useState(false)
+  const attrs = (product.variant_attributes ?? []).filter((attr) => (attr.options ?? []).length > 0)
+  const gallery = productGalleryUrls(product)
   const outOfStock = product.available_qty != null && product.available_qty <= 0
   const max = outOfStock ? 0 : product.available_qty == null ? 99 : Math.max(1, product.available_qty)
   const related = relatedProducts(model, product.id, 4)
+
+  useEffect(() => {
+    const next: Record<number, number> = {}
+    for (const attr of attrs) {
+      const first = attr.options[0]
+      if (first) next[attr.id] = first.id
+    }
+    setSelected(next)
+    setGalleryIndex(0)
+    setPreferGallery(false)
+  }, [product.id])
 
   useEffect(() => {
     if (outOfStock) setQty(0)
     else setQty((prev) => Math.min(Math.max(1, prev), max || 1))
   }, [outOfStock, max, product.id])
 
+  const selectedOptions: StorefrontSelectedOption[] = attrs.flatMap((attr) => {
+    const opt = attr.options.find((row) => row.id === selected[attr.id])
+    if (!opt) return []
+    return [
+      {
+        attribute_id: attr.id,
+        attribute_name: attr.name,
+        option_id: opt.id,
+        option_name: opt.name,
+        extra_price: opt.extra_price || 0,
+        image_url: opt.image_url ?? null,
+      },
+    ]
+  })
+
+  const extra = selectedOptions.reduce((sum, opt) => sum + Math.max(0, opt.extra_price || 0), 0)
+  const unitPrice = product.price + extra
+  const variantCover =
+    [...selectedOptions].reverse().find((opt) => opt.image_url)?.image_url || null
+  const optionsReady = attrs.length === 0 || selectedOptions.length === attrs.length
+
+  const coverSrc = preferGallery
+    ? gallery[galleryIndex] || product.image_url || null
+    : variantCover || gallery[galleryIndex] || product.image_url || null
+
+  const highlightThumbIndex = preferGallery
+    ? galleryIndex
+    : variantCover
+      ? gallery.findIndex((src) => src === variantCover)
+      : galleryIndex
+  const activeThumb = preferGallery || !variantCover ? galleryIndex : highlightThumbIndex
+
+  function pickVariant(attrId: number, optionId: number) {
+    setSelected((prev) => ({ ...prev, [attrId]: optionId }))
+    setPreferGallery(false)
+  }
+
+  function pickGallery(index: number) {
+    setGalleryIndex(index)
+    setPreferGallery(true)
+  }
+
+  function pushToCart(mode: 'cart' | 'checkout') {
+    if (outOfStock || !optionsReady) return
+    shop?.addToCart(product, qty, selectedOptions)
+    setAdded(true)
+    window.setTimeout(() => setAdded(false), 1800)
+    if (mode === 'checkout') shop?.openCheckout()
+    else shop?.openCart()
+  }
+
   return (
     <ShopShell model={model} title="Product">
-      <div className="grid items-start gap-6 lg:grid-cols-12 lg:gap-8">
-        <div className="overflow-hidden rounded-[28px] bg-white shadow-[0_24px_60px_rgba(0,0,0,0.08)] ring-1 ring-black/5 lg:col-span-7">
-          <div className="aspect-[5/4] sm:aspect-[4/3] lg:min-h-[520px] lg:aspect-auto">
-            <ProductImage
-              src={product.image_url}
-              alt={product.name}
-              primary={c.primary}
-              className="h-full min-h-[320px] w-full object-cover lg:min-h-[520px]"
-            />
-          </div>
-        </div>
+      <div className="grid items-start gap-8 lg:grid-cols-12 lg:gap-10">
+        <Reveal className="lg:col-span-7" y={28} delay={0.02}>
+          <ProductGallery
+            product={product}
+            coverSrc={coverSrc}
+            activeIndex={activeThumb}
+            onSelectIndex={pickGallery}
+            primary={c.primary}
+          />
+        </Reveal>
 
-        <div className="flex flex-col rounded-[28px] border border-black/5 bg-white p-5 shadow-[0_16px_40px_rgba(0,0,0,0.04)] sm:p-7 lg:col-span-5 lg:sticky lg:top-24">
-          <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-neutral-500">{model.title}</p>
-          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-[2.4rem] sm:leading-tight">
+        <Reveal
+          className="relative flex flex-col overflow-hidden rounded-[28px] border border-black/5 bg-white/90 p-5 shadow-[0_20px_50px_rgba(0,0,0,0.06)] backdrop-blur-sm sm:p-8 lg:col-span-5 lg:sticky lg:top-24"
+          y={36}
+          delay={0.08}
+        >
+          <div
+            className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-30 blur-3xl"
+            style={{ background: c.accent }}
+          />
+
+          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-neutral-500">
+            {model.title}
+          </p>
+          <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-neutral-950 sm:text-[2.35rem] sm:leading-[1.15]">
             {product.name}
           </h1>
-          <div className="mt-3 text-2xl font-semibold tracking-tight" style={{ color: c.primary }}>
-            {formatRupiah(product.price)}
+
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={unitPrice}
+              initial={reduce ? false : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduce ? undefined : { opacity: 0, y: -4 }}
+              transition={{ duration: 0.25 }}
+              className="mt-3 text-2xl font-semibold tracking-tight"
+              style={{ color: c.primary }}
+            >
+              {formatRupiah(unitPrice)}
+            </motion.div>
+          </AnimatePresence>
+
+          <div className="mt-5 flex flex-wrap gap-2 text-[12px]">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-50 px-3 py-1.5 text-neutral-600 ring-1 ring-black/5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Transfer bank
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-50 px-3 py-1.5 text-neutral-600 ring-1 ring-black/5">
+              {outOfStock ? (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                  Stok habis
+                </>
+              ) : (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                  {product.available_qty == null ? 'Siap order' : `Stok ${product.available_qty}`}
+                </>
+              )}
+            </span>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-2">
-            <div className="rounded-2xl bg-neutral-50 px-3 py-3 text-[12px]">
-              <div className="text-neutral-500">Pembayaran</div>
-              <div className="mt-1 font-medium">Transfer bank</div>
+          {attrs.length > 0 ? (
+            <div className="mt-6 space-y-5 border-t border-black/5 pt-6">
+              {attrs.map((attr) => {
+                const current = attr.options.find((row) => row.id === selected[attr.id])
+                return (
+                  <div key={attr.id}>
+                    <div className="mb-2.5 flex items-baseline justify-between gap-3">
+                      <div className="text-[13px] font-medium text-neutral-800">{attr.name}</div>
+                      {current ? (
+                        <div className="text-[12px] text-neutral-500">
+                          Dipilih: <span className="font-medium text-neutral-800">{current.name}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {attr.options.map((opt) => (
+                        <VariantOptionButton
+                          key={opt.id}
+                          active={selected[attr.id] === opt.id}
+                          name={opt.name}
+                          imageUrl={opt.image_url}
+                          extraPrice={opt.extra_price || 0}
+                          onClick={() => pickVariant(attr.id, opt.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-            <div className="rounded-2xl bg-neutral-50 px-3 py-3 text-[12px]">
-              <div className="text-neutral-500">Ketersediaan</div>
-              <div className="mt-1 font-medium">
-                {outOfStock
-                  ? 'Habis'
-                  : product.available_qty == null
-                    ? 'Siap order'
-                    : `Stok ${product.available_qty}`}
-              </div>
-            </div>
-          </div>
+          ) : null}
 
-          <div className="mt-5 border-y border-black/5 py-4">
-            {product.description ? (
+          <div className="mt-6 border-t border-black/5 pt-6">
+            <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-500">Deskripsi</div>
+            {product.description?.trim() ? (
               <p className="text-[14px] leading-relaxed text-neutral-600 whitespace-pre-wrap">{product.description}</p>
             ) : (
               <p className="text-[14px] leading-relaxed text-neutral-500">
@@ -923,38 +1595,42 @@ function ProductDetailPage({
             )}
           </div>
 
-          <div className="mt-5">
-            <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-500">Qty</div>
-            <QtyStepper value={Math.max(1, qty)} max={Math.max(1, max)} onChange={setQty} />
+          <div className="mt-6 flex flex-wrap items-center gap-4">
+            <div>
+              <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-neutral-500">Jumlah</div>
+              <QtyStepper value={Math.max(1, qty)} max={Math.max(1, max)} onChange={setQty} />
+            </div>
           </div>
 
           {shop?.error ? <div className="mt-4 text-sm text-rose-600">{shop.error}</div> : null}
           {outOfStock ? <div className="mt-4 text-sm text-rose-600">Stok habis untuk produk ini.</div> : null}
 
-          <div className="mt-6 flex flex-col gap-3">
+          <div className="mt-7 flex flex-col gap-2.5">
             <PrimaryButton
               color={c.primary}
-              disabled={outOfStock}
-              onClick={() => {
-                if (outOfStock) return
-                shop?.addToCart(product, qty)
-                setAdded(true)
-                window.setTimeout(() => setAdded(false), 1600)
-                shop?.openCart()
-              }}
+              disabled={outOfStock || !optionsReady}
+              className="w-full"
+              onClick={() => pushToCart('cart')}
             >
-              {added ? 'Ditambahkan' : 'Tambah ke cart'}
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={added ? 'ok' : 'add'}
+                  initial={reduce ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={reduce ? undefined : { opacity: 0, y: -6 }}
+                  transition={{ duration: 0.2 }}
+                  className="inline-block"
+                >
+                  {added ? '✓ Ditambahkan ke keranjang' : 'Tambah ke keranjang'}
+                </motion.span>
+              </AnimatePresence>
             </PrimaryButton>
             <GhostButton
-              disabled={outOfStock}
-              onClick={() => {
-                if (outOfStock) return
-                shop?.addToCart(product, qty)
-                setAdded(true)
-                window.setTimeout(() => setAdded(false), 1600)
-              }}
+              disabled={outOfStock || !optionsReady}
+              className="w-full"
+              onClick={() => pushToCart('checkout')}
             >
-              Simpan di cart
+              Beli sekarang
             </GhostButton>
           </div>
 
@@ -970,7 +1646,7 @@ function ProductDetailPage({
               </div>
             </div>
           ) : null}
-        </div>
+        </Reveal>
       </div>
 
       <RelatedGrid model={model} products={related} title="Rekomendasi" />
@@ -990,6 +1666,8 @@ function AvalonProductDetailPage({
   const [qty, setQty] = useState(1)
   const [tab, setTab] = useState<'description' | 'info' | 'reviews'>('description')
   const [added, setAdded] = useState(false)
+  const [selected, setSelected] = useState<Record<number, number>>({})
+  const attrs = (product.variant_attributes ?? []).filter((attr) => (attr.options ?? []).length > 0)
   const outOfStock = product.available_qty != null && product.available_qty <= 0
   const max = outOfStock ? 0 : product.available_qty == null ? 99 : Math.max(1, product.available_qty)
   const related = relatedProducts(model, product.id, 4)
@@ -1008,9 +1686,65 @@ function AvalonProductDetailPage({
   }, [])
 
   useEffect(() => {
+    const next: Record<number, number> = {}
+    for (const attr of attrs) {
+      const first = attr.options[0]
+      if (first) next[attr.id] = first.id
+    }
+    setSelected(next)
+  }, [product.id])
+
+  useEffect(() => {
     if (outOfStock) setQty(0)
     else setQty((prev) => Math.min(Math.max(1, prev), max || 1))
   }, [outOfStock, max, product.id])
+
+  const selectedOptions: StorefrontSelectedOption[] = attrs.flatMap((attr) => {
+    const opt = attr.options.find((row) => row.id === selected[attr.id])
+    if (!opt) return []
+    return [
+      {
+        attribute_id: attr.id,
+        attribute_name: attr.name,
+        option_id: opt.id,
+        option_name: opt.name,
+        extra_price: opt.extra_price || 0,
+        image_url: opt.image_url ?? null,
+      },
+    ]
+  })
+
+  const extra = selectedOptions.reduce((sum, opt) => sum + Math.max(0, opt.extra_price || 0), 0)
+  const cover =
+    [...selectedOptions].reverse().find((opt) => opt.image_url)?.image_url || product.image_url
+  const optionsReady = attrs.length === 0 || selectedOptions.length === attrs.length
+
+  const gallery = productGalleryUrls(product)
+  const [galleryIndex, setGalleryIndex] = useState(0)
+  const [preferGallery, setPreferGallery] = useState(false)
+  const [zoomOpen, setZoomOpen] = useState(false)
+  useEffect(() => {
+    setGalleryIndex(0)
+    setPreferGallery(false)
+    setZoomOpen(false)
+  }, [product.id])
+  const variantCover = [...selectedOptions].reverse().find((opt) => opt.image_url)?.image_url || null
+  const displayCover = preferGallery
+    ? gallery[galleryIndex] || cover
+    : variantCover || gallery[galleryIndex] || cover
+  const highlightThumbIndex = preferGallery
+    ? galleryIndex
+    : variantCover
+      ? gallery.findIndex((src) => src === variantCover)
+      : galleryIndex
+  const activeThumb = highlightThumbIndex >= 0 ? highlightThumbIndex : galleryIndex
+  const zoomImages = useMemo(() => {
+    const list = [...gallery]
+    if (displayCover && !list.includes(displayCover)) list.unshift(displayCover)
+    if (list.length === 0 && displayCover) return [displayCover]
+    return list
+  }, [gallery, displayCover])
+  const [zoomIdx, setZoomIdx] = useState(0)
 
   return (
     <div
@@ -1025,11 +1759,11 @@ function AvalonProductDetailPage({
 
       <header className="border-b border-[#eee]">
         <div className="mx-auto flex h-14 max-w-[1620px] items-center justify-between px-[30px]">
-          <button type="button" className="text-[24px] font-bold lowercase" onClick={() => shop?.openHome()}>
+          <button type="button" className="text-[24px] font-bold lowercase" onClick={() => shop?.openBrowseBack()}>
             {model.title || 'avalon'}
           </button>
           <div className="flex items-center gap-5 text-[14px] font-medium">
-            <button type="button" onClick={() => shop?.openHome()}>
+            <button type="button" onClick={() => shop?.openBrowseBack()}>
               Shop
             </button>
             <button type="button" onClick={() => (shop?.customer ? shop.openAccount() : shop?.openLogin())}>
@@ -1043,7 +1777,7 @@ function AvalonProductDetailPage({
       </header>
 
       <div className="mx-auto max-w-[1620px] px-[30px] py-4 text-[13px] text-[#4c4c4c]">
-        <button type="button" className="hover:text-black" onClick={() => shop?.openHome()}>
+        <button type="button" className="hover:text-black" onClick={() => shop?.openBrowseBack()}>
           Home
         </button>
         <span className="mx-2">/</span>
@@ -1051,15 +1785,85 @@ function AvalonProductDetailPage({
       </div>
 
       <div className="mx-auto grid max-w-[1620px] gap-10 px-[30px] pb-14 lg:grid-cols-2 lg:gap-14">
-        <div className="overflow-hidden bg-[#f5f5f5]">
-          <div className="aspect-[4/5] w-full">
-            <ProductImage
-              src={product.image_url}
-              alt={product.name}
-              primary={primary}
-              className="h-full w-full object-cover"
-            />
-          </div>
+        <div>
+          <button
+            type="button"
+            className="group relative block w-full overflow-hidden bg-[#f5f5f5] text-left"
+            aria-label="Zoom product image"
+            disabled={!displayCover}
+            onClick={() => {
+              if (!displayCover) return
+              const idx = zoomImages.indexOf(displayCover)
+              setZoomIdx(idx >= 0 ? idx : 0)
+              setZoomOpen(true)
+            }}
+          >
+            <div className="relative aspect-[4/5] w-full">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={displayCover || product.id}
+                  className="absolute inset-0"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.28 }}
+                >
+                  <ProductImage
+                    src={displayCover}
+                    alt={product.name}
+                    primary={primary}
+                    className="h-full w-full object-cover"
+                  />
+                </motion.div>
+              </AnimatePresence>
+            </div>
+            {displayCover ? (
+              <span className="pointer-events-none absolute bottom-4 right-4 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-medium text-white opacity-0 backdrop-blur-md transition group-hover:opacity-100">
+                Zoom
+              </span>
+            ) : null}
+          </button>
+          {gallery.length > 1 ? (
+            <div className="mt-3 flex gap-2 overflow-x-auto">
+              {gallery.map((src, index) => (
+                <button
+                  key={`${src}-${index}`}
+                  type="button"
+                  onClick={() => {
+                    setGalleryIndex(index)
+                    setPreferGallery(true)
+                  }}
+                  aria-pressed={index === activeThumb}
+                  className={`h-16 w-16 shrink-0 overflow-hidden border-2 transition ${
+                    index === activeThumb ? 'border-black' : 'border-transparent hover:border-[#999]'
+                  }`}
+                >
+                  <img src={src} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <ImageZoomLightbox
+            open={zoomOpen}
+            src={zoomImages[zoomIdx] || (displayCover ?? null)}
+            alt={product.name}
+            images={zoomImages}
+            index={zoomIdx}
+            onClose={() => setZoomOpen(false)}
+            onIndexChange={
+              zoomImages.length > 1
+                ? (next) => {
+                    setZoomIdx(next)
+                    const src = zoomImages[next]
+                    const gi = src ? gallery.indexOf(src) : -1
+                    if (gi >= 0) {
+                      setGalleryIndex(gi)
+                      setPreferGallery(true)
+                    }
+                  }
+                : undefined
+            }
+          />
         </div>
 
         <div>
@@ -1073,11 +1877,53 @@ function AvalonProductDetailPage({
             </span>
             <span>({reviews} customer review{reviews === 1 ? '' : 's'})</span>
           </div>
-          <div className="mt-4 text-[22px] font-bold">{formatRupiah(product.price)}</div>
+          <div className="mt-4 text-[22px] font-bold">{formatRupiah(product.price + extra)}</div>
           <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[#4c4c4c]">
             {product.description?.trim() ||
               'Street-ready essentials with clean cuts and everyday comfort. Pair with denim or layered looks.'}
           </p>
+
+          {attrs.length > 0 ? (
+            <div className="mt-6 space-y-4">
+              {attrs.map((attr) => {
+                const current = attr.options.find((row) => row.id === selected[attr.id])
+                return (
+                  <div key={attr.id}>
+                    <div className="mb-2 flex items-baseline justify-between gap-3 text-[12px] font-semibold uppercase tracking-wide text-[#4c4c4c]">
+                      <span>{attr.name}</span>
+                      {current ? (
+                        <span className="normal-case tracking-normal text-black">{current.name}</span>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {attr.options.map((opt) => {
+                        const active = selected[attr.id] === opt.id
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setSelected((prev) => ({ ...prev, [attr.id]: opt.id }))
+                              setPreferGallery(false)
+                            }}
+                            className="border px-3 py-1.5 text-[13px] transition"
+                            style={{
+                              borderColor: active ? '#000' : '#cdcdcd',
+                              background: active ? '#000' : '#fff',
+                              color: active ? '#fff' : '#111',
+                            }}
+                          >
+                            {opt.name}
+                            {opt.extra_price > 0 ? ` (+${formatRupiah(opt.extra_price)})` : ''}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : null}
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <div className="flex items-center border border-[#cdcdcd]">
@@ -1101,11 +1947,11 @@ function AvalonProductDetailPage({
             </div>
             <button
               type="button"
-              disabled={outOfStock}
+              disabled={outOfStock || !optionsReady}
               className="bg-black px-[25px] py-[10px] text-[15px] font-bold text-white transition hover:opacity-85 disabled:opacity-40"
               onClick={() => {
-                if (outOfStock) return
-                shop?.addToCart(product, qty)
+                if (outOfStock || !optionsReady) return
+                shop?.addToCart(product, qty, selectedOptions)
                 setAdded(true)
                 window.setTimeout(() => setAdded(false), 1600)
                 shop?.openCart()
@@ -1276,7 +2122,7 @@ function CartPage({ model }: { model: StorefrontRenderModel }) {
           <div className="space-y-3 lg:col-span-8">
             {lines.map((line) => (
               <div
-                key={line.product_id}
+                key={line.line_key}
                 className="flex gap-4 rounded-[22px] border border-black/5 bg-white p-3 shadow-[0_12px_40px_rgba(0,0,0,0.04)] sm:p-4"
               >
                 <div className="h-28 w-24 shrink-0 overflow-hidden rounded-2xl bg-neutral-100 sm:h-32 sm:w-28">
@@ -1291,12 +2137,15 @@ function CartPage({ model }: { model: StorefrontRenderModel }) {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-medium tracking-tight">{line.name}</div>
+                      {line.variant_label ? (
+                        <div className="mt-1 text-xs text-neutral-500">{line.variant_label}</div>
+                      ) : null}
                       <div className="mt-1 text-sm text-neutral-500">{formatRupiah(line.price)}</div>
                     </div>
                     <button
                       type="button"
                       className="text-[12px] text-neutral-400 transition hover:text-rose-600"
-                      onClick={() => shop?.removeLine(line.product_id)}
+                      onClick={() => shop?.removeLine(line.line_key)}
                     >
                       Hapus
                     </button>
@@ -1305,7 +2154,7 @@ function CartPage({ model }: { model: StorefrontRenderModel }) {
                     <QtyStepper
                       value={line.qty}
                       max={line.available_qty == null ? 99 : Math.max(1, line.available_qty)}
-                      onChange={(n) => shop?.setQty(line.product_id, n)}
+                      onChange={(n) => shop?.setQty(line.line_key, n)}
                     />
                     <div className="text-sm font-semibold">{formatRupiah(line.price * line.qty)}</div>
                   </div>
@@ -1333,9 +2182,10 @@ function CartPage({ model }: { model: StorefrontRenderModel }) {
             <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">Ringkasan</div>
             <div className="mt-4 space-y-2 text-sm text-neutral-600">
               {lines.map((line) => (
-                <div key={line.product_id} className="flex justify-between gap-2">
+                <div key={line.line_key} className="flex justify-between gap-2">
                   <span className="truncate">
-                    {line.name} × {line.qty}
+                    {line.name}
+                    {line.variant_label ? ` (${line.variant_label})` : ''} × {line.qty}
                   </span>
                   <span>{formatRupiah(line.price * line.qty)}</span>
                 </div>
@@ -1449,7 +2299,14 @@ function CheckoutPage({ model }: { model: StorefrontRenderModel }) {
         path,
         {
           destination_id: dest.id,
-          items: (shop?.cart ?? []).map((line) => ({ product_id: line.product_id, qty: line.qty })),
+          items: (shop?.cart ?? []).map((line) => ({
+            product_id: line.product_id,
+            qty: line.qty,
+            selected_options: (line.selected_options ?? []).map((opt) => ({
+              attribute_id: opt.attribute_id,
+              option_id: opt.option_id,
+            })),
+          })),
         },
         publicApiConfig(model),
       )
@@ -1672,9 +2529,11 @@ function CheckoutPage({ model }: { model: StorefrontRenderModel }) {
             <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-neutral-500">Order</div>
             <div className="mt-4 space-y-3">
               {(shop?.cart ?? []).map((line) => (
-                <div key={line.product_id} className="flex justify-between gap-3 text-sm">
+                <div key={line.line_key} className="flex justify-between gap-3 text-sm">
                   <span className="text-neutral-600">
-                    {line.name} <span className="text-neutral-400">× {line.qty}</span>
+                    {line.name}
+                    {line.variant_label ? ` (${line.variant_label})` : ''}{' '}
+                    <span className="text-neutral-400">× {line.qty}</span>
                   </span>
                   <span className="font-medium">{formatRupiah(line.price * line.qty)}</span>
                 </div>

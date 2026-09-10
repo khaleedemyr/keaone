@@ -1,8 +1,9 @@
 .blog-editor {
-  border: 1px solid var(--color-line, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--line, rgba(15, 23, 42, 0.12));
   border-radius: 0.85rem;
   overflow: hidden;
-  background: color-mix(in srgb, var(--color-panel, #111) 90%, transparent);
+  background: var(--field-bg, #fff);
+  color: var(--field-fg, #0f172a);
 }
 
 .blog-editor-toolbar {
@@ -10,8 +11,9 @@
   flex-wrap: wrap;
   gap: 0.25rem;
   padding: 0.45rem 0.55rem;
-  border-bottom: 1px solid var(--color-line, rgba(255, 255, 255, 0.1));
-  background: color-mix(in srgb, var(--color-panel, #111) 70%, transparent);
+  border-bottom: 1px solid var(--line, rgba(15, 23, 42, 0.12));
+  background: color-mix(in srgb, var(--glass-a, #fff) 88%, transparent);
+  color: var(--ink, var(--field-fg, #0f172a));
 }
 
 .blog-editor-btn {
@@ -28,20 +30,20 @@
 }
 
 .blog-editor-btn:hover {
-  border-color: color-mix(in srgb, var(--color-mint, #3ee8c5) 35%, transparent);
-  background: color-mix(in srgb, var(--color-mint, #3ee8c5) 8%, transparent);
+  border-color: color-mix(in srgb, var(--mint, #3ee8c5) 40%, transparent);
+  background: color-mix(in srgb, var(--mint, #3ee8c5) 12%, transparent);
 }
 
 .blog-editor-btn.is-active {
-  border-color: color-mix(in srgb, var(--color-mint, #3ee8c5) 55%, transparent);
-  background: color-mix(in srgb, var(--color-mint, #3ee8c5) 14%, transparent);
+  border-color: color-mix(in srgb, var(--mint, #3ee8c5) 55%, transparent);
+  background: color-mix(in srgb, var(--mint, #3ee8c5) 18%, transparent);
 }
 
 .blog-editor-sep {
   width: 1px;
   align-self: stretch;
   margin: 0.15rem 0.2rem;
-  background: var(--color-line, rgba(255, 255, 255, 0.12));
+  background: var(--line, rgba(15, 23, 42, 0.12));
 }
 
 .blog-editor-content {
@@ -50,42 +52,60 @@
   outline: none;
   font-size: 0.95rem;
   line-height: 1.65;
+  background: var(--field-bg, #fff);
+  color: var(--field-fg, #0f172a);
 }
 
-.blog-editor-content p.is-editor-empty:first-child::before {
-  color: var(--color-muted, #8b95a8);
+.blog-editor-content .ProseMirror,
+.blog-editor .ProseMirror {
+  outline: none;
+  min-height: 14rem;
+  color: inherit;
+}
+
+.blog-editor-content p.is-editor-empty:first-child::before,
+.blog-editor .ProseMirror p.is-editor-empty:first-child::before {
+  color: var(--muted, #64748b);
   content: attr(data-placeholder);
   float: left;
   height: 0;
   pointer-events: none;
 }
 
-.blog-editor-content h2 {
+.blog-editor-content h2,
+.blog-editor .ProseMirror h2 {
   font-size: 1.35rem;
   font-weight: 700;
   margin: 1rem 0 0.5rem;
+  color: var(--ink, var(--field-fg, #0f172a));
 }
 
-.blog-editor-content h3 {
+.blog-editor-content h3,
+.blog-editor .ProseMirror h3 {
   font-size: 1.12rem;
   font-weight: 650;
   margin: 0.85rem 0 0.4rem;
+  color: var(--ink, var(--field-fg, #0f172a));
 }
 
 .blog-editor-content ul,
-.blog-editor-content ol {
+.blog-editor-content ol,
+.blog-editor .ProseMirror ul,
+.blog-editor .ProseMirror ol {
   padding-left: 1.35rem;
   margin: 0.5rem 0;
 }
 
-.blog-editor-content blockquote {
+.blog-editor-content blockquote,
+.blog-editor .ProseMirror blockquote {
   margin: 0.75rem 0;
   padding-left: 0.85rem;
-  border-left: 3px solid color-mix(in srgb, var(--color-mint, #3ee8c5) 55%, transparent);
-  color: var(--color-muted, #8b95a8);
+  border-left: 3px solid color-mix(in srgb, var(--mint, #3ee8c5) 55%, transparent);
+  color: var(--muted, #64748b);
 }
 
-.blog-editor-content img {
+.blog-editor-content img,
+.blog-editor .ProseMirror img {
   display: block;
   max-width: 100%;
   height: auto;
@@ -93,7 +113,34 @@
   border-radius: 0.65rem;
 }
 
-.blog-editor-content a {
-  color: var(--color-mint, #3ee8c5);
+.blog-editor-content a,
+.blog-editor .ProseMirror a {
+  color: var(--mint, #0d9488);
   text-decoration: underline;
+}
+
+.blog-editor-content [style*='text-align: center'],
+.blog-editor-content [style*='text-align:center'],
+.blog-editor .ProseMirror [style*='text-align: center'],
+.blog-editor .ProseMirror [style*='text-align:center'] {
+  text-align: center;
+}
+
+.blog-editor-content [style*='text-align: right'],
+.blog-editor-content [style*='text-align:right'],
+.blog-editor .ProseMirror [style*='text-align: right'],
+.blog-editor .ProseMirror [style*='text-align:right'] {
+  text-align: right;
+}
+
+.blog-editor-content [style*='text-align: justify'],
+.blog-editor-content [style*='text-align:justify'],
+.blog-editor .ProseMirror [style*='text-align: justify'],
+.blog-editor .ProseMirror [style*='text-align:justify'] {
+  text-align: justify;
+}
+
+.blog-editor-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

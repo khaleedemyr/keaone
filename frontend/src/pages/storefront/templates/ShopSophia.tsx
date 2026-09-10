@@ -4,8 +4,22 @@ import { STOREFRONT_PREVIEW_BANNER } from '../previewDraft'
 import { useShop } from '../commerce/StorefrontShop'
 import type { StorefrontRenderModel, StorefrontRenderProduct } from './renderTypes'
 import { FooterLinkList } from './FooterLinkList'
-import { readFooterColumn, readFooterLegal, readSophiaServicesColumn } from '../lib/footerLinks'
+import { parseFooterLinks, readFooterColumn, readFooterLegal, readSophiaServicesColumn } from '../lib/footerLinks'
+import { coerceNavForTemplate, handleShopNavClick, useStorefrontScrolled } from './storefrontNav'
 import { SOPHIA_DEMO } from './sophiaDemo'
+import { withDemoFallback, withDemoImage } from './storefrontDemo'
+import {
+  Float,
+  HeroEnter,
+  HoverLift,
+  Magnetic,
+  Parallax,
+  Reveal,
+  ScalePop,
+  Stagger,
+  StaggerItem,
+  Tilt3D,
+} from './storefrontMotion'
 
 /**
  * Sophia Pro — Homepage Style 3
@@ -129,17 +143,8 @@ function Shell({ model, children }: { model: StorefrontRenderModel; children: Re
         fontFamily: 'Manrope, system-ui, sans-serif',
       }}
     >
-      <style>{`
-        @keyframes sophia-float {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-10px); }
-        }
-        .sophia-float-1 { animation: sophia-float 3.2s ease-in-out infinite; }
-        .sophia-float-2 { animation: sophia-float 3.8s ease-in-out infinite 0.4s; }
-        .sophia-float-3 { animation: sophia-float 4.2s ease-in-out infinite 0.8s; }
-      `}</style>
       {model.preview ? (
-        <div className="sticky top-0 z-50 border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
+        <div className="border-b border-black/10 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950">
           {STOREFRONT_PREVIEW_BANNER}
         </div>
       ) : null}
@@ -181,11 +186,12 @@ function ProductCard({
 }: {
   product: StorefrontRenderProduct
   body?: string
-  imageFallback: string
+  imageFallback?: string
   primary: string
 }) {
   const shop = useShop()
   const desc = (product.description || body || '').trim()
+  const imageSrc = product.image_url || imageFallback
   return (
     <article className="group flex h-full flex-col bg-transparent">
       <button
@@ -193,18 +199,22 @@ function ProductCard({
         className="relative aspect-[4/5] w-full overflow-hidden rounded-[18px] bg-[#f8ebe4] text-left"
         onClick={() => shop?.openProduct(product)}
       >
-        <img
-          src={product.image_url || imageFallback}
-          alt=""
-          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
-        />
+        {imageSrc ? (
+          <img
+            src={imageSrc}
+            alt=""
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+          />
+        ) : null}
         {product.is_deal ? (
-          <span
-            className="absolute left-3 top-3 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white"
-            style={{ background: primary }}
-          >
-            Sale
-          </span>
+          <ScalePop className="absolute left-3 top-3">
+            <span
+              className="inline-block rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white"
+              style={{ background: primary }}
+            >
+              Sale
+            </span>
+          </ScalePop>
         ) : null}
       </button>
       <div className="flex flex-1 flex-col gap-1.5 px-1 pb-2 pt-4">
@@ -237,18 +247,12 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
   const content = theme(model)
   const c = colors(model)
   const shop = useShop()
+  const [navGlass, chromeRef] = useStorefrontScrolled(16)
   const [reviewIndex, setReviewIndex] = useState(0)
-  const [heroReady, setHeroReady] = useState(false)
   const reviewRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const id = window.setTimeout(() => setHeroReady(true), 80)
-    return () => window.clearTimeout(id)
-  }, [])
-
   const catalog = useMemo(() => {
-    if (model.products?.length) return model.products
-    return DEMO_PRODUCT_NAMES.map((name, i) => ({
+    const demoProducts = DEMO_PRODUCT_NAMES.map((name, i) => ({
       id: -(i + 1),
       name,
       description: DEMO_PRODUCT_BODIES[i] || '',
@@ -257,21 +261,22 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
       is_deal: i % 3 === 1,
       is_bestseller: true,
     }))
-  }, [model.products])
+    return withDemoFallback(model, model.products ?? [], demoProducts)
+  }, [model])
 
   const products = catalog.slice(0, 12)
 
   const heroImage =
-    typeof content.hero_image === 'string' && content.hero_image ? content.hero_image : SOPHIA_DEMO.hero
+    withDemoImage(model, typeof content.hero_image === 'string' ? content.hero_image : undefined, SOPHIA_DEMO.hero)
   const floatImages = [0, 1, 2].map((i) => {
     const key = `hero_float_${i + 1}`
     const fromSlot = content[key]
-    return typeof fromSlot === 'string' && fromSlot ? fromSlot : SOPHIA_DEMO.floats[i]!
+    return withDemoImage(model, typeof fromSlot === 'string' ? fromSlot : undefined, SOPHIA_DEMO.floats[i]!)
   })
   const consultImage =
-    typeof content.consult_image === 'string' && content.consult_image ? content.consult_image : SOPHIA_DEMO.consult
+    withDemoImage(model, typeof content.consult_image === 'string' ? content.consult_image : undefined, SOPHIA_DEMO.consult)
   const aboutImage =
-    typeof content.about_image === 'string' && content.about_image ? content.about_image : SOPHIA_DEMO.about
+    withDemoImage(model, typeof content.about_image === 'string' ? content.about_image : undefined, SOPHIA_DEMO.about)
 
   const heroKicker = slotText(content, 'hero_kicker', '102+ five star ratings')
   const heroHeadline = slotText(
@@ -314,6 +319,8 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
     if (fromSlot.length > 0) {
       return fromSlot.slice(0, 5).map((row, index) => ({
         key: `cat-${index}`,
+        categoryId:
+          typeof row === 'object' && row && 'category_id' in row ? Number(row.category_id) || 0 : 0,
         label:
           typeof row === 'object' && row && 'label' in row && typeof row.label === 'string' && row.label.trim()
             ? row.label
@@ -321,14 +328,19 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
         image:
           typeof row === 'object' && row && 'image' in row && typeof row.image === 'string' && row.image
             ? row.image
-            : SOPHIA_DEMO.categories[index % SOPHIA_DEMO.categories.length]!,
+            : withDemoImage(model, undefined, SOPHIA_DEMO.categories[index % SOPHIA_DEMO.categories.length]!),
       }))
     }
-    return DEFAULT_CATS.map((label, index) => ({
-      key: `demo-${index}`,
-      label,
-      image: SOPHIA_DEMO.categories[index]!,
-    }))
+    return withDemoFallback(
+      model,
+      [],
+      DEFAULT_CATS.map((label, index) => ({
+        key: `demo-${index}`,
+        categoryId: 0,
+        label,
+        image: withDemoImage(model, undefined, SOPHIA_DEMO.categories[index]!),
+      })),
+    )
   })()
 
   const productsTitle = slotText(content, 'products_title', 'Popular Skin Products for your Daily Use')
@@ -420,24 +432,34 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
     title: 'Shop',
     links: 'Cart | cart\nMy Account | account\nProducts | #products\nCategories | #categories',
   })
-  const footerLegal = readFooterLegal(content, 'Privacy Policy | #about\nTerms & Conditions | #about', '#about')
-
   const brand = model.title || 'Sophia'
+  const footerLegal = readFooterLegal(content, 'Privacy Policy | #about\nTerms & Conditions | #about', '#about')
+  const footerCopy = slotText(content, 'footer_copy', `Copyright © ${new Date().getFullYear()} ${brand} | All Rights Reserved.`)
   const phone = model.contact_phone || '02 1234 4456'
   const email = model.contact_email || ''
   const address = model.contact_address || 'Level 1 Suite 11, The Street Suburb, NSW Australia'
 
-  const nav = footerCol1.links
-    .filter((l) => l.href)
-    .slice(0, 6)
-    .map((l) => ({ href: l.href || '#hero', label: l.label }))
+  const navDefault =
+    'Home | #hero\nShop | #categories\nProducts | #products\nReviews | #reviews\nBook | #consult\nAbout | #about'
+  const nav = coerceNavForTemplate(
+    parseFooterLinks(slotText(content, 'nav_links', navDefault), '#hero'),
+    parseFooterLinks(navDefault, '#hero'),
+    ['hero', 'categories', 'products', 'reviews', 'consult', 'about'],
+  ).slice(0, 6)
 
   return (
     <Shell model={model}>
       {/* Header — light, phone + Book Online */}
-      <header className="sticky top-0 z-40 border-b border-[#EEDCD0]/80 bg-[#fdf6f2]/92 backdrop-blur-md">
+      <header
+        ref={chromeRef}
+        className={`sticky top-0 z-40 border-b transition-[background-color,border-color,backdrop-filter,box-shadow] duration-300 ${
+          navGlass
+            ? 'border-[#EEDCD0]/40 bg-[#fdf6f2]/55 shadow-sm backdrop-blur-md'
+            : 'border-[#EEDCD0]/80 bg-[#fdf6f2]/92 backdrop-blur-md'
+        }`}
+      >
         <div className={`${S.frame} flex h-[78px] items-center justify-between gap-4`}>
-          <a href="#hero" className="flex shrink-0 items-center gap-2">
+          <a href="#hero" className="flex shrink-0 items-center gap-2" onClick={(e) => handleShopNavClick(e, { href: '#hero' }, shop)}>
             {model.logo_url ? (
               <img src={model.logo_url} alt="" className="h-9 w-auto max-w-[160px] object-contain" />
             ) : (
@@ -451,7 +473,12 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
           </a>
           <nav className="hidden items-center gap-7 text-[13px] font-medium capitalize tracking-wide text-[#0d0d0d] lg:flex">
             {nav.map((item) => (
-              <a key={item.label} href={item.href} className="transition hover:opacity-60">
+              <a
+                key={item.label}
+                href={item.href || '#hero'}
+                className="transition hover:opacity-60"
+                onClick={(e) => handleShopNavClick(e, item, shop)}
+              >
                 {item.label}
               </a>
             ))}
@@ -470,13 +497,15 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
               </span>
               {phone}
             </a>
-            <a
-              href="#consult"
-              className="hidden rounded-full px-5 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-90 sm:inline-flex"
-              style={{ background: c.accent || S.buttonSecondary }}
-            >
-              {heroCtaSecondary}
-            </a>
+            <Magnetic className="hidden sm:inline-flex">
+              <a
+                href="#consult"
+                className="inline-flex rounded-full px-5 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-90"
+                style={{ background: c.accent || S.buttonSecondary }}
+              >
+                {heroCtaSecondary}
+              </a>
+            </Magnetic>
             <button
               type="button"
               className="text-[13px] font-medium text-[#0d0d0d]"
@@ -494,113 +523,121 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
       {/* Hero — centered copy + semicircle image + float circles (Style 3) */}
       <section id="hero" className="overflow-hidden" style={{ background: S.deep }}>
         <div className={`${S.frame} pt-12 text-center sm:pt-16 lg:pt-20`}>
-          <div className="mx-auto flex max-w-3xl flex-col items-center">
+          <HeroEnter className="mx-auto flex max-w-3xl flex-col items-center">
             <div className="flex items-center gap-2">
               <StarRow n={5} size={14} />
               <span className="text-[13px] font-medium uppercase tracking-[0.06em] text-[#010101]">{heroKicker}</span>
             </div>
             <h1
-              className={`mt-4 max-w-[18ch] text-[34px] font-bold leading-[1.15] text-[#010101] transition duration-700 sm:text-[44px] lg:text-[52px] ${
-                heroReady ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
-              }`}
+              className="mt-4 max-w-[18ch] text-[34px] font-bold leading-[1.15] text-[#010101] sm:text-[44px] lg:text-[52px]"
               style={{ fontFamily: 'Merriweather, Georgia, serif' }}
             >
               {heroHeadline}
             </h1>
-            <p
-              className={`mt-5 max-w-xl text-[15px] leading-relaxed text-[#010101]/80 transition delay-100 duration-700 sm:text-[16px] ${
-                heroReady ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
-              }`}
-            >
-              {heroBody}
-            </p>
-            <div
-              className={`mt-8 flex flex-wrap items-center justify-center gap-4 transition delay-150 duration-700 ${
-                heroReady ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
-              }`}
-            >
-              <a
-                href="#consult"
-                className="inline-flex items-center justify-center rounded-[32px] border-2 bg-transparent px-7 py-3 text-[14px] font-semibold text-[#010101] transition hover:bg-white/40"
-                style={{ borderColor: c.primary }}
-              >
-                {heroCta}
-              </a>
-              <a href="#products" className="text-[14px] font-semibold text-[#010101] underline-offset-4 hover:underline">
-                {heroCtaSecondary}
-              </a>
+            <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-[#010101]/80 sm:text-[16px]">{heroBody}</p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+              <Magnetic>
+                <a
+                  href="#consult"
+                  className="inline-flex items-center justify-center rounded-[32px] border-2 bg-transparent px-7 py-3 text-[14px] font-semibold text-[#010101] transition hover:bg-white/40"
+                  style={{ borderColor: c.primary }}
+                >
+                  {heroCta}
+                </a>
+              </Magnetic>
+              <Magnetic>
+                <a
+                  href="#products"
+                  className="text-[14px] font-semibold text-[#010101] underline-offset-4 hover:underline"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    shop?.openCatalog()
+                  }}
+                >
+                  {heroCtaSecondary}
+                </a>
+              </Magnetic>
             </div>
-          </div>
+          </HeroEnter>
 
           {/* Semicircle hero + floating circles */}
-          <div
-            className={`relative mx-auto mt-10 w-full max-w-[918px] pb-2 transition duration-700 delay-200 sm:mt-14 ${
-              heroReady ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-6 scale-95 opacity-0'
-            }`}
-          >
+          <HeroEnter delay={0.18} className="relative mx-auto mt-10 w-full max-w-[918px] pb-2 sm:mt-14">
             <div
               className="pointer-events-none absolute -left-[8%] -top-[20%] h-[55%] w-[55%] rounded-full opacity-70"
               style={{ background: `radial-gradient(circle, ${S.peach} 0%, transparent 70%)` }}
             />
-            <div
-              className="relative mx-auto w-[92%] overflow-hidden sm:w-[86%]"
-              style={{
-                aspectRatio: '2 / 1',
-                borderTopLeftRadius: '9999px',
-                borderTopRightRadius: '9999px',
-                borderBottomLeftRadius: 0,
-                borderBottomRightRadius: 0,
-              }}
+            <Parallax
+              offset={48}
+              className="relative mx-auto w-[92%] sm:w-[86%]"
             >
-              <img src={heroImage} alt="" className="h-full w-full object-cover object-[center_20%]" />
-            </div>
+              <div
+                className="overflow-hidden"
+                style={{
+                  aspectRatio: '2 / 1',
+                  borderTopLeftRadius: '9999px',
+                  borderTopRightRadius: '9999px',
+                  borderBottomLeftRadius: 0,
+                  borderBottomRightRadius: 0,
+                }}
+              >
+                {heroImage ? <img src={heroImage} alt="" className="h-full w-full object-cover object-[center_20%]" /> : null}
+              </div>
+            </Parallax>
 
             {/* Float circles — positions approximate demo vw layout */}
-            <div
-              className={`sophia-float-1 absolute left-[-2%] top-[2%] hidden h-[18%] w-[18%] overflow-hidden rounded-full sm:block md:left-[-1%] md:top-0 md:h-[22%] md:w-[22%]`}
+            <Float
+              amplitude={12}
+              duration={3.2}
+              className="absolute left-[-2%] top-[2%] hidden h-[18%] w-[18%] overflow-hidden rounded-full sm:block md:left-[-1%] md:top-0 md:h-[22%] md:w-[22%]"
               style={{ background: S.iconBg, maxWidth: 195, maxHeight: 195, aspectRatio: '1' }}
             >
-              <img src={floatImages[0]} alt="" className="h-full w-full object-cover" />
-            </div>
-            <div
-              className={`sophia-float-2 absolute right-[8%] top-[-8%] hidden h-[16%] w-[16%] overflow-hidden rounded-full sm:block md:right-[10%] md:top-[-10%] md:h-[20%] md:w-[20%]`}
+              {floatImages[0] ? <img src={floatImages[0]} alt="" className="h-full w-full object-cover" /> : null}
+            </Float>
+            <Float
+              amplitude={14}
+              duration={3.8}
+              className="absolute right-[8%] top-[-8%] hidden h-[16%] w-[16%] overflow-hidden rounded-full sm:block md:right-[10%] md:top-[-10%] md:h-[20%] md:w-[20%]"
               style={{ background: S.iconBg, maxWidth: 180, maxHeight: 180, aspectRatio: '1' }}
             >
-              <img src={floatImages[1]} alt="" className="h-full w-full object-cover" />
-            </div>
-            <div
-              className={`sophia-float-3 absolute bottom-[12%] right-[-4%] hidden h-[18%] w-[18%] overflow-hidden rounded-full sm:block md:bottom-[14%] md:right-[-3%] md:h-[22%] md:w-[22%]`}
+              {floatImages[1] ? <img src={floatImages[1]} alt="" className="h-full w-full object-cover" /> : null}
+            </Float>
+            <Float
+              amplitude={10}
+              duration={4.2}
+              className="absolute bottom-[12%] right-[-4%] hidden h-[18%] w-[18%] overflow-hidden rounded-full sm:block md:bottom-[14%] md:right-[-3%] md:h-[22%] md:w-[22%]"
               style={{ background: S.iconBg, maxWidth: 195, maxHeight: 195, aspectRatio: '1' }}
             >
-              <img src={floatImages[2]} alt="" className="h-full w-full object-cover" />
-            </div>
-          </div>
+              {floatImages[2] ? <img src={floatImages[2]} alt="" className="h-full w-full object-cover" /> : null}
+            </Float>
+          </HeroEnter>
         </div>
       </section>
 
       {/* Trust strip — secondary peach bg + icon tiles */}
       <section style={{ background: S.secondary }}>
-        <div className={`${S.frame} grid gap-6 py-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5 lg:py-12`}>
+        <Stagger className={`${S.frame} grid gap-6 py-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5 lg:py-12`} stagger={0.08}>
           {trust.map((item, i) => (
-            <div key={item.title} className="flex gap-3.5">
-              <div
-                className="grid h-12 w-12 shrink-0 place-items-center rounded-lg"
-                style={{ background: S.iconBg }}
-              >
-                <TrustIcon index={i} />
+            <StaggerItem key={item.title}>
+              <div className="flex gap-3.5">
+                <div
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-lg"
+                  style={{ background: S.iconBg }}
+                >
+                  <TrustIcon index={i} />
+                </div>
+                <div>
+                  <div className="text-[15px] font-semibold text-[#010101]">{item.title}</div>
+                  <div className="mt-1 text-[13px] text-[#686868]">{item.body}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-[15px] font-semibold text-[#010101]">{item.title}</div>
-                <div className="mt-1 text-[13px] text-[#686868]">{item.body}</div>
-              </div>
-            </div>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
 
-      {/* Categories — circular */}
+      {categoryItems.length > 0 ? (
       <section id="categories" className="py-16 sm:py-20" style={{ background: S.bg }}>
-        <div className={`${S.frame} text-center`}>
+        <Reveal className={`${S.frame} text-center`}>
           <h2
             className="text-[30px] font-bold tracking-tight text-[#010101] sm:text-[36px]"
             style={{ fontFamily: 'Merriweather, Georgia, serif' }}
@@ -608,30 +645,44 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
             {categoriesTitle}
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-[15px] text-[#686868]">{categoriesBody}</p>
-        </div>
-        <div className={`${S.frame} mt-12 grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-5 lg:gap-6`}>
+        </Reveal>
+        <Stagger className={`${S.frame} mt-12 grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-5 lg:gap-6`} stagger={0.07}>
           {categoryItems.map((cat) => (
-            <a key={cat.key} href="#products" className="group flex flex-col items-center text-center">
-              <div
-                className="aspect-square w-full max-w-[180px] overflow-hidden rounded-full shadow-sm transition group-hover:shadow-md"
-                style={{ background: S.peach }}
-              >
-                <img src={cat.image} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-              </div>
-              <div
-                className="mt-4 text-[15px] font-bold text-[#010101] group-hover:underline"
-                style={{ fontFamily: 'Merriweather, Georgia, serif' }}
-              >
-                {cat.label}
-              </div>
-            </a>
+            <StaggerItem key={cat.key}>
+              <HoverLift>
+                <button
+                  type="button"
+                  className="group flex w-full flex-col items-center text-center"
+                  onClick={() =>
+                    cat.categoryId > 0
+                      ? shop?.openCatalog({ categoryId: cat.categoryId })
+                      : shop?.openCategories()
+                  }
+                >
+                  <div
+                    className="aspect-square w-full max-w-[180px] overflow-hidden rounded-full shadow-sm transition group-hover:shadow-md"
+                    style={{ background: S.peach }}
+                  >
+                    {cat.image ? <img src={cat.image} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" /> : null}
+                  </div>
+                  <div
+                    className="mt-4 text-[15px] font-bold text-[#010101] group-hover:underline"
+                    style={{ fontFamily: 'Merriweather, Georgia, serif' }}
+                  >
+                    {cat.label}
+                  </div>
+                </button>
+              </HoverLift>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
+      ) : null}
 
       {/* Popular products */}
+      {products.length > 0 ? (
       <section id="products" className="bg-white py-16 sm:py-20">
-        <div className={`${S.frame} text-center`}>
+        <Reveal className={`${S.frame} text-center`}>
           <h2
             className="text-[30px] font-bold tracking-tight text-[#010101] sm:text-[36px]"
             style={{ fontFamily: 'Merriweather, Georgia, serif' }}
@@ -639,24 +690,27 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
             {productsTitle}
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-[15px] text-[#686868]">{productsBody}</p>
-        </div>
-        <div className={`${S.frame} mt-12 grid gap-x-5 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`}>
+        </Reveal>
+        <Stagger className={`${S.frame} mt-12 grid gap-x-5 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`} stagger={0.06}>
           {products.map((p, i) => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              body={DEMO_PRODUCT_BODIES[i % DEMO_PRODUCT_BODIES.length]}
-              imageFallback={SOPHIA_DEMO.products[i % SOPHIA_DEMO.products.length]!}
-              primary={c.primary}
-            />
+            <StaggerItem key={p.id}>
+              <Tilt3D className="relative h-full" maxTilt={10}>
+                <ProductCard
+                  product={p}
+                  imageFallback={withDemoImage(model, p.image_url, SOPHIA_DEMO.products[i % SOPHIA_DEMO.products.length]!)}
+                  primary={c.primary}
+                />
+              </Tilt3D>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </section>
+      ) : null}
 
       {/* Reviews */}
       <section id="reviews" className="py-16 sm:py-20" style={{ background: S.peach }}>
         <div className={`${S.frame} grid gap-10 lg:grid-cols-[minmax(0,340px)_1fr] lg:items-start`}>
-          <div>
+          <Reveal>
             <h2
               className="text-[28px] font-bold leading-snug tracking-tight text-[#010101] sm:text-[34px]"
               style={{ fontFamily: 'Merriweather, Georgia, serif' }}
@@ -680,23 +734,24 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
               </div>
               <div className="mt-2 text-[13px] text-[#686868]">{reviewsMeta}</div>
             </div>
-          </div>
+          </Reveal>
           <div className="min-w-0">
             <div
               ref={reviewRef}
               className="flex gap-4 overflow-x-auto scroll-smooth pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
               {reviews.map((r, i) => (
-                <blockquote
-                  key={`${r.name}-${i}`}
-                  data-review
-                  className="w-[min(100%,320px)] shrink-0 rounded-2xl bg-white p-5 shadow-sm sm:w-[340px]"
-                  style={{ border: `1px solid ${S.borderLight}` }}
-                >
+                <HoverLift key={`${r.name}-${i}`} className="w-[min(100%,320px)] shrink-0 sm:w-[340px]">
+                  <blockquote
+                    data-review
+                    className="rounded-2xl bg-white p-5 shadow-sm"
+                    style={{ border: `1px solid ${S.borderLight}` }}
+                  >
                   <StarRow n={r.stars} size={14} />
                   <p className="mt-3 text-[14px] leading-relaxed text-[#010101]">“{r.quote}”</p>
                   <footer className="mt-4 text-[13px] font-semibold text-[#686868]">{r.name}</footer>
-                </blockquote>
+                  </blockquote>
+                </HoverLift>
               ))}
             </div>
             {reviews.length > 1 ? (
@@ -721,27 +776,33 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
       <section id="consult" className="bg-white">
         <div className="grid lg:grid-cols-2">
           <div className="relative min-h-[340px] overflow-hidden lg:min-h-[520px]" style={{ background: S.deep }}>
-            <img src={consultImage} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <Parallax offset={56} className="h-full">
+              {consultImage ? <img src={consultImage} alt="" className="h-full min-h-[340px] w-full object-cover lg:min-h-[520px]" /> : null}
+            </Parallax>
           </div>
           <div className="flex flex-col justify-center px-6 py-14 sm:px-10 lg:px-16 lg:py-20" style={{ background: S.bg }}>
-            <h2
-              className="text-[30px] font-bold tracking-tight text-[#010101] sm:text-[36px]"
-              style={{ fontFamily: 'Merriweather, Georgia, serif' }}
-            >
-              {consultTitle}
-            </h2>
-            <div className="mt-5 space-y-4 text-[15px] leading-relaxed text-[#686868]">
-              {lines(consultBody).map((para) => (
-                <p key={para.slice(0, 40)}>{para}</p>
-              ))}
-            </div>
-            <a
-              href={`mailto:${email || 'hello@example.com'}?subject=${encodeURIComponent(consultCta)}`}
-              className="mt-8 inline-flex w-fit items-center justify-center rounded-[32px] px-7 py-3 text-[14px] font-semibold text-white transition hover:opacity-90"
-              style={{ background: c.primary }}
-            >
-              {consultCta}
-            </a>
+            <Reveal>
+              <h2
+                className="text-[30px] font-bold tracking-tight text-[#010101] sm:text-[36px]"
+                style={{ fontFamily: 'Merriweather, Georgia, serif' }}
+              >
+                {consultTitle}
+              </h2>
+              <div className="mt-5 space-y-4 text-[15px] leading-relaxed text-[#686868]">
+                {lines(consultBody).map((para) => (
+                  <p key={para.slice(0, 40)}>{para}</p>
+                ))}
+              </div>
+              <Magnetic className="mt-8 w-fit">
+                <a
+                  href={`mailto:${email || 'hello@example.com'}?subject=${encodeURIComponent(consultCta)}`}
+                  className="inline-flex items-center justify-center rounded-[32px] px-7 py-3 text-[14px] font-semibold text-white transition hover:opacity-90"
+                  style={{ background: c.primary }}
+                >
+                  {consultCta}
+                </a>
+              </Magnetic>
+            </Reveal>
           </div>
         </div>
       </section>
@@ -749,7 +810,7 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
       {/* About */}
       <section id="about" className="py-16 sm:py-20" style={{ background: S.bg }}>
         <div className={`${S.frame} grid items-center gap-10 lg:grid-cols-2 lg:gap-16`}>
-          <div>
+          <Reveal>
             <h2
               className="text-[30px] font-bold leading-tight tracking-tight text-[#010101] sm:text-[38px]"
               style={{ fontFamily: 'Merriweather, Georgia, serif' }}
@@ -762,20 +823,28 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
                 <p key={para.slice(0, 40)}>{para}</p>
               ))}
             </div>
-            <a
-              href="#consult"
-              className="mt-8 inline-flex items-center justify-center rounded-[32px] px-7 py-3 text-[14px] font-semibold text-white transition hover:opacity-90"
-              style={{ background: c.primary }}
-            >
-              {aboutCta}
-            </a>
+            <Magnetic className="mt-8 w-fit">
+              <a
+                href="#consult"
+                className="inline-flex items-center justify-center rounded-[32px] px-7 py-3 text-[14px] font-semibold text-white transition hover:opacity-90"
+                style={{ background: c.primary }}
+              >
+                {aboutCta}
+              </a>
+            </Magnetic>
             {aboutPromo ? <p className="mt-5 text-[13px] text-[#686868]">{aboutPromo}</p> : null}
-          </div>
-          <div className="overflow-hidden rounded-[28px]" style={{ background: S.deep }}>
-            <div className="aspect-[4/5]">
-              <img src={aboutImage} alt="" className="h-full w-full object-cover" />
-            </div>
-          </div>
+          </Reveal>
+          <Reveal delay={0.12}>
+            <Tilt3D className="relative overflow-hidden rounded-[28px]" maxTilt={8}>
+              <div style={{ background: S.deep }}>
+                <Parallax offset={36}>
+                  <div className="aspect-[4/5]">
+                    {aboutImage ? <img src={aboutImage} alt="" className="h-full w-full object-cover" /> : null}
+                  </div>
+                </Parallax>
+              </div>
+            </Tilt3D>
+          </Reveal>
         </div>
       </section>
 
@@ -822,7 +891,7 @@ export function ShopSophia({ model }: { model: StorefrontRenderModel }) {
         </div>
         <div className={`${S.frame} flex flex-col gap-3 border-t border-white/10 py-5 text-[12px] text-white/45 sm:flex-row sm:items-center sm:justify-between`}>
           <div>
-            Copyright © {new Date().getFullYear()} {brand} | All Rights Reserved.
+            {footerCopy}
           </div>
           <FooterLinkList links={footerLegal} inline className="flex gap-4" itemClassName="hover:text-white" />
         </div>
