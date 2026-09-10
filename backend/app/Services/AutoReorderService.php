@@ -75,10 +75,12 @@ class AutoReorderService
             throw ValidationException::withMessages(['items' => ['Pilih minimal satu produk.']]);
         }
 
+        $warehouse = Warehouse::query()->whereKey($warehouseId)->firstOrFail();
+
         return $this->purchases->createRequisition([
             'client_uuid' => (string) Str::uuid(),
             'warehouse_id' => $warehouseId,
-            'outlet_id' => CurrentCompany::outlet()?->id,
+            'outlet_id' => $warehouse->outlet_id ?? CurrentCompany::outlet()?->id,
             'note' => 'Auto-reorder '.now()->format('Y-m-d H:i'),
             'items' => $selected,
             'approvals' => [],
@@ -93,10 +95,16 @@ class AutoReorderService
         $warehouse = Warehouse::query()->whereKey($warehouseId)->firstOrFail();
 
         return Product::query()
+            ->with('category:id,is_raw_material')
             ->where('company_id', $companyId)
             ->where('track_stock', true)
             ->where('is_active', true)
             ->where('reorder_qty', '>', 0)
+            ->where(function ($q) {
+                $q->where('is_procurement_item', true)
+                    ->orWhere('is_fixed_asset_item', true)
+                    ->orWhereHas('category', fn ($c) => $c->where('is_raw_material', true));
+            })
             ->whereRaw('COALESCE((SELECT qty FROM stock_balances WHERE stock_balances.product_id = products.id AND stock_balances.warehouse_id = ? LIMIT 1), 0) <= products.min_stock', [$warehouseId])
             ->orderBy('name')
             ->get()

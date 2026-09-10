@@ -65,20 +65,25 @@ class CompanyController extends Controller
             'settings.pos_mode' => ['sometimes', Rule::in(['retail', 'restaurant', 'cafe'])],
             'settings.inventory_costing_method' => ['sometimes', Rule::in(['fifo', 'average', 'moving_average'])],
             'settings.inventory_allow_negative_stock' => ['sometimes', 'boolean'],
-        ], $this->procurementSettingsValidationRules()));
+        ], array_merge($this->procurementSettingsValidationRules(), $this->salesSettingsValidationRules())));
 
         $settingsInput = $data['settings'] ?? [];
+        $financeKeys = config('finance.settings_keys', []);
         $posKeys = ['pos_mode'];
-        $procurementKeys = config('procurement.settings_keys', []);
+        $procurementKeys = array_values(array_diff(config('procurement.settings_keys', []), $financeKeys));
         $inventoryKeys = config('inventory.settings_keys', []);
         $incoming = array_keys($settingsInput);
+        $hasFinance = array_intersect($incoming, $financeKeys) !== [];
         $hasPos = array_intersect($incoming, $posKeys) !== [];
         $hasProcurement = array_intersect($incoming, $procurementKeys) !== [];
         $hasInventory = array_intersect($incoming, $inventoryKeys) !== [];
-        $hasOps = array_diff($incoming, array_merge($posKeys, $procurementKeys, $inventoryKeys)) !== [];
+        $hasOps = array_diff($incoming, array_merge($posKeys, $financeKeys, $procurementKeys, $inventoryKeys)) !== [];
 
         if (isset($data['modules'])) {
             $this->ensureCan('modules', 'edit');
+        }
+        if ($hasFinance) {
+            $this->ensureCanAny(['financesettings', 'purchasesettings', 'possettings', 'ops', 'settings']);
         }
         if ($hasPos) {
             $this->ensureCan('possettings', 'edit');
@@ -92,7 +97,7 @@ class CompanyController extends Controller
         if ($hasOps) {
             $this->ensureCan('ops', 'edit');
         }
-        if (! isset($data['modules']) && ! $hasPos && ! $hasOps && ! $hasProcurement && ! $hasInventory) {
+        if (! isset($data['modules']) && ! $hasPos && ! $hasOps && ! $hasProcurement && ! $hasInventory && ! $hasFinance) {
             $this->ensureCan('ops', 'edit');
         }
 
@@ -121,6 +126,7 @@ class CompanyController extends Controller
                 ['tax_percent', 'allow_credit', 'receipt_width', 'receipt_footer', 'receipt_layout', 'pos_mode'],
                 config('procurement.settings_keys', []),
                 config('inventory.settings_keys', []),
+                config('sales.settings_keys', []),
             );
             $settingsPatch = array_intersect_key($settingsPatch, array_flip($allowedKeys));
 
@@ -228,6 +234,24 @@ class CompanyController extends Controller
             } elseif (str_ends_with($key, '_tolerance')) {
                 $rules["settings.{$key}"] = ['sometimes', 'integer', 'min:0', 'max:100'];
             } elseif (str_starts_with($key, 'gl_procurement_')) {
+                $rules["settings.{$key}"] = ['sometimes', 'nullable', 'integer'];
+            } else {
+                $rules["settings.{$key}"] = ['sometimes', 'boolean'];
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function salesSettingsValidationRules(): array
+    {
+        $rules = [];
+
+        foreach (config('sales.settings_keys', []) as $key) {
+            if (str_starts_with($key, 'gl_sales_')) {
                 $rules["settings.{$key}"] = ['sometimes', 'nullable', 'integer'];
             } else {
                 $rules["settings.{$key}"] = ['sometimes', 'boolean'];

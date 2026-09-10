@@ -14,7 +14,7 @@ class VendorInvoiceController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorinvoices', 'view');
 
         $query = VendorInvoice::query()
@@ -66,7 +66,7 @@ class VendorInvoiceController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorinvoices', 'create');
         $this->ensureBilling();
 
@@ -101,7 +101,7 @@ class VendorInvoiceController extends Controller
 
     public function show(VendorInvoice $vendorInvoice): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorinvoices', 'view');
 
         return $this->ok($this->invoices->serialize($vendorInvoice));
@@ -109,7 +109,7 @@ class VendorInvoiceController extends Controller
 
     public function update(Request $request, VendorInvoice $vendorInvoice): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorinvoices', 'edit');
 
         $data = $request->validate([
@@ -142,7 +142,7 @@ class VendorInvoiceController extends Controller
 
     public function submit(VendorInvoice $vendorInvoice): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorinvoices', 'edit');
 
         return $this->ok($this->invoices->serialize($this->invoices->submit($vendorInvoice)));
@@ -150,7 +150,7 @@ class VendorInvoiceController extends Controller
 
     public function approve(VendorInvoice $vendorInvoice): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorinvoices', 'edit');
 
         return $this->ok($this->invoices->serialize($this->invoices->approve($vendorInvoice, request()->user())));
@@ -158,7 +158,7 @@ class VendorInvoiceController extends Controller
 
     public function reject(Request $request, VendorInvoice $vendorInvoice): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorinvoices', 'edit');
 
         $data = $request->validate(['note' => ['nullable', 'string']]);
@@ -170,7 +170,7 @@ class VendorInvoiceController extends Controller
 
     public function confirm(VendorInvoice $vendorInvoice): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorinvoices', 'edit');
 
         return $this->ok($this->invoices->serialize($this->invoices->confirm($vendorInvoice)));
@@ -178,7 +178,7 @@ class VendorInvoiceController extends Controller
 
     public function cancel(VendorInvoice $vendorInvoice): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCanAny([['vendorinvoices', 'edit'], ['vendorinvoices', 'delete']]);
 
         return $this->ok($this->invoices->serialize($this->invoices->cancel($vendorInvoice)));
@@ -186,7 +186,7 @@ class VendorInvoiceController extends Controller
 
     public function match(VendorInvoice $vendorInvoice): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorinvoices', 'edit');
 
         return $this->ok($this->invoices->serialize($this->invoices->runMatch($vendorInvoice)));

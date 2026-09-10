@@ -12,7 +12,7 @@ class CategoryController extends Controller
     public function index(Request $request): JsonResponse
     {
         if ($request->boolean('for_select')) {
-            $this->ensureCanAny(['categories', 'products', 'subcategories', 'promotions', 'discounts']);
+            $this->ensureCanAny(['categories', 'products', 'subcategories', 'promotions', 'discounts', 'storefrontpages', 'storefrontsetup']);
         } else {
             $this->ensureCan('categories', 'view');
         }

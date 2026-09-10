@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\Contact;
+use App\Models\GoodsReceipt;
+use App\Models\GoodsReceiptItem;
 use App\Models\Outlet;
 use App\Models\Product;
 use App\Models\PurchaseReturn;
@@ -25,6 +27,7 @@ class ProcurementReturnService
         private InventoryService $inventory,
         private ProductUnitService $productUnits,
         private NotificationService $notifications,
+        private DocumentSequenceService $documentSequences,
     ) {}
 
     public function returnEnabled(?Company $company = null): bool
@@ -272,9 +275,14 @@ class ProcurementReturnService
 
         return DB::transaction(function () use ($return) {
             $return = PurchaseReturn::query()->whereKey($return->id)->lockForUpdate()->firstOrFail();
+            if ($return->status !== 'approved') {
+                throw ValidationException::withMessages(['status' => ['Retur harus disetujui dulu sebelum dikonfirmasi.']]);
+            }
             $return->load('items');
 
             foreach ($return->items as $item) {
+                $this->assertReturnQtyAgainstGr($return, $item);
+
                 $product = Product::query()->withoutGlobalScopes()->find($item->product_id);
                 $factor = max(1, (int) ($item->factor_to_base ?: 1));
                 $baseQty = $this->productUnits->toBaseQty((int) $item->qty, $factor);
@@ -300,10 +308,16 @@ class ProcurementReturnService
                 }
             }
 
-            $return->update([
-                'status' => 'confirmed',
-                'returned_at' => now(),
-            ]);
+            $updated = PurchaseReturn::query()
+                ->whereKey($return->id)
+                ->where('status', 'approved')
+                ->update([
+                    'status' => 'confirmed',
+                    'returned_at' => now(),
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Retur tidak bisa dikonfirmasi.']]);
+            }
 
             return $this->loadReturn($return->fresh());
         });
@@ -438,25 +452,96 @@ class ProcurementReturnService
             throw ValidationException::withMessages(['items' => ['Minimal 1 item.']]);
         }
 
-        foreach ($items as $row) {
+        foreach ($items as $index => $row) {
             $product = Product::query()->findOrFail($row['product_id']);
             $resolved = $this->productUnits->resolveLine(
                 $product,
                 isset($row['unit_level']) ? (string) $row['unit_level'] : null,
                 isset($row['unit']) ? (string) $row['unit'] : null,
             );
+            $qty = (int) $row['qty'];
+            $grItemId = isset($row['goods_receipt_item_id']) ? (int) $row['goods_receipt_item_id'] : null;
+
+            if ($grItemId) {
+                $grItem = GoodsReceiptItem::query()->find($grItemId);
+                if (! $grItem) {
+                    throw ValidationException::withMessages([
+                        "items.$index.goods_receipt_item_id" => ['Baris GR tidak ditemukan.'],
+                    ]);
+                }
+                if ($return->goods_receipt_id && (int) $grItem->goods_receipt_id !== (int) $return->goods_receipt_id) {
+                    throw ValidationException::withMessages([
+                        "items.$index.goods_receipt_item_id" => ['Baris GR tidak milik GR retur ini.'],
+                    ]);
+                }
+                if ((int) $grItem->product_id !== (int) $product->id) {
+                    throw ValidationException::withMessages([
+                        "items.$index.product_id" => ['Produk harus sama dengan baris GR.'],
+                    ]);
+                }
+                $this->assertReturnQtyAgainstGrItem($return, $grItem, $qty, $resolved['factor_to_base'], $index);
+            }
 
             $return->items()->create([
                 'company_id' => $return->company_id,
                 'product_id' => $product->id,
-                'goods_receipt_item_id' => $row['goods_receipt_item_id'] ?? null,
-                'qty' => (int) $row['qty'],
+                'goods_receipt_item_id' => $grItemId,
+                'qty' => $qty,
                 'unit_cost' => (int) ($row['unit_cost'] ?? $product->cost_price ?? 0),
                 'unit' => $resolved['unit'],
                 'unit_level' => $resolved['level'],
                 'factor_to_base' => $resolved['factor_to_base'],
                 'name_snapshot' => $product->name,
                 'note' => $row['note'] ?? null,
+            ]);
+        }
+    }
+
+    private function assertReturnQtyAgainstGr(PurchaseReturn $return, PurchaseReturnItem $item): void
+    {
+        if (! $item->goods_receipt_item_id) {
+            return;
+        }
+        $grItem = GoodsReceiptItem::query()->find($item->goods_receipt_item_id);
+        if (! $grItem) {
+            throw ValidationException::withMessages([
+                'items' => ['Baris GR untuk retur tidak ditemukan.'],
+            ]);
+        }
+        $this->assertReturnQtyAgainstGrItem(
+            $return,
+            $grItem,
+            (int) $item->qty,
+            max(1, (int) ($item->factor_to_base ?: 1)),
+            null,
+            (int) $item->id,
+        );
+    }
+
+    private function assertReturnQtyAgainstGrItem(
+        PurchaseReturn $return,
+        GoodsReceiptItem $grItem,
+        int $qty,
+        int $factor,
+        ?int $index = null,
+        ?int $excludeReturnItemId = null,
+    ): void {
+        $grBase = $this->productUnits->toBaseQty((int) $grItem->qty, max(1, (int) ($grItem->factor_to_base ?: 1)));
+        $returnBase = $this->productUnits->toBaseQty($qty, max(1, $factor));
+        $priorBase = (int) PurchaseReturnItem::query()
+            ->where('goods_receipt_item_id', $grItem->id)
+            ->when($excludeReturnItemId, fn ($q) => $q->whereKeyNot($excludeReturnItemId))
+            ->whereHas('purchaseReturn', function ($q) use ($return) {
+                $q->whereKeyNot($return->id)
+                    ->whereIn('status', ['draft', 'submitted', 'approved', 'confirmed']);
+            })
+            ->get(['qty', 'factor_to_base'])
+            ->sum(fn ($row) => $this->productUnits->toBaseQty((int) $row->qty, max(1, (int) ($row->factor_to_base ?: 1))));
+
+        if ($priorBase + $returnBase > $grBase) {
+            $key = $index === null ? 'items' : "items.$index.qty";
+            throw ValidationException::withMessages([
+                $key => ['Qty retur melebihi sisa qty GR (satuan dasar).'],
             ]);
         }
     }
@@ -569,18 +654,7 @@ class ProcurementReturnService
 
     private function nextNumber(int $companyId): string
     {
-        $full = 'PRN-'.now()->format('ymd').'-';
-        $last = PurchaseReturn::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+        return $this->documentSequences->next($companyId, 'purchase_return', 'PRN');
     }
 
     private function assertWarehouse(int $companyId, int $warehouseId): void

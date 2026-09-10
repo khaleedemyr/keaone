@@ -14,7 +14,7 @@ class VendorPrepaymentController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorprepayments', 'view');
 
         $query = VendorPrepayment::query()
@@ -46,7 +46,7 @@ class VendorPrepaymentController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorprepayments', 'create');
         $this->ensureBilling();
 
@@ -71,7 +71,7 @@ class VendorPrepaymentController extends Controller
 
     public function show(VendorPrepayment $vendorPrepayment): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorprepayments', 'view');
 
         return $this->ok($this->prepayments->serialize($vendorPrepayment));
@@ -79,7 +79,7 @@ class VendorPrepaymentController extends Controller
 
     public function update(Request $request, VendorPrepayment $vendorPrepayment): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorprepayments', 'edit');
 
         $data = $request->validate([
@@ -102,7 +102,7 @@ class VendorPrepaymentController extends Controller
 
     public function submit(VendorPrepayment $vendorPrepayment): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorprepayments', 'edit');
 
         return $this->ok($this->prepayments->serialize($this->prepayments->submit($vendorPrepayment)));
@@ -110,7 +110,7 @@ class VendorPrepaymentController extends Controller
 
     public function approve(VendorPrepayment $vendorPrepayment): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorprepayments', 'edit');
 
         return $this->ok($this->prepayments->serialize($this->prepayments->approve($vendorPrepayment, request()->user())));
@@ -118,7 +118,7 @@ class VendorPrepaymentController extends Controller
 
     public function reject(Request $request, VendorPrepayment $vendorPrepayment): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorprepayments', 'edit');
 
         $data = $request->validate([
@@ -130,7 +130,7 @@ class VendorPrepaymentController extends Controller
 
     public function pay(VendorPrepayment $vendorPrepayment): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorprepayments', 'edit');
 
         return $this->ok($this->prepayments->serialize($this->prepayments->pay($vendorPrepayment, request()->user())));
@@ -138,7 +138,7 @@ class VendorPrepaymentController extends Controller
 
     public function apply(Request $request, VendorPrepayment $vendorPrepayment): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorprepayments', 'edit');
 
         $data = $request->validate([
@@ -152,7 +152,7 @@ class VendorPrepaymentController extends Controller
 
     public function cancel(VendorPrepayment $vendorPrepayment): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCanAny([['vendorprepayments', 'edit'], ['vendorprepayments', 'delete']]);
 
         return $this->ok($this->prepayments->serialize($this->prepayments->cancel($vendorPrepayment)));

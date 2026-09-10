@@ -122,7 +122,7 @@ export default function GlAccounts() {
   return (
     <div>
       <PageHeader
-        eyebrow={t('appMaster')}
+        eyebrow={t('appFinance')}
         title={t('glAccountsTitle')}
         subtitle={t('glAccountsSubtitle')}
         actions={

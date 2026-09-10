@@ -15,6 +15,8 @@ class InventoryOpsTest extends TestCase
         $this->assertSame('stock_adjustment', InventoryOps::ADJUSTMENT_REF);
         $this->assertSame('transfer_out', InventoryOps::TYPE_TRANSFER_OUT);
         $this->assertSame('transfer_in', InventoryOps::TYPE_TRANSFER_IN);
+        $this->assertSame('transfer_void_out', InventoryOps::TYPE_TRANSFER_VOID_OUT);
+        $this->assertSame('transfer_void_in', InventoryOps::TYPE_TRANSFER_VOID_IN);
         $this->assertSame('opname', InventoryOps::TYPE_OPNAME);
         $this->assertSame('adjustment', InventoryOps::TYPE_ADJUSTMENT);
     }

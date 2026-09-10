@@ -26,6 +26,7 @@ class CostingService
         ?int $refId,
         ?int $inboundUnitCost,
         bool $reverseCosting,
+        bool $syncProductCost = true,
     ): array {
         $method = InventorySettings::method($company);
 
@@ -40,7 +41,9 @@ class CostingService
         if ($qtyChange > 0 && $reverseCosting && InventorySettings::usesLayers($company)) {
             $restored = $this->restoreConsumptions($balance, $qtyChange, $refType, $refId);
             if ($restored !== null) {
-                $this->syncProductCost($product, $balance);
+                if ($syncProductCost) {
+                    $this->syncProductCost($product, $balance);
+                }
 
                 return $restored + ['method' => $method];
             }
@@ -48,28 +51,32 @@ class CostingService
 
         if ($qtyChange < 0 && $reverseCosting && InventorySettings::usesLayers($company)) {
             $result = $this->consumeSourceLayers($balance, $product, abs($qtyChange), $refType, $refId);
-            $this->syncProductCost($product, $balance);
+            if ($syncProductCost) {
+                $this->syncProductCost($product, $balance);
+            }
 
             return $result + ['method' => $method];
         }
 
         if (InventorySettings::usesLayers($company)) {
-            $this->seedOpeningLayer($balance, $product, $qtyBefore, $inboundUnitCost);
+            $this->seedOpeningLayer($balance, $product, max(0, $qtyBefore), $inboundUnitCost);
         }
 
         if ($qtyChange > 0) {
             $unitCost = $this->resolveInboundCost($product, $balance, $inboundUnitCost);
+            // When recovering from negative stock, only the positive ending qty carries value/layers.
+            $valuedQty = $qtyBefore < 0 ? max(0, $qtyBefore + $qtyChange) : $qtyChange;
             $result = match ($method) {
-                InventorySettings::FIFO => $this->inboundLayer(
-                    $balance,
-                    $qtyChange,
-                    $unitCost,
-                    $refType,
-                    $refId,
-                ),
-                InventorySettings::AVERAGE => $this->inboundAverage($balance, $qtyChange, $unitCost),
-                default => $this->inboundMovingAverage($balance, $qtyBefore, $qtyChange, $unitCost),
+                InventorySettings::FIFO => $valuedQty > 0
+                    ? $this->inboundLayer($balance, $valuedQty, $unitCost, $refType, $refId)
+                    : ['unit_cost' => $unitCost, 'cost_amount' => 0, 'consumptions' => []],
+                InventorySettings::AVERAGE => $this->inboundAverage($balance, $valuedQty, $unitCost),
+                default => $this->inboundMovingAverage($balance, max(0, $qtyBefore), $valuedQty, $unitCost),
             };
+            // Movement still reflects full inbound unit cost for audit; amount tracks valued qty.
+            if ($valuedQty !== $qtyChange && $valuedQty > 0) {
+                $result['unit_cost'] = $unitCost;
+            }
         } else {
             $qtyOut = abs($qtyChange);
             $result = match ($method) {
@@ -79,7 +86,9 @@ class CostingService
             };
         }
 
-        $this->syncProductCost($product, $balance);
+        if ($syncProductCost) {
+            $this->syncProductCost($product, $balance);
+        }
 
         return $result + ['method' => $method];
     }
@@ -369,6 +378,14 @@ class CostingService
      */
     private function inboundMovingAverage(StockBalance $balance, int $qtyBefore, int $qty, int $unitCost): array
     {
+        if ($qty <= 0) {
+            return [
+                'unit_cost' => $unitCost,
+                'cost_amount' => 0,
+                'consumptions' => [],
+            ];
+        }
+
         $value = (int) $balance->cost_value + ($qty * $unitCost);
         $newQty = $qtyBefore + $qty;
         $balance->cost_value = $value;
@@ -411,6 +428,14 @@ class CostingService
      */
     private function inboundAverage(StockBalance $balance, int $qty, int $unitCost): array
     {
+        if ($qty <= 0) {
+            return [
+                'unit_cost' => $unitCost,
+                'cost_amount' => 0,
+                'consumptions' => [],
+            ];
+        }
+
         $balance->period_receipt_qty = (int) $balance->period_receipt_qty + $qty;
         $balance->period_receipt_value = (int) $balance->period_receipt_value + ($qty * $unitCost);
         $balance->cost_value = (int) $balance->cost_value + ($qty * $unitCost);

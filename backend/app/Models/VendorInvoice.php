@@ -115,8 +115,15 @@ class VendorInvoice extends Model
     public function payableTotal(): int
     {
         $payable = (int) $this->amount_payable;
+        if ($payable > 0) {
+            return $payable;
+        }
+        // 0 valid bila PPh men-cover penuh; selain itu fallback ke total (legacy).
+        if ((int) ($this->withholding_tax ?? 0) > 0) {
+            return 0;
+        }
 
-        return $payable > 0 ? $payable : (int) $this->total;
+        return (int) $this->total;
     }
 
     public function amountDue(): int

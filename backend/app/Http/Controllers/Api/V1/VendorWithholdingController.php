@@ -14,7 +14,7 @@ class VendorWithholdingController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorwithholding', 'view');
 
         if (! $this->withholding->enabled()) {
@@ -56,7 +56,7 @@ class VendorWithholdingController extends Controller
 
     public function remit(VendorWithholdingRecord $vendorWithholdingRecord): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorwithholding', 'edit');
 
         $record = $this->withholding->markRemitted($vendorWithholdingRecord);

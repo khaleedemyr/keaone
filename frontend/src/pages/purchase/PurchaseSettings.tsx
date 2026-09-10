@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../../api/client'
-import type { ApiOk, Settings, GlAccount } from '../../types'
+import type { ApiOk, Settings } from '../../types'
 import { FormAlert, useFeedback } from '../../components/feedback'
 import { PageHeader } from '../../components/ui'
 import { useAuth } from '../../auth'
 import { useAccess } from '../../access'
-import { useI18n, type MsgKey } from '../../i18n'
+import { useI18n } from '../../i18n'
 
 type ProcurementSettingsForm = Pick<
   Settings,
@@ -31,8 +31,6 @@ type ProcurementSettingsForm = Pick<
   | 'vendor_payment_batch_enabled'
   | 'vendor_prepayment_enabled'
   | 'procurement_withholding_tax_enabled'
-  | 'procurement_gl_posting_enabled'
-  | 'procurement_budget_check_enabled'
   | 'procurement_rfq_enabled'
   | 'procurement_vendor_price_list_enabled'
   | 'procurement_contract_enabled'
@@ -48,15 +46,6 @@ type ProcurementSettingsForm = Pick<
   | 'procurement_sod_creator_approver'
   | 'procurement_sod_approver_receiver'
   | 'procurement_field_audit_enabled'
-  | 'gl_procurement_inventory_account_id'
-  | 'gl_procurement_grni_account_id'
-  | 'gl_procurement_ap_account_id'
-  | 'gl_procurement_vat_input_account_id'
-  | 'gl_procurement_cash_account_id'
-  | 'gl_procurement_bank_account_id'
-  | 'gl_procurement_wht_payable_account_id'
-  | 'gl_procurement_expense_account_id'
-  | 'gl_procurement_fixed_asset_account_id'
   | 'procurement_match_qty_tolerance'
   | 'procurement_match_price_tolerance'
 >
@@ -83,8 +72,6 @@ const DEFAULT_FORM: ProcurementSettingsForm = {
   vendor_payment_batch_enabled: false,
   vendor_prepayment_enabled: false,
   procurement_withholding_tax_enabled: false,
-  procurement_gl_posting_enabled: false,
-  procurement_budget_check_enabled: false,
   procurement_rfq_enabled: false,
   procurement_vendor_price_list_enabled: false,
   procurement_contract_enabled: false,
@@ -100,15 +87,6 @@ const DEFAULT_FORM: ProcurementSettingsForm = {
   procurement_sod_creator_approver: true,
   procurement_sod_approver_receiver: false,
   procurement_field_audit_enabled: true,
-  gl_procurement_inventory_account_id: null,
-  gl_procurement_grni_account_id: null,
-  gl_procurement_ap_account_id: null,
-  gl_procurement_vat_input_account_id: null,
-  gl_procurement_cash_account_id: null,
-  gl_procurement_bank_account_id: null,
-  gl_procurement_wht_payable_account_id: null,
-  gl_procurement_expense_account_id: null,
-  gl_procurement_fixed_asset_account_id: null,
   procurement_match_qty_tolerance: 0,
   procurement_match_price_tolerance: 0,
 }
@@ -137,8 +115,6 @@ function settingsToForm(settings: Settings): ProcurementSettingsForm {
     vendor_payment_batch_enabled: settings.vendor_payment_batch_enabled ?? false,
     vendor_prepayment_enabled: settings.vendor_prepayment_enabled ?? false,
     procurement_withholding_tax_enabled: settings.procurement_withholding_tax_enabled ?? false,
-    procurement_gl_posting_enabled: settings.procurement_gl_posting_enabled ?? false,
-    procurement_budget_check_enabled: settings.procurement_budget_check_enabled ?? false,
     procurement_rfq_enabled: settings.procurement_rfq_enabled ?? false,
     procurement_vendor_price_list_enabled: settings.procurement_vendor_price_list_enabled ?? false,
     procurement_contract_enabled: settings.procurement_contract_enabled ?? false,
@@ -154,15 +130,6 @@ function settingsToForm(settings: Settings): ProcurementSettingsForm {
     procurement_sod_creator_approver: settings.procurement_sod_creator_approver ?? true,
     procurement_sod_approver_receiver: settings.procurement_sod_approver_receiver ?? false,
     procurement_field_audit_enabled: settings.procurement_field_audit_enabled ?? true,
-    gl_procurement_inventory_account_id: settings.gl_procurement_inventory_account_id ?? null,
-    gl_procurement_grni_account_id: settings.gl_procurement_grni_account_id ?? null,
-    gl_procurement_ap_account_id: settings.gl_procurement_ap_account_id ?? null,
-    gl_procurement_vat_input_account_id: settings.gl_procurement_vat_input_account_id ?? null,
-    gl_procurement_cash_account_id: settings.gl_procurement_cash_account_id ?? null,
-    gl_procurement_bank_account_id: settings.gl_procurement_bank_account_id ?? null,
-    gl_procurement_wht_payable_account_id: settings.gl_procurement_wht_payable_account_id ?? null,
-    gl_procurement_expense_account_id: settings.gl_procurement_expense_account_id ?? null,
-    gl_procurement_fixed_asset_account_id: settings.gl_procurement_fixed_asset_account_id ?? null,
     procurement_match_qty_tolerance: settings.procurement_match_qty_tolerance ?? 0,
     procurement_match_price_tolerance: settings.procurement_match_price_tolerance ?? 0,
   }
@@ -176,8 +143,7 @@ export default function PurchaseSettings() {
   const canEdit = can('purchasesettings', 'edit')
   const [form, setForm] = useState<ProcurementSettingsForm>(DEFAULT_FORM)
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [glAccounts, setGlAccounts] = useState<GlAccount[]>([])
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -188,14 +154,6 @@ export default function PurchaseSettings() {
       })
       .catch((err) => {
         if (!cancelled) feedback.error(apiMessage(err, t('loadFailed')))
-      })
-    void api
-      .get<ApiOk<GlAccount[]>>('/gl-accounts', { params: { for_select: 1, status: 'active' }, silent: true })
-      .then(({ data }) => {
-        if (!cancelled) setGlAccounts(data.data ?? [])
-      })
-      .catch(() => {
-        if (!cancelled) setGlAccounts([])
       })
     return () => {
       cancelled = true
@@ -225,36 +183,6 @@ export default function PurchaseSettings() {
 
   function toggle(key: keyof ProcurementSettingsForm) {
     setForm({ ...form, [key]: !form[key] })
-  }
-
-  function setAccountId(key: keyof ProcurementSettingsForm, value: string) {
-    setForm({ ...form, [key]: value ? Number(value) : null })
-  }
-
-  function accountSelect(
-    key: keyof ProcurementSettingsForm,
-    label: MsgKey,
-    disabled: boolean,
-  ) {
-    const current = form[key]
-    return (
-      <label className="block text-sm text-muted">
-        {t(label)}
-        <select
-          className="field"
-          disabled={!canEdit || disabled}
-          value={current != null ? String(current) : ''}
-          onChange={(e) => setAccountId(key, e.target.value)}
-        >
-          <option value="">{t('glMappingNone')}</option>
-          {glAccounts.map((acc) => (
-            <option key={acc.id} value={acc.id}>
-              {acc.code} — {acc.name}
-            </option>
-          ))}
-        </select>
-      </label>
-    )
   }
 
   return (
@@ -520,6 +448,7 @@ export default function PurchaseSettings() {
 
         <section className="glass space-y-3 rounded-3xl p-5">
           <h3 className="text-sm font-semibold text-fg">{t('procurementSettingsPayments')}</h3>
+          <p className="text-xs text-muted">{t('procurementSettingsApFinanceHint')}</p>
           <label className="flex items-start gap-2 text-sm text-muted opacity-70">
             <input
               type="checkbox"
@@ -561,35 +490,6 @@ export default function PurchaseSettings() {
           </label>
         </section>
 
-        <section className="glass space-y-3 rounded-3xl p-5">
-          <h3 className="text-sm font-semibold text-fg">{t('procurementSettingsGl')}</h3>
-          <label className="flex items-start gap-2 text-sm text-muted opacity-70">
-            <input
-              type="checkbox"
-              className="mt-1"
-              disabled={!canEdit || !form.vendor_invoice_enabled}
-              checked={Boolean(form.procurement_gl_posting_enabled)}
-              onChange={() => toggle('procurement_gl_posting_enabled')}
-            />
-            <span>
-              <span className="text-fg">{t('procurementGlPostingEnabled')}</span>
-              <span className="mt-0.5 block text-xs">{t('procurementGlPostingEnabledHint')}</span>
-            </span>
-          </label>
-          {form.procurement_gl_posting_enabled ? (
-            <div className="grid gap-3 md:grid-cols-2">
-              {accountSelect('gl_procurement_inventory_account_id', 'glMappingInventory', !form.procurement_gl_posting_enabled)}
-              {accountSelect('gl_procurement_grni_account_id', 'glMappingGrni', !form.procurement_gl_posting_enabled)}
-              {accountSelect('gl_procurement_ap_account_id', 'glMappingAp', !form.procurement_gl_posting_enabled)}
-              {accountSelect('gl_procurement_vat_input_account_id', 'glMappingVatInput', !form.procurement_gl_posting_enabled)}
-              {accountSelect('gl_procurement_cash_account_id', 'glMappingCash', !form.procurement_gl_posting_enabled)}
-              {accountSelect('gl_procurement_bank_account_id', 'glMappingBank', !form.procurement_gl_posting_enabled)}
-              {accountSelect('gl_procurement_wht_payable_account_id', 'glMappingWhtPayable', !form.procurement_gl_posting_enabled)}
-              {accountSelect('gl_procurement_expense_account_id', 'glMappingExpense', !form.procurement_gl_posting_enabled)}
-              {accountSelect('gl_procurement_fixed_asset_account_id', 'glMappingFixedAsset', !form.procurement_gl_posting_enabled)}
-            </div>
-          ) : null}
-        </section>
 
         <section className="glass space-y-3 rounded-3xl p-5">
           <h3 className="text-sm font-semibold text-fg">{t('procurementSettingsSourcing')}</h3>
@@ -645,22 +545,6 @@ export default function PurchaseSettings() {
           </label>
         </section>
 
-        <section className="glass space-y-3 rounded-3xl p-5">
-          <h3 className="text-sm font-semibold text-fg">{t('procurementSettingsBudget')}</h3>
-          <label className="flex items-start gap-2 text-sm text-muted">
-            <input
-              type="checkbox"
-              className="mt-1"
-              disabled={!canEdit}
-              checked={Boolean(form.procurement_budget_check_enabled)}
-              onChange={() => toggle('procurement_budget_check_enabled')}
-            />
-            <span>
-              <span className="text-fg">{t('procurementBudgetCheckEnabled')}</span>
-              <span className="mt-0.5 block text-xs">{t('procurementBudgetCheckEnabledHint')}</span>
-            </span>
-          </label>
-        </section>
 
         {canEdit ? (
           <button type="submit" disabled={saving} className="btn-primary">

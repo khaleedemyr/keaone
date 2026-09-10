@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ProductUnit;
 use App\Models\StockProduction;
 use App\Services\StockProductionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class StockProductionController extends Controller
 {
@@ -50,9 +52,14 @@ class StockProductionController extends Controller
         $data = $request->validate([
             'product_id' => ['required', 'integer'],
             'qty' => ['required', 'integer', 'min:1'],
+            'unit_level' => ['nullable', Rule::in(ProductUnit::LEVELS)],
         ]);
 
-        return $this->ok($this->productions->preview((int) $data['product_id'], (int) $data['qty']));
+        return $this->ok($this->productions->preview(
+            (int) $data['product_id'],
+            (int) $data['qty'],
+            isset($data['unit_level']) ? (string) $data['unit_level'] : null,
+        ));
     }
 
     public function store(Request $request): JsonResponse
@@ -66,6 +73,7 @@ class StockProductionController extends Controller
             'warehouse_id' => ['required', 'integer'],
             'product_id' => ['required', 'integer'],
             'qty' => ['required', 'integer', 'min:1'],
+            'unit_level' => ['nullable', Rule::in(ProductUnit::LEVELS)],
             'note' => ['nullable', 'string'],
         ];
 
@@ -105,6 +113,7 @@ class StockProductionController extends Controller
             'warehouse_id' => ['sometimes', 'integer'],
             'product_id' => ['sometimes', 'integer'],
             'qty' => ['sometimes', 'integer', 'min:1'],
+            'unit_level' => ['nullable', Rule::in(ProductUnit::LEVELS)],
             'note' => ['nullable', 'string'],
         ];
 

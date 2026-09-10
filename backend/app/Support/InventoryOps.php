@@ -16,6 +16,10 @@ class InventoryOps
 
     public const TYPE_TRANSFER_IN = 'transfer_in';
 
+    public const TYPE_TRANSFER_VOID_OUT = 'transfer_void_out';
+
+    public const TYPE_TRANSFER_VOID_IN = 'transfer_void_in';
+
     public const TYPE_OPNAME = 'opname';
 
     public const TYPE_ADJUSTMENT = 'adjustment';

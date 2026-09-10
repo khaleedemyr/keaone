@@ -54,3 +54,6 @@ backend/.phpunit.cache/
 _ide_helper.php
 
 backend/stderr
+
+# Local Playwright/QA dumps
+frontend/storage-qa-*/

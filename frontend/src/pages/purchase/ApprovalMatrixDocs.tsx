@@ -297,10 +297,10 @@ export default function ApprovalMatrixDocs() {
         hideStatus={false}
       />
 
-      <div className="card overflow-x-auto">
+      <div className="glass mt-4 overflow-x-auto rounded-3xl">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-muted">
+            <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
               <th className="px-4 py-3">{t('procurementApprovalDocType')}</th>
               <th className="px-4 py-3">{t('navDepartments')}</th>
               <th className="px-4 py-3">{t('procurementApprovalAmountRange')}</th>

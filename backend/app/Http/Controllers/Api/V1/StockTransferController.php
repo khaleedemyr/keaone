@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ProductUnit;
 use App\Models\StockTransfer;
 use App\Services\StockTransferService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class StockTransferController extends Controller
 {
@@ -52,10 +54,7 @@ class StockTransferController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer'],
             'items.*.qty' => ['required', 'integer', 'min:1'],
-            'items.*.qty_input' => ['nullable', 'integer', 'min:1'],
-            'items.*.unit' => ['nullable', 'string', 'max:50'],
-            'items.*.unit_level' => ['nullable', 'string', 'max:20'],
-            'items.*.factor_to_base' => ['nullable', 'integer', 'min:1'],
+            'items.*.unit_level' => ['nullable', Rule::in(ProductUnit::LEVELS)],
         ]);
 
         $row = $this->transfers->create($data, $request->user());
@@ -83,10 +82,7 @@ class StockTransferController extends Controller
             'items' => ['sometimes', 'array', 'min:1'],
             'items.*.product_id' => ['required_with:items', 'integer'],
             'items.*.qty' => ['required_with:items', 'integer', 'min:1'],
-            'items.*.qty_input' => ['nullable', 'integer', 'min:1'],
-            'items.*.unit' => ['nullable', 'string', 'max:50'],
-            'items.*.unit_level' => ['nullable', 'string', 'max:20'],
-            'items.*.factor_to_base' => ['nullable', 'integer', 'min:1'],
+            'items.*.unit_level' => ['nullable', Rule::in(ProductUnit::LEVELS)],
         ]);
 
         return $this->ok($this->transfers->serialize($this->transfers->update($stockTransfer, $data)));
@@ -106,6 +102,20 @@ class StockTransferController extends Controller
         $this->ensureCan('stocktransfers', 'edit');
 
         return $this->ok($this->transfers->serialize($this->transfers->receive($stockTransfer)));
+    }
+
+    public function void(Request $request, StockTransfer $stockTransfer): JsonResponse
+    {
+        $this->ensureModule('stock');
+        $this->ensureCan('stocktransfers', 'edit');
+
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        return $this->ok($this->transfers->serialize(
+            $this->transfers->void($stockTransfer, $request->user(), $data['reason'] ?? null)
+        ));
     }
 
     public function cancel(StockTransfer $stockTransfer): JsonResponse

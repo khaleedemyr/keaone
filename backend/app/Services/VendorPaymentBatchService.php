@@ -22,6 +22,7 @@ class VendorPaymentBatchService
         private NotificationService $notifications,
         private WithholdingTaxService $withholdingTax,
         private GlPostingService $glPosting,
+        private DocumentSequenceService $documentSequences,
     ) {}
 
     public function enabled(?\App\Models\Company $company = null): bool
@@ -269,6 +270,12 @@ class VendorPaymentBatchService
 
         return DB::transaction(function () use ($batch, $user) {
             $batch = VendorPaymentBatch::query()->whereKey($batch->id)->lockForUpdate()->firstOrFail();
+            $requiredStatus = $this->needApproval() ? 'approved' : 'submitted';
+            if ($batch->status !== $requiredStatus) {
+                throw ValidationException::withMessages([
+                    'status' => ['Batch tidak bisa dibayar (status berubah).'],
+                ]);
+            }
             $batch->load('items.vendorInvoice');
 
             $this->assertItemsPayable($batch);
@@ -303,10 +310,16 @@ class VendorPaymentBatchService
                 $this->withholdingTax->recordFromPayment($invoice, $batch, (int) $item->amount, $paidAt);
             }
 
-            $batch->update([
-                'status' => 'paid',
-                'paid_at' => $paidAt,
-            ]);
+            $updated = VendorPaymentBatch::query()
+                ->whereKey($batch->id)
+                ->where('status', $requiredStatus)
+                ->update([
+                    'status' => 'paid',
+                    'paid_at' => $paidAt,
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Batch tidak bisa dibayar (status berubah).']]);
+            }
 
             $this->glPosting->postPaymentBatch($batch->fresh(), $user);
 
@@ -633,18 +646,7 @@ class VendorPaymentBatchService
 
     private function nextNumber(int $companyId): string
     {
-        $full = 'VPB-'.now()->format('ymd').'-';
-        $last = VendorPaymentBatch::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+        return $this->documentSequences->next($companyId, 'vendor_payment_batch', 'VPB');
     }
 
     /**

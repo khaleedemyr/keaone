@@ -26,6 +26,7 @@ class RfqService
         private InventoryService $inventory,
         private ProductUnitService $productUnits,
         private PurchaseService $purchases,
+        private DocumentSequenceService $documentSequences,
     ) {}
 
     public function enabled(?Company $company = null): bool
@@ -250,6 +251,13 @@ class RfqService
             }
             if ($quote->items()->count() === 0) {
                 throw ValidationException::withMessages(['items' => ['Quote belum punya harga item.']]);
+            }
+
+            $zeroCost = $quote->items()->where('unit_cost', '<=', 0)->exists();
+            if ($zeroCost) {
+                throw ValidationException::withMessages([
+                    'items' => ['Semua item quote harus punya harga unit > 0.'],
+                ]);
             }
 
             $quote->update([
@@ -629,34 +637,12 @@ class RfqService
 
     private function nextNumber(string $prefix, int $companyId): string
     {
-        $full = $prefix.'-'.now()->format('ymd').'-';
-        $last = Rfq::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+        return $this->documentSequences->next($companyId, 'rfq', $prefix);
     }
 
     private function nextQuoteNumber(Rfq $rfq): string
     {
-        $full = 'VQ-'.now()->format('ymd').'-';
-        $last = VendorQuote::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $rfq->company_id)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+        return $this->documentSequences->next((int) $rfq->company_id, 'vendor_quote', 'VQ');
     }
 
     private function assertWarehouse(int $companyId, int $warehouseId): void

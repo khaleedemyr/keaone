@@ -50,6 +50,7 @@ export default function PublicVendorPortalView({ token }: { token: string }) {
   const [meta, setMeta] = useState<PortalMeta | null>(null)
   const [orders, setOrders] = useState<PortalPo[]>([])
   const [error, setError] = useState('')
+  const [actionError, setActionError] = useState('')
   const [loading, setLoading] = useState(true)
   const [confirming, setConfirming] = useState<string | null>(null)
   const [uploading, setUploading] = useState<string | null>(null)
@@ -117,11 +118,12 @@ export default function PublicVendorPortalView({ token }: { token: string }) {
 
   async function confirmPo(shareToken: string) {
     setConfirming(shareToken)
+    setActionError('')
     try {
       await axios.post(`/api/v1/public/vendor-portal/${token}/purchase-orders/${shareToken}/confirm`)
       await load()
     } catch {
-      setError(t('saveFailed'))
+      setActionError(t('vendorPortalActionFailed'))
     } finally {
       setConfirming(null)
     }
@@ -180,6 +182,7 @@ export default function PublicVendorPortalView({ token }: { token: string }) {
             {t('vendorPortalSubtitle')}
             {meta.company?.name ? ` · ${meta.company.name}` : ''}
           </p>
+          {actionError ? <p className="mt-3 text-sm text-danger">{actionError}</p> : null}
 
           {orders.length === 0 ? (
             <p className="mt-6 text-sm text-muted">{t('vendorPortalNoOrders')}</p>

@@ -131,7 +131,11 @@ class ApprovalGovernanceService
             ->map(fn ($id) => (int) $id)
             ->all();
 
-        if (in_array($receiverUserId, $approved, true)) {
+        if ($po->approved_by) {
+            $approved[] = (int) $po->approved_by;
+        }
+
+        if (in_array($receiverUserId, array_values(array_unique($approved)), true)) {
             throw ValidationException::withMessages([
                 'user_id' => ['Approver PO tidak boleh menerima GR yang sama (segregation of duties).'],
             ]);
@@ -323,16 +327,20 @@ class ApprovalGovernanceService
         return $total;
     }
 
-    public function markApprovalRowsPending(Collection $rows): void
+    public function markApprovalRowsPending(Collection $rows, ?int $onlyLevel = null): void
     {
         $now = now();
+        $minLevel = $onlyLevel ?? ($rows->min('level') !== null ? (int) $rows->min('level') : 1);
+
         foreach ($rows as $row) {
+            $level = (int) $row->level;
+            $isActive = $level === $minLevel;
             $row->update([
-                'status' => 'pending',
+                'status' => $isActive ? 'pending' : 'waiting',
                 'acted_by' => null,
                 'acted_at' => null,
                 'note' => null,
-                'pending_since' => $now,
+                'pending_since' => $isActive ? $now : null,
                 'escalated_at' => null,
             ]);
         }

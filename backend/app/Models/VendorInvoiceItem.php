@@ -43,6 +43,11 @@ class VendorInvoiceItem extends Model
         return $this->belongsTo(VendorInvoice::class, 'vendor_invoice_id');
     }
 
+    public function vendorInvoice(): BelongsTo
+    {
+        return $this->invoice();
+    }
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
@@ -51,5 +56,10 @@ class VendorInvoiceItem extends Model
     public function purchaseOrderItem(): BelongsTo
     {
         return $this->belongsTo(PurchaseOrderItem::class);
+    }
+
+    public function goodsReceiptItem(): BelongsTo
+    {
+        return $this->belongsTo(GoodsReceiptItem::class);
     }
 }

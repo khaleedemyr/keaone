@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\StockLot;
 use App\Models\StockLotMovement;
 use App\Support\InventoryOps;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Validation\ValidationException;
 
 class LotLedgerService
@@ -29,22 +30,32 @@ class LotLedgerService
             throw ValidationException::withMessages(['lot_code' => ['Kode lot wajib diisi untuk ledger.']]);
         }
 
-        $lot = StockLot::query()->withoutGlobalScopes()->firstOrCreate(
-            [
-                'company_id' => $companyId,
-                'warehouse_id' => $warehouseId,
-                'product_id' => $productId,
-                'lot_code' => $code,
-            ],
-            [
-                'qty' => 0,
-                'unit_cost' => $unitCost,
-                'status' => 'open',
-                'source_ref_type' => $refType,
-                'source_ref_id' => $refId,
-                'produced_at' => now(),
-            ],
-        );
+        try {
+            $lot = StockLot::query()->withoutGlobalScopes()->firstOrCreate(
+                [
+                    'company_id' => $companyId,
+                    'warehouse_id' => $warehouseId,
+                    'product_id' => $productId,
+                    'lot_code' => $code,
+                ],
+                [
+                    'qty' => 0,
+                    'unit_cost' => $unitCost,
+                    'status' => 'open',
+                    'source_ref_type' => $refType,
+                    'source_ref_id' => $refId,
+                    'produced_at' => now(),
+                ],
+            );
+        } catch (UniqueConstraintViolationException) {
+            $lot = StockLot::query()
+                ->withoutGlobalScopes()
+                ->where('company_id', $companyId)
+                ->where('warehouse_id', $warehouseId)
+                ->where('product_id', $productId)
+                ->where('lot_code', $code)
+                ->firstOrFail();
+        }
 
         $lot = StockLot::query()->withoutGlobalScopes()->whereKey($lot->id)->lockForUpdate()->firstOrFail();
         if ($lot->status === 'voided') {

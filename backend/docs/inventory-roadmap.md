@@ -20,7 +20,7 @@ Gunakan dokumen ini saat merencanakan fitur baru, migration DB, menu RBAC, costi
 | Retail polish (Fase 4) | Scan-first opname & transfer, kartu stok + picker SKU/barcode (varian = produk terpisah) |
 | Manufaktur (Fase 5) | Modul `work_order` (default off): BOM multilevel leaf, qty aktual/varians, scrap, lot_code ringan |
 | Hook gerakan | GR confirm/void, penjualan (COGS), retur beli, opening qty, transfer, opname, adjustment, production issue/receipt |
-| Belum ada | Void transfer shipped, lot ledger penuh, serial FG, routing/MES, void produksi confirmed |
+| Belum ada | lot ledger penuh pada jual/transfer, serial FG UI lanjutan, routing/MES penuh |
 
 **Prinsip:** katalog & BOM resep tetap di **Data Master** / produk. Gerakan, saldo, nilai, dan operasi gudang hidup di app **Persediaan**. Pembelian tetap di **Pengadaan**.
 

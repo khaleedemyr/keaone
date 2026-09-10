@@ -5,10 +5,12 @@ namespace App\Services;
 use App\Models\CompanyUser;
 use App\Models\Contact;
 use App\Models\GoodsReceipt;
+use App\Models\GoodsReceiptItem;
 use App\Models\MatchException;
 use App\Models\Outlet;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use App\Models\User;
 use App\Models\VendorInvoice;
 use App\Models\VendorInvoiceApproval;
@@ -27,6 +29,7 @@ class VendorInvoiceService
         private ProcurementMatchService $matchService,
         private WithholdingTaxService $withholdingTax,
         private GlPostingService $glPosting,
+        private DocumentSequenceService $documentSequences,
     ) {}
 
     public function enabled(?\App\Models\Company $company = null): bool
@@ -181,8 +184,17 @@ class VendorInvoiceService
 
         $result = DB::transaction(function () use ($invoice, $user) {
             $invoice = VendorInvoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            if ($invoice->status !== 'submitted') {
+                throw ValidationException::withMessages(['status' => ['Hanya invoice yang diajukan yang bisa disetujui.']]);
+            }
 
-            if (! $this->needApproval() || $invoice->approvals()->count() === 0) {
+            if ($this->needApproval() && $invoice->approvals()->count() === 0) {
+                throw ValidationException::withMessages([
+                    'approvals' => ['Invoice membutuhkan approver. Ajukan ulang dengan daftar approver.'],
+                ]);
+            }
+
+            if (! $this->needApproval()) {
                 $invoice->update([
                     'status' => 'approved',
                     'approved_by' => $user->id,
@@ -277,7 +289,7 @@ class VendorInvoiceService
                 $step->update([
                     'status' => 'rejected',
                     'acted_by' => $user->id,
-                    'acted_at' => now,
+                    'acted_at' => now(),
                     'note' => $note,
                 ]);
             }
@@ -565,7 +577,8 @@ class VendorInvoiceService
             'vendor_ref' => $payload['vendor_ref'] ?? null,
             'number' => $this->nextNumber($companyId),
             'client_uuid' => $payload['client_uuid'],
-            'status' => 'submitted',
+            // Draft bila butuh approval internal; submitted hanya jika approval off.
+            'status' => $this->needApproval() ? 'draft' : 'submitted',
             'match_status' => ProcurementSettings::matchEnabled() ? 'pending' : null,
             'invoice_date' => $payload['invoice_date'] ?? now()->toDateString(),
             'due_date' => $payload['due_date'] ?? null,
@@ -578,6 +591,10 @@ class VendorInvoiceService
 
         $totals = $this->attachItems($invoice, $payload['items'] ?? [], $payload);
         $invoice->update($totals);
+
+        if ($this->needApproval()) {
+            // Biarkan staff internal setujui/ajukan; jangan auto-approve chain kosong.
+        }
 
         return $this->loadInvoice($invoice->fresh());
     }
@@ -594,7 +611,7 @@ class VendorInvoiceService
         }
 
         $subtotal = 0;
-        foreach ($items as $row) {
+        foreach ($items as $index => $row) {
             $product = Product::query()->findOrFail($row['product_id']);
             $resolved = $this->productUnits->resolveLine(
                 $product,
@@ -607,11 +624,42 @@ class VendorInvoiceService
             $lineTotal = max(0, ($qty * $unitCost) - $discount);
             $subtotal += $lineTotal;
 
+            $poItemId = isset($row['purchase_order_item_id']) ? (int) $row['purchase_order_item_id'] : null;
+            $grItemId = isset($row['goods_receipt_item_id']) ? (int) $row['goods_receipt_item_id'] : null;
+
+            if ($poItemId) {
+                $poItem = PurchaseOrderItem::query()->find($poItemId);
+                if (! $poItem || (int) $poItem->purchase_order_id !== (int) ($invoice->purchase_order_id ?? 0)) {
+                    throw ValidationException::withMessages([
+                        "items.$index.purchase_order_item_id" => ['Baris PO tidak valid untuk invoice ini.'],
+                    ]);
+                }
+                if ((int) $poItem->product_id !== (int) $product->id) {
+                    throw ValidationException::withMessages([
+                        "items.$index.product_id" => ['Produk harus sama dengan baris PO.'],
+                    ]);
+                }
+            }
+
+            if ($grItemId) {
+                $grItem = GoodsReceiptItem::query()->find($grItemId);
+                if (! $grItem || (int) $grItem->goods_receipt_id !== (int) ($invoice->goods_receipt_id ?? 0)) {
+                    throw ValidationException::withMessages([
+                        "items.$index.goods_receipt_item_id" => ['Baris GR tidak valid untuk invoice ini.'],
+                    ]);
+                }
+                if ((int) $grItem->product_id !== (int) $product->id) {
+                    throw ValidationException::withMessages([
+                        "items.$index.product_id" => ['Produk harus sama dengan baris GR.'],
+                    ]);
+                }
+            }
+
             $invoice->items()->create([
                 'company_id' => $invoice->company_id,
                 'product_id' => $product->id,
-                'purchase_order_item_id' => $row['purchase_order_item_id'] ?? null,
-                'goods_receipt_item_id' => $row['goods_receipt_item_id'] ?? null,
+                'purchase_order_item_id' => $poItemId,
+                'goods_receipt_item_id' => $grItemId,
                 'qty' => $qty,
                 'unit_cost' => $unitCost,
                 'discount' => $discount,
@@ -792,18 +840,7 @@ class VendorInvoiceService
 
     private function nextNumber(int $companyId): string
     {
-        $full = 'VIN-'.now()->format('ymd').'-';
-        $last = VendorInvoice::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+        return $this->documentSequences->next($companyId, 'vendor_invoice', 'VIN');
     }
 
     private function assertSupplier(int $companyId, int $supplierId): void

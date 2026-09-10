@@ -23,6 +23,9 @@ class StockTransfer extends Model
         'note',
         'shipped_at',
         'received_at',
+        'voided_at',
+        'voided_by',
+        'void_reason',
     ];
 
     protected function casts(): array
@@ -30,6 +33,7 @@ class StockTransfer extends Model
         return [
             'shipped_at' => 'datetime',
             'received_at' => 'datetime',
+            'voided_at' => 'datetime',
         ];
     }
 

@@ -19,7 +19,6 @@ type Section =
   | 'choices'
   | 'suppliers'
   | 'customers'
-  | 'glaccounts'
 
 const Products = lazy(() => import('../pages/Products'))
 const Categories = lazy(() => import('../pages/Categories'))
@@ -33,7 +32,6 @@ const CustomFields = lazy(() => import('../pages/CustomFields'))
 const ChoiceTypes = lazy(() => import('../pages/ChoiceTypes'))
 const Choices = lazy(() => import('../pages/Choices'))
 const Parties = lazy(() => import('../pages/Parties'))
-const GlAccounts = lazy(() => import('../pages/GlAccounts'))
 
 export const MASTER_NAV_GROUPS: { id: string; label: MsgKey; items: { id: Section; label: MsgKey }[] }[] = [
   {
@@ -64,11 +62,6 @@ export const MASTER_NAV_GROUPS: { id: string; label: MsgKey; items: { id: Sectio
       { id: 'choicetypes', label: 'navChoiceTypes' },
       { id: 'choices', label: 'navChoices' },
     ],
-  },
-  {
-    id: 'finance',
-    label: 'masterGroupFinance',
-    items: [{ id: 'glaccounts', label: 'navGlAccounts' }],
   },
   {
     id: 'partners',
@@ -122,7 +115,6 @@ export default function MasterApp() {
       {current === 'customfields' ? <CustomFields /> : null}
       {current === 'choicetypes' ? <ChoiceTypes /> : null}
       {current === 'choices' ? <Choices /> : null}
-      {current === 'glaccounts' ? <GlAccounts /> : null}
       {current === 'suppliers' ? (
         <Parties
           menu="suppliers"

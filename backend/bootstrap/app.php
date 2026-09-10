@@ -31,6 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'company' => \App\Http\Middleware\EnsureCompany::class,
             'platform' => \App\Http\Middleware\EnsurePlatform::class,
             'sse.auth' => \App\Http\Middleware\AuthenticateEventStream::class,
+            'storefront.customer' => \App\Http\Middleware\AuthenticateStorefrontCustomer::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

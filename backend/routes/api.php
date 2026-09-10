@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\JobLevelController;
 use App\Http\Controllers\Api\V1\MarketingBlogController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\PosHoldController;
 use App\Http\Controllers\Api\V1\OutletController;
 use App\Http\Controllers\Api\V1\PlatformBlogController;
 use App\Http\Controllers\Api\V1\PlatformSupportController;
@@ -41,8 +42,11 @@ use App\Http\Controllers\Api\V1\SaleController;
 use App\Http\Controllers\Api\V1\GoodsReceiptController;
 use App\Http\Controllers\Api\V1\PublicCompanyInviteController;
 use App\Http\Controllers\Api\V1\PublicPurchaseOrderController;
+use App\Http\Controllers\Api\V1\PublicStorefrontController;
 use App\Http\Controllers\Api\V1\PublicVendorPortalController;
 use App\Http\Controllers\Api\V1\PublicPurchaseRequisitionController;
+use App\Http\Controllers\Api\V1\StorefrontController;
+use App\Http\Controllers\Api\V1\StorefrontCustomerAuthController;
 use App\Http\Controllers\Api\V1\PurchaseOrderController;
 use App\Http\Controllers\Api\V1\PurchaseRequisitionController;
 use App\Http\Controllers\Api\V1\ProcurementAttachmentController;
@@ -98,6 +102,26 @@ Route::prefix('v1')->group(function () {
     Route::post('public/vendor-portal/{portalToken}/purchase-orders/{shareToken}/invoices', [PublicVendorPortalController::class, 'storeInvoice']);
     Route::get('public/purchase-requisitions/{shareToken}', [PublicPurchaseRequisitionController::class, 'show']);
     Route::get('public/invites/{token}', [PublicCompanyInviteController::class, 'show']);
+    Route::get('public/storefront', [PublicStorefrontController::class, 'show']);
+    Route::get('public/storefront/products', [PublicStorefrontController::class, 'products']);
+    Route::get('public/storefront/products/{productId}', [PublicStorefrontController::class, 'showProduct'])
+        ->whereNumber('productId');
+    Route::get('public/storefront/products/{productId}/reviews', [PublicStorefrontController::class, 'productReviews'])
+        ->whereNumber('productId');
+    Route::post('public/storefront/orders', [PublicStorefrontController::class, 'placeOrder']);
+    Route::get('public/storefront/shipping/destinations', [PublicStorefrontController::class, 'searchShippingDestinations']);
+    Route::post('public/storefront/shipping/cost', [PublicStorefrontController::class, 'calculateShipping']);
+    Route::post('public/storefront/auth/register', [StorefrontCustomerAuthController::class, 'register'])
+        ->middleware('throttle:storefront-register');
+    Route::post('public/storefront/auth/login', [StorefrontCustomerAuthController::class, 'login'])
+        ->middleware('throttle:storefront-login');
+    Route::middleware('storefront.customer')->group(function () {
+        Route::get('public/storefront/auth/me', [StorefrontCustomerAuthController::class, 'me']);
+        Route::post('public/storefront/auth/logout', [StorefrontCustomerAuthController::class, 'logout']);
+        Route::put('public/storefront/auth/profile', [StorefrontCustomerAuthController::class, 'updateProfile']);
+        Route::get('public/storefront/auth/orders', [StorefrontCustomerAuthController::class, 'orders']);
+        Route::post('public/storefront/auth/reviews', [StorefrontCustomerAuthController::class, 'submitReview']);
+    });
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
@@ -328,6 +352,10 @@ Route::prefix('v1')->group(function () {
             Route::post('sales/{sale}/payments', [SaleController::class, 'addPayment']);
             Route::post('sales/{sale}/cancel', [SaleController::class, 'cancel']);
 
+            Route::get('pos/holds', [PosHoldController::class, 'index']);
+            Route::post('pos/holds', [PosHoldController::class, 'store']);
+            Route::delete('pos/holds/{posHold}', [PosHoldController::class, 'destroy']);
+
             Route::get('stock', [StockController::class, 'index']);
             Route::get('stock/low', [StockController::class, 'low']);
             Route::get('stock/over', [StockController::class, 'over']);
@@ -343,6 +371,7 @@ Route::prefix('v1')->group(function () {
             Route::put('stock-transfers/{stockTransfer}', [StockTransferController::class, 'update']);
             Route::post('stock-transfers/{stockTransfer}/ship', [StockTransferController::class, 'ship']);
             Route::post('stock-transfers/{stockTransfer}/receive', [StockTransferController::class, 'receive']);
+            Route::post('stock-transfers/{stockTransfer}/void', [StockTransferController::class, 'void']);
             Route::post('stock-transfers/{stockTransfer}/cancel', [StockTransferController::class, 'cancel']);
 
             Route::get('stock-opnames', [StockOpnameController::class, 'index']);
@@ -420,6 +449,7 @@ Route::prefix('v1')->group(function () {
             Route::get('purchase-orders', [PurchaseOrderController::class, 'index']);
             Route::get('purchase-orders/lookup', [PurchaseOrderController::class, 'lookup']);
             Route::post('purchase-orders', [PurchaseOrderController::class, 'store']);
+            Route::post('purchase-orders/batch', [PurchaseOrderController::class, 'storeBatch']);
             Route::get('purchase-orders/{purchaseOrder}/field-audits', [PurchaseOrderController::class, 'fieldAudits']);
             Route::get('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'show']);
             Route::put('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'update']);
@@ -517,6 +547,7 @@ Route::prefix('v1')->group(function () {
             Route::get('budgets/{budget}/commitments', [BudgetController::class, 'commitments']);
 
             Route::get('assets', [AssetController::class, 'index']);
+            Route::get('assets/next-serial', [AssetController::class, 'nextSerial']);
             Route::get('assets/{asset}', [AssetController::class, 'show']);
             Route::put('assets/{asset}', [AssetController::class, 'update']);
 
@@ -564,6 +595,36 @@ Route::prefix('v1')->group(function () {
             Route::get('supplier-product-prices/{supplierProductPrice}', [SupplierProductPriceController::class, 'show']);
             Route::put('supplier-product-prices/{supplierProductPrice}', [SupplierProductPriceController::class, 'update']);
             Route::delete('supplier-product-prices/{supplierProductPrice}', [SupplierProductPriceController::class, 'destroy']);
+
+            Route::get('storefront', [StorefrontController::class, 'show']);
+            Route::put('storefront', [StorefrontController::class, 'update']);
+            Route::get('storefront/pages/home', [StorefrontController::class, 'showHomePage']);
+            Route::put('storefront/pages/home', [StorefrontController::class, 'updateHomePage']);
+            Route::post('storefront/pages/home/apply-preset', [StorefrontController::class, 'applyHomePreset']);
+            Route::post('storefront/media', [StorefrontController::class, 'storeMedia']);
+            Route::post('storefront/logo', [StorefrontController::class, 'storeLogo']);
+            Route::delete('storefront/logo', [StorefrontController::class, 'destroyLogo']);
+            Route::post('storefront/domains/check', [StorefrontController::class, 'checkDomain']);
+            Route::post('storefront/domains', [StorefrontController::class, 'connectDomain']);
+            Route::post('storefront/domains/{storefrontDomain}/verify', [StorefrontController::class, 'verifyDomain']);
+            Route::delete('storefront/domains/{storefrontDomain}', [StorefrontController::class, 'destroyDomain']);
+            Route::get('storefront/products', [StorefrontController::class, 'products']);
+            Route::post('storefront/products', [StorefrontController::class, 'syncProduct']);
+            Route::put('storefront/products/{storefrontProduct}', [StorefrontController::class, 'updateProduct']);
+            Route::delete('storefront/products/{storefrontProduct}', [StorefrontController::class, 'destroyProduct']);
+            Route::get('storefront/product-options', [StorefrontController::class, 'productOptions']);
+            Route::get('storefront/orders', [StorefrontController::class, 'orders']);
+            Route::post('storefront/orders', [StorefrontController::class, 'placeOrder']);
+            Route::get('storefront/shipping/destinations', [StorefrontController::class, 'searchShippingDestinations']);
+            Route::post('storefront/shipping/cost', [StorefrontController::class, 'calculateShipping']);
+            Route::post('storefront/orders/{storefrontOrder}/confirm', [StorefrontController::class, 'confirmOrder']);
+            Route::post('storefront/orders/{storefrontOrder}/ship', [StorefrontController::class, 'shipOrder']);
+            Route::post('storefront/orders/{storefrontOrder}/deliver', [StorefrontController::class, 'deliverOrder']);
+            Route::post('storefront/orders/{storefrontOrder}/cancel', [StorefrontController::class, 'cancelOrder']);
+            Route::post('storefront/shop/auth/register', [StorefrontCustomerAuthController::class, 'register'])
+                ->middleware('throttle:storefront-register');
+            Route::post('storefront/shop/auth/login', [StorefrontCustomerAuthController::class, 'login'])
+                ->middleware('throttle:storefront-login');
 
             Route::get('match-exceptions', [MatchExceptionController::class, 'index']);
             Route::post('match-exceptions/{matchException}/waive', [MatchExceptionController::class, 'waive']);

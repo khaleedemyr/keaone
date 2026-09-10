@@ -23,6 +23,7 @@ import {
   type PurchaseLineDraft,
 } from './purchaseLineUtils'
 import { formatRupiah } from '../../lib/money'
+import { InvoiceDetailModal } from './InvoiceDetailModal'
 
 type InvoiceLineDraft = PurchaseLineDraft & {
   goods_receipt_item_id?: number
@@ -125,6 +126,7 @@ export default function VendorInvoiceDocs() {
   const [rows, setRows] = useState<InvoiceRow[]>([])
   const [matchFilter, setMatchFilter] = useState('all')
   const [open, setOpen] = useState(false)
+  const [detailId, setDetailId] = useState<number | null>(null)
   const [editing, setEditing] = useState<InvoiceRow | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -208,7 +210,7 @@ export default function VendorInvoiceDocs() {
       api.get<ApiOk<Party[]>>('/suppliers', { params: { for_select: 1, status: 'active', per_page: 200 }, silent: true }),
       api.get<ApiOk<Member[]>>('/company/members', { params: { per_page: 200 }, silent: true }),
       api.get<ApiOk<Array<{ id: number; number: string; supplier_id?: number | null }>>>('/purchase-orders', {
-        params: { status: 'ordered', per_page: 100 },
+        params: { status: 'ordered,partial,received', per_page: 100 },
         silent: true,
       }),
       api.get<ApiOk<Array<{ id: number; number: string; supplier_id?: number | null }>>>('/goods-receipts', {
@@ -341,12 +343,12 @@ export default function VendorInvoiceDocs() {
       setLines(
         ensureTrailingEmptyPurchaseLine(
           (doc.items ?? [])
-            .filter((item) => (item.qty_remaining ?? item.qty) > 0)
+            .filter((item) => item.qty > 0)
             .map((item) => ({
               key: uuid(),
               product_id: item.product_id,
               name: item.name_snapshot,
-              qty: item.qty_remaining ?? item.qty,
+              qty: item.qty,
               unit: item.unit ?? '',
               unit_level: (item.unit_level as ProductUnitLevel) || 'small',
               unit_cost: item.unit_cost ?? 0,
@@ -520,7 +522,15 @@ export default function VendorInvoiceDocs() {
           <tbody>
             {rows.map((row) => (
               <tr key={row.id} className="border-b border-line/70 last:border-0">
-                <td className="px-4 py-3 font-medium">{row.number}</td>
+                <td className="px-4 py-3 font-medium">
+                  <button
+                    type="button"
+                    className="text-left font-medium text-fg hover:text-mint"
+                    onClick={() => setDetailId(row.id)}
+                  >
+                    {row.number}
+                  </button>
+                </td>
                 <td className="px-4 py-3">{row.supplier?.name ?? '—'}</td>
                 <td className="px-4 py-3">{row.vendor_ref || '—'}</td>
                 <td className="px-4 py-3 tabular-nums">{formatRupiah(row.total ?? 0, locale)}</td>
@@ -555,6 +565,13 @@ export default function VendorInvoiceDocs() {
                 ) : null}
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      className="btn-ghost !px-2 !text-xs"
+                      onClick={() => setDetailId(row.id)}
+                    >
+                      {t('purchaseViewDetail')}
+                    </button>
                     {canEdit && ['draft', 'rejected'].includes(row.status) ? (
                       <button type="button" className="btn-ghost !px-2 !text-xs" onClick={() => void openEdit(row)}>
                         {t('edit')}
@@ -624,7 +641,7 @@ export default function VendorInvoiceDocs() {
           <label className="block text-sm text-muted">
             {t('purchasePoTitle')}
             <select className="field" value={poId} onChange={(e) => void fillFromPo(e.target.value)} disabled={Boolean(editing)}>
-              <option value="">{t('filterAll')}</option>
+              <option value="">{t('purchaseSelectPo')}</option>
               {filteredPoOptions.map((po) => (
                 <option key={po.id} value={po.id}>
                   {po.number}
@@ -635,7 +652,7 @@ export default function VendorInvoiceDocs() {
           <label className="block text-sm text-muted">
             {t('purchaseGrTitle')}
             <select className="field" value={grId} onChange={(e) => void fillFromGr(e.target.value)} disabled={Boolean(editing)}>
-              <option value="">{t('filterAll')}</option>
+              <option value="">{t('purchaseSelectGr')}</option>
               {filteredGrOptions.map((gr) => (
                 <option key={gr.id} value={gr.id}>
                   {gr.number}
@@ -704,6 +721,15 @@ export default function VendorInvoiceDocs() {
           needsCost
         />
       </MasterModal>
+
+      <InvoiceDetailModal
+        invoiceId={detailId}
+        open={detailId !== null}
+        onClose={() => setDetailId(null)}
+        statusLabel={statusLabel}
+        matchStatusLabel={matchStatusLabel}
+        paymentStatusLabel={paymentStatusLabel}
+      />
     </div>
   )
 }

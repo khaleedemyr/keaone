@@ -92,12 +92,15 @@ export function AppNavShell<T extends string>({
   current,
   onSelect,
   children,
+  hub,
 }: {
   items?: AppNavItem<T>[]
   groups?: AppNavGroup<T>[]
   current: T | null
   onSelect: (id: T) => void
   children: ReactNode
+  /** Custom landing content when no section is selected */
+  hub?: ReactNode
 }) {
   const { t } = useI18n()
   const erpCtx = useErpSubNavContext()
@@ -172,13 +175,7 @@ export function AppNavShell<T extends string>({
     setOpenGroups((prev) => ({ ...prev, [groupId]: !prev[groupId] }))
   }
 
-  if (erpMode) {
-    if (current) {
-      return (
-        <Suspense fallback={<div className="p-6 text-sm text-muted">{t('loadingWork')}</div>}>{children}</Suspense>
-      )
-    }
-
+  function defaultHub() {
     return (
       <div className="px-1 py-2">
         <h2 className="font-display text-xl font-bold">{t('pickMenu')}</h2>
@@ -211,6 +208,18 @@ export function AppNavShell<T extends string>({
     )
   }
 
+  const hubContent = hub ?? defaultHub()
+
+  if (erpMode) {
+    if (current) {
+      return (
+        <Suspense fallback={<div className="p-6 text-sm text-muted">{t('loadingWork')}</div>}>{children}</Suspense>
+      )
+    }
+
+    return <>{hubContent}</>
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col md:flex-row">
       <aside className={`os-app-nav hidden md:flex ${grouped ? 'os-app-nav--grouped' : ''}`}>
@@ -232,34 +241,7 @@ export function AppNavShell<T extends string>({
           {current ? (
             <Suspense fallback={<div className="p-6 text-sm text-muted">{t('loadingWork')}</div>}>{children}</Suspense>
           ) : (
-            <div className="px-1 py-2">
-              <h2 className="font-display text-xl font-bold">{t('pickMenu')}</h2>
-              <p className="mt-1 max-w-lg text-sm text-muted">{t('pickMenuHint')}</p>
-              {grouped ? (
-                <div className="mt-4 space-y-5">
-                  {visibleGroups.map((group) => (
-                    <div key={group.id}>
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{group.label}</h3>
-                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                        {group.items.map((item) => (
-                          <button key={item.id} type="button" className="os-app-pick" onClick={() => selectItem(item.id)}>
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                  {flatItems.map((item) => (
-                    <button key={item.id} type="button" className="os-app-pick" onClick={() => selectItem(item.id)}>
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            hubContent
           )}
         </div>
       </div>

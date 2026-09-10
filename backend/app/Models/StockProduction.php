@@ -21,6 +21,10 @@ class StockProduction extends Model
         'client_uuid',
         'status',
         'qty',
+        'qty_input',
+        'unit',
+        'unit_level',
+        'factor_to_base',
         'scrap_qty',
         'product_name_snapshot',
         'note',
@@ -36,6 +40,8 @@ class StockProduction extends Model
     {
         return [
             'qty' => 'integer',
+            'qty_input' => 'integer',
+            'factor_to_base' => 'integer',
             'scrap_qty' => 'integer',
             'track_serial' => 'boolean',
             'confirmed_at' => 'datetime',

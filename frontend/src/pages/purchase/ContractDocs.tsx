@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../../api/client'
-import type { ApiOk, Party, Product } from '../../types'
+import type { ApiOk, Party, Product, ProductUnitLevel } from '../../types'
 import { useFeedback } from '../../components/feedback'
 import { PageHeader } from '../../components/ui'
 import { MasterFilters, MasterPager, useListQuery } from '../../components/MasterListBar'
@@ -11,7 +11,7 @@ import { useAccess } from '../../access'
 import { useAuth } from '../../auth'
 import { useI18n, type MsgKey } from '../../i18n'
 import { formatRupiah } from '../../lib/money'
-import { buildProductOptions } from './purchaseLineUtils'
+import { buildProductOptions, defaultUnitPick, productPurchaseCost, productUnitOptions } from './purchaseLineUtils'
 import { useSupplierSelect } from './useSupplierSelect'
 
 type ContractItemRow = {
@@ -22,6 +22,8 @@ type ContractItemRow = {
   qty_contracted: number
   qty_released?: number
   qty_remaining?: number
+  unit?: string | null
+  unit_level?: ProductUnitLevel | null
   unit_cost: number
   note?: string | null
 }
@@ -40,8 +42,22 @@ type ContractRow = {
   items: ContractItemRow[]
 }
 
-type ItemDraft = { product_id: string; qty: string; unit_cost: string; note: string }
-const EMPTY_ITEM: ItemDraft = { product_id: '', qty: '', unit_cost: '', note: '' }
+type ItemDraft = {
+  product_id: string
+  qty: string
+  unit: string
+  unit_level: ProductUnitLevel
+  unit_cost: string
+  note: string
+}
+const EMPTY_ITEM: ItemDraft = {
+  product_id: '',
+  qty: '',
+  unit: '',
+  unit_level: 'small',
+  unit_cost: '',
+  note: '',
+}
 
 function uuid() {
   return crypto.randomUUID()
@@ -81,6 +97,10 @@ export default function ContractDocs() {
   const [itemDrafts, setItemDrafts] = useState<ItemDraft[]>([{ ...EMPTY_ITEM }])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [releaseOpen, setReleaseOpen] = useState(false)
+  const [releaseQtys, setReleaseQtys] = useState<Record<number, string>>({})
+  const [releaseError, setReleaseError] = useState('')
+  const [releaseSaving, setReleaseSaving] = useState(false)
 
   const canCreate = can('procurementcontracts', 'create')
   const canEdit = can('procurementcontracts', 'edit')
@@ -92,6 +112,7 @@ export default function ContractDocs() {
       { value: 'draft', label: t('procurementContractStatusDraft') },
       { value: 'active', label: t('procurementContractStatusActive') },
       { value: 'closed', label: t('procurementContractStatusClosed') },
+      { value: 'cancelled', label: t('procurementContractStatusCancelled') },
     ],
     [t],
   )
@@ -148,6 +169,8 @@ export default function ContractDocs() {
         ? row.items.map((item) => ({
             product_id: String(item.product_id),
             qty: String(item.qty_contracted),
+            unit: item.unit ?? '',
+            unit_level: (item.unit_level as ProductUnitLevel) || 'small',
             unit_cost: String(item.unit_cost),
             note: item.note ?? '',
           }))
@@ -166,9 +189,15 @@ export default function ContractDocs() {
         .map((row) => ({
           product_id: Number(row.product_id),
           qty: Number(row.qty),
+          unit: row.unit || undefined,
+          unit_level: row.unit_level || 'small',
           unit_cost: Number(row.unit_cost || 0),
           note: row.note || undefined,
         }))
+      if (items.length === 0) {
+        setError(t('purchaseNeedItems'))
+        return
+      }
       const payload = {
         title,
         supplier_id: Number(supplierId),
@@ -182,7 +211,7 @@ export default function ContractDocs() {
         feedback.success(t('saved'))
       } else {
         await api.post('/procurement-contracts', { ...payload, client_uuid: uuid() })
-        feedback.success(t('created'))
+        feedback.success(t('saved'))
       }
       setOpen(false)
       await loadRows()
@@ -204,20 +233,59 @@ export default function ContractDocs() {
     }
   }
 
-  async function releasePo() {
+  function openRelease() {
     if (!viewing) return
+    const remaining = viewing.items.filter((row) => (row.qty_remaining ?? 0) > 0)
+    if (remaining.length === 0) {
+      feedback.error(t('procurementContractNoReleaseQty'))
+      return
+    }
+    const qtys: Record<number, string> = {}
+    for (const row of remaining) {
+      if (row.id != null) qtys[row.id] = String(row.qty_remaining ?? 0)
+    }
+    setReleaseQtys(qtys)
+    setReleaseError('')
+    setReleaseOpen(true)
+  }
+
+  async function confirmRelease(e: FormEvent) {
+    e.preventDefault()
+    if (!viewing) return
+    setReleaseSaving(true)
+    setReleaseError('')
     try {
       const items = viewing.items
-        .filter((row) => (row.qty_remaining ?? 0) > 0)
-        .map((row) => ({ contract_item_id: row.id!, qty: row.qty_remaining ?? 0 }))
-      if (items.length === 0) return
-      await api.post(`/procurement-contracts/${viewing.id}/release-po`, { client_uuid: uuid(), items })
+        .filter((row) => row.id != null && (row.qty_remaining ?? 0) > 0)
+        .map((row) => {
+          const qty = Number(releaseQtys[row.id!] ?? 0)
+          return { contract_item_id: row.id!, qty, max: row.qty_remaining ?? 0 }
+        })
+        .filter((row) => row.qty > 0)
+
+      if (items.length === 0) {
+        setReleaseError(t('procurementContractNoReleaseQty'))
+        return
+      }
+      const over = items.find((row) => row.qty > row.max)
+      if (over) {
+        setReleaseError(t('procurementContractReleaseQtyOver'))
+        return
+      }
+
+      await api.post(`/procurement-contracts/${viewing.id}/release-po`, {
+        client_uuid: uuid(),
+        items: items.map(({ contract_item_id, qty }) => ({ contract_item_id, qty })),
+      })
       feedback.success(t('procurementContractReleasePoOk'))
+      setReleaseOpen(false)
       const detail = await api.get<ApiOk<ContractRow>>(`/procurement-contracts/${viewing.id}`)
       setViewing(detail.data.data)
       await loadRows()
     } catch (err) {
-      feedback.error(apiMessage(err, t('actionFailed')))
+      setReleaseError(apiMessage(err, t('actionFailed')))
+    } finally {
+      setReleaseSaving(false)
     }
   }
 
@@ -254,29 +322,38 @@ export default function ContractDocs() {
         onPerPage={list.filters.onPerPage}
       />
 
-      <div className="card mt-4 overflow-x-auto">
-        <table className="master-table w-full">
-          <thead>
+      <div className="glass mt-4 overflow-x-auto rounded-3xl">
+        <table className="min-w-full text-left text-sm">
+          <thead className="border-b border-line text-[11px] uppercase tracking-wide text-muted">
             <tr>
-              <th>{t('number')}</th>
-              <th>{t('title')}</th>
-              <th>{t('supplier')}</th>
-              <th>{t('status')}</th>
-              <th>{t('total')}</th>
+              <th className="px-4 py-3">{t('number')}</th>
+              <th className="px-4 py-3">{t('title')}</th>
+              <th className="px-4 py-3">{t('supplier')}</th>
+              <th className="px-4 py-3">{t('status')}</th>
+              <th className="px-4 py-3 text-right">{t('total')}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id}>
-                <td>
+              <tr key={row.id} className="border-b border-line/70 last:border-0">
+                <td className="px-4 py-3 font-medium">
                   <MasterNameButton onClick={() => setViewing(row)}>{row.number}</MasterNameButton>
                 </td>
-                <td>{row.title}</td>
-                <td>{row.supplier?.name ?? '—'}</td>
-                <td>{statusLabel(t, row.status)}</td>
-                <td>{formatRupiah(row.total_value)}</td>
+                <td className="max-w-[16rem] truncate px-4 py-3" title={row.title}>
+                  {row.title}
+                </td>
+                <td className="px-4 py-3 text-muted">{row.supplier?.name ?? '—'}</td>
+                <td className="px-4 py-3">{statusLabel(t, row.status)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{formatRupiah(row.total_value)}</td>
               </tr>
             ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
+                  {t('emptyMaster')}
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
@@ -346,8 +423,18 @@ export default function ContractDocs() {
                       className="!mt-0"
                       value={row.product_id}
                       onChange={(value) => {
+                        const product = products.find((p) => String(p.id) === value)
+                        const unitPick = product ? defaultUnitPick(product) : { unit: '', unit_level: 'small' as ProductUnitLevel }
                         const next = [...itemDrafts]
-                        next[idx] = { ...next[idx], product_id: value }
+                        next[idx] = {
+                          ...next[idx],
+                          product_id: value,
+                          unit: unitPick.unit,
+                          unit_level: unitPick.unit_level,
+                          unit_cost:
+                            next[idx].unit_cost ||
+                            (product ? String(productPurchaseCost(product)) : next[idx].unit_cost),
+                        }
                         setItemDrafts(next)
                       }}
                       options={productOptions}
@@ -356,13 +443,13 @@ export default function ContractDocs() {
                       emptyLabel={t('purchasePickProduct')}
                     />
                   </label>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-3">
                     <label className="field-block mb-0">
                       <span>{t('stockQty')}</span>
                       <input
                         className="field !mt-0 tabular-nums"
                         type="number"
-                        min={0}
+                        min={1}
                         value={row.qty}
                         onChange={(e) => {
                           const next = [...itemDrafts]
@@ -370,6 +457,44 @@ export default function ContractDocs() {
                           setItemDrafts(next)
                         }}
                       />
+                    </label>
+                    <label className="field-block mb-0">
+                      <span>{t('unit')}</span>
+                      <select
+                        className="field !mt-0"
+                        value={row.unit_level}
+                        disabled={!row.product_id}
+                        onChange={(e) => {
+                          const level = e.target.value as ProductUnitLevel
+                          const product = products.find((p) => String(p.id) === row.product_id)
+                          const picked = productUnitOptions(product).find((o) => o.level === level)
+                          const next = [...itemDrafts]
+                          next[idx] = {
+                            ...next[idx],
+                            unit_level: level,
+                            unit: picked?.label || next[idx].unit,
+                          }
+                          setItemDrafts(next)
+                        }}
+                      >
+                        {(() => {
+                          const product = products.find((p) => String(p.id) === row.product_id)
+                          const options = productUnitOptions(product)
+                          const known = options.some((o) => o.level === row.unit_level)
+                          return (
+                            <>
+                              {!known && row.unit_level ? (
+                                <option value={row.unit_level}>{row.unit || t('purchaseSelectUnit')}</option>
+                              ) : null}
+                              {options.map((opt) => (
+                                <option key={opt.level} value={opt.level}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </>
+                          )
+                        })()}
+                      </select>
                     </label>
                     <label className="field-block mb-0">
                       <span>{t('purchaseUnitCost')}</span>
@@ -404,7 +529,10 @@ export default function ContractDocs() {
               <p className="text-xs text-muted">{t('items')}</p>
               <ul className="mt-1 space-y-1 text-sm">
                 {viewing.items.map((item) => (
-                  <li key={item.id}>{item.product_name} — {item.qty_contracted} ({t('procurementContractRemaining')}: {item.qty_remaining ?? 0})</li>
+                  <li key={item.id}>
+                    {item.product_name} — {item.qty_contracted} {item.unit || ''} (
+                    {t('procurementContractRemaining')}: {item.qty_remaining ?? 0})
+                  </li>
                 ))}
               </ul>
             </div>
@@ -414,7 +542,7 @@ export default function ContractDocs() {
               ) : null}
               {canEdit && viewing.status === 'active' ? (
                 <>
-                  <button type="button" className="btn btn-primary" onClick={() => void releasePo()}>{t('procurementContractReleasePo')}</button>
+                  <button type="button" className="btn btn-primary" onClick={openRelease}>{t('procurementContractReleasePo')}</button>
                   <button type="button" className="btn btn-ghost" onClick={() => void runAction(`/procurement-contracts/${viewing.id}/close`, 'procurementContractClosed')}>{t('close')}</button>
                 </>
               ) : null}
@@ -432,6 +560,45 @@ export default function ContractDocs() {
           </div>
         ) : null}
       </MasterViewModal>
+
+      <MasterModal
+        open={releaseOpen}
+        title={t('procurementContractReleasePo')}
+        onClose={() => setReleaseOpen(false)}
+        onSubmit={confirmRelease}
+        saving={releaseSaving}
+        error={releaseError}
+        size="lg"
+      >
+        <p className="mb-4 text-sm text-muted">{t('procurementContractReleaseHint')}</p>
+        <div className="space-y-3">
+          {(viewing?.items ?? [])
+            .filter((item) => (item.qty_remaining ?? 0) > 0)
+            .map((item) => (
+              <div key={item.id} className="rounded-xl border border-line p-3">
+                <div className="mb-2 text-sm font-medium text-fg">
+                  {item.product_name}
+                  <span className="ml-2 text-xs font-normal text-muted">
+                    {t('procurementContractRemaining')}: {item.qty_remaining ?? 0} {item.unit || ''}
+                  </span>
+                </div>
+                <label className="field-block mb-0">
+                  <span>{t('procurementContractReleaseQty')}</span>
+                  <input
+                    className="field !mt-0 tabular-nums"
+                    type="number"
+                    min={0}
+                    max={item.qty_remaining ?? 0}
+                    value={releaseQtys[item.id!] ?? ''}
+                    onChange={(e) =>
+                      setReleaseQtys((prev) => ({ ...prev, [item.id!]: e.target.value }))
+                    }
+                  />
+                </label>
+              </div>
+            ))}
+        </div>
+      </MasterModal>
     </div>
   )
 }

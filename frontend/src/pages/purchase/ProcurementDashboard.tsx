@@ -49,7 +49,7 @@ type DashboardData = {
   recent: DashboardRecent[]
 }
 
-type Section = 'dashboard' | 'pr' | 'po' | 'gr' | 'direct' | 'return' | 'adjustments' | 'delivery' | 'invoices' | 'match' | 'payments' | 'settings'
+type Section = 'dashboard' | 'pr' | 'po' | 'gr' | 'direct' | 'return' | 'adjustments' | 'delivery' | 'invoices' | 'match' | 'payments' | 'settings' | 'finance'
 
 const TYPE_SECTION: Record<string, Section | undefined> = {
   purchase_requisition: 'pr',
@@ -76,6 +76,12 @@ const STATUS_LABEL: Record<string, MsgKey> = {
   ordered: 'purchaseStatusOrdered',
   partial: 'purchaseStatusPartial',
   confirmed: 'purchaseStatusConfirmed',
+  rejected: 'purchaseStatusRejected',
+  cancelled: 'purchaseStatusCancelled',
+  received: 'purchaseStatusReceived',
+  closed: 'purchaseStatusClosed',
+  voided: 'purchaseStatusVoided',
+  paid: 'purchaseStatusPaid',
 }
 
 export default function ProcurementDashboard({ onNavigate }: { onNavigate?: (section: Section) => void }) {
@@ -212,7 +218,7 @@ export default function ProcurementDashboard({ onNavigate }: { onNavigate?: (sec
           value: c.invoice_draft,
           hint: 'procurementDashInvoiceDraftHint',
           tone: 'from-teal-400/20',
-          section: 'invoices',
+          section: 'finance',
         },
         {
           key: 'inv_sub',
@@ -220,7 +226,7 @@ export default function ProcurementDashboard({ onNavigate }: { onNavigate?: (sec
           value: c.invoice_submitted,
           hint: 'procurementDashInvoiceSubmittedHint',
           tone: 'from-lime-400/20',
-          section: 'invoices',
+          section: 'finance',
         },
       )
     }
@@ -232,7 +238,7 @@ export default function ProcurementDashboard({ onNavigate }: { onNavigate?: (sec
         value: c.match_exception_open,
         hint: 'procurementDashMatchOpenHint',
         tone: 'from-red-400/20',
-        section: 'match',
+        section: 'finance',
       })
     }
 
@@ -244,7 +250,7 @@ export default function ProcurementDashboard({ onNavigate }: { onNavigate?: (sec
           value: c.invoice_payable,
           hint: 'procurementDashInvoicePayableHint',
           tone: 'from-yellow-400/20',
-          section: 'invoices',
+          section: 'finance',
         },
         {
           key: 'pay_draft',
@@ -252,7 +258,7 @@ export default function ProcurementDashboard({ onNavigate }: { onNavigate?: (sec
           value: c.payment_batch_draft,
           hint: 'procurementDashPaymentBatchDraftHint',
           tone: 'from-fuchsia-400/20',
-          section: 'payments',
+          section: 'finance',
         },
         {
           key: 'pay_sub',
@@ -260,7 +266,7 @@ export default function ProcurementDashboard({ onNavigate }: { onNavigate?: (sec
           value: c.payment_batch_submitted,
           hint: 'procurementDashPaymentBatchSubmittedHint',
           tone: 'from-pink-400/20',
-          section: 'payments',
+          section: 'finance',
         },
       )
     }

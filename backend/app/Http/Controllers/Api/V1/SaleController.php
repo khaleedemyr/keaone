@@ -28,6 +28,11 @@ class SaleController extends Controller
             ->orderByDesc('sold_at')
             ->orderByDesc('id');
 
+        $outletId = CurrentCompany::outlet()?->id;
+        if ($outletId && ! $request->boolean('all_outlets')) {
+            $query->where('outlet_id', $outletId);
+        }
+
         if ($status = $request->string('status')->toString()) {
             $query->where('status', $status);
         }
@@ -61,6 +66,7 @@ class SaleController extends Controller
             'discount_id' => ['nullable', 'integer'],
             'promotion_id' => ['nullable', 'integer'],
             'promo_code' => ['nullable', 'string', 'max:40'],
+            'skip_auto_promotion' => ['nullable', 'boolean'],
             'note' => ['nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer'],
@@ -139,6 +145,7 @@ class SaleController extends Controller
     public function reportsAsyncStatus(string $jobId): JsonResponse
     {
         $this->ensureModule('pos');
+        $this->ensureCan(MenuCatalog::salesReportMenu('summary'), 'view');
 
         $companyId = (int) CurrentCompany::id();
         if (! str_starts_with($jobId, 'sales_report:'.$companyId.':')) {

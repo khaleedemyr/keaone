@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\Asset;
+use App\Models\Company;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptItem;
 use App\Models\Product;
+use App\Support\ProcurementSettings;
 use Illuminate\Support\Facades\DB;
 
 class AssetService
@@ -19,11 +21,17 @@ class AssetService
             return;
         }
 
-        $qty = max(1, (int) $item->qty);
+        $factor = max(1, (int) ($item->factor_to_base ?: 1));
+        // Satu kartu aset per unit dasar (pcs), bukan per unit kemasan PO/GR.
+        $baseQty = max(1, (int) $item->qty * $factor);
         $unitCost = (int) $item->unit_cost;
+        $costPerBase = $factor > 1 ? (int) round($unitCost / $factor) : $unitCost;
         $acquiredAt = $gr->received_at ?? now();
+        $autoSerial = ProcurementSettings::fixedAssetAutoSerialEnabled(
+            Company::query()->find($gr->company_id)
+        );
 
-        for ($i = 0; $i < $qty; $i++) {
+        for ($i = 0; $i < $baseQty; $i++) {
             Asset::query()->create([
                 'company_id' => $gr->company_id,
                 'number' => $this->nextNumber((int) $gr->company_id),
@@ -32,8 +40,9 @@ class AssetService
                 'goods_receipt_item_id' => $item->id,
                 'outlet_id' => $gr->outlet_id,
                 'name_snapshot' => $item->name_snapshot ?: $product->name,
-                'acquisition_cost' => $unitCost,
+                'acquisition_cost' => max(0, $costPerBase),
                 'status' => 'active',
+                'serial_number' => $autoSerial ? $this->nextSerial((int) $gr->company_id) : null,
                 'acquired_at' => $acquiredAt,
             ]);
         }
@@ -84,6 +93,26 @@ class AssetService
                 ->lockForUpdate()
                 ->orderByDesc('id')
                 ->value('number');
+
+            $seq = 1;
+            if (is_string($last) && preg_match('/-(\d+)$/', $last, $matches)) {
+                $seq = (int) $matches[1] + 1;
+            }
+
+            return $prefix.str_pad((string) $seq, 4, '0', STR_PAD_LEFT);
+        });
+    }
+
+    public function nextSerial(int $companyId): string
+    {
+        return DB::transaction(function () use ($companyId) {
+            $prefix = 'SN-'.now()->format('ymd').'-';
+            $last = Asset::query()
+                ->where('company_id', $companyId)
+                ->where('serial_number', 'like', $prefix.'%')
+                ->lockForUpdate()
+                ->orderByDesc('id')
+                ->value('serial_number');
 
             $seq = 1;
             if (is_string($last) && preg_match('/-(\d+)$/', $last, $matches)) {

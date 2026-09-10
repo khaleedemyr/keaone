@@ -125,8 +125,9 @@ export function HoldSelectModal({
                   >
                     <div className="truncate font-semibold">{row.hold.label}</div>
                     <div className="mt-0.5 text-xs text-muted">
-                      {formatWhen(row.hold.savedAt)} · {t('posItemsCount', { count: String(row.qty) })} ·{' '}
-                      {formatMoney(row.subtotal)}
+                      {formatWhen(row.hold.savedAt)}
+                      {row.hold.user_name ? ` · ${row.hold.user_name}` : ''} ·{' '}
+                      {t('posItemsCount', { count: String(row.qty) })} · {formatMoney(row.subtotal)}
                     </div>
                   </button>
                   <button

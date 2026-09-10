@@ -15,6 +15,7 @@ class AssetController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('fixedassets', 'view');
 
         $query = Asset::query()->orderByDesc('acquired_at')->orderByDesc('id');
@@ -48,13 +49,28 @@ class AssetController extends Controller
 
     public function show(Asset $asset): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('fixedassets', 'view');
 
         return $this->ok($this->assets->serialize($asset));
     }
 
+    public function nextSerial(): JsonResponse
+    {
+        $this->ensureModule('finance');
+        $this->ensureCan('fixedassets', 'edit');
+
+        $companyId = (int) (\App\Support\CurrentCompany::id() ?? 0);
+        if ($companyId <= 0) {
+            throw ValidationException::withMessages(['company' => ['Company tidak valid.']]);
+        }
+
+        return $this->ok(['serial_number' => $this->assets->nextSerial($companyId)]);
+    }
+
     public function update(Request $request, Asset $asset): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('fixedassets', 'edit');
 
         if ($asset->status !== 'active') {

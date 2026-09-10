@@ -300,10 +300,10 @@ export default function BudgetDocs() {
         onPerPage={list.filters.onPerPage}
       />
 
-      <div className="card overflow-x-auto">
+      <div className="glass mt-4 overflow-x-auto rounded-3xl">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-muted">
+            <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
               <th className="px-4 py-3">{t('name')}</th>
               <th className="px-4 py-3">{t('procurementBudgetFiscalYear')}</th>
               <th className="px-4 py-3">{t('procurementBudgetPeriod')}</th>

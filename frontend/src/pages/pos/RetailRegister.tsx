@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
+import { SplitTenderPanel } from '../../components/pos/SplitTenderPanel'
 import { formatRupiah } from '../../lib/money'
+import type { PosTenderRow } from '../../lib/posTender'
 import type { CartLine, Discount, Product, Promotion } from '../../types'
 import { useI18n } from '../../i18n'
 
@@ -95,6 +97,10 @@ export function RetailRegister({
   onMethod,
   payAmount,
   onPayAmount,
+  splitPay = false,
+  onSplitPay,
+  tenders = [],
+  onTenders,
   subtotal,
   discountAmount = 0,
   discountSource = null,
@@ -138,6 +144,10 @@ export function RetailRegister({
   onMethod: (method: 'cash' | 'transfer' | 'qris') => void
   payAmount: string
   onPayAmount: (value: string) => void
+  splitPay?: boolean
+  onSplitPay?: (value: boolean) => void
+  tenders?: PosTenderRow[]
+  onTenders?: (rows: PosTenderRow[]) => void
   subtotal: number
   discountAmount?: number
   discountSource?: 'promotion' | 'discount' | null
@@ -248,6 +258,11 @@ export function RetailRegister({
       if (event.key === 'F2') {
         event.preventDefault()
         if (cart.length) onCheckout()
+        return
+      }
+      if (event.key === 'F8') {
+        event.preventDefault()
+        onSettlement?.()
         return
       }
       if (event.key === 'F3') {
@@ -594,53 +609,73 @@ export function RetailRegister({
                 ) : null}
               </div>
             ) : null}
-            <div className="retail-pay-methods">
-              {methods.map((item) => (
+            <div className="flex items-center justify-between gap-2">
+              {onSplitPay ? (
                 <button
-                  key={item.id}
                   type="button"
-                  onClick={() => onMethod(item.id)}
-                  className={method === item.id ? 'bg-mint text-ink' : 'bg-fill text-muted'}
+                  className={`rounded-xl px-3 py-1.5 text-xs ${
+                    splitPay ? 'bg-mint text-ink font-semibold' : 'bg-fill text-muted'
+                  }`}
+                  onClick={() => onSplitPay(!splitPay)}
                 >
-                  {item.label}
+                  {t('posSplitToggle')}
                 </button>
-              ))}
+              ) : null}
             </div>
 
-            {method === 'cash' ? (
+            {splitPay && onTenders ? (
+              <SplitTenderPanel total={total} rows={tenders} onChange={onTenders} compact />
+            ) : (
               <>
-                <input
-                  type="number"
-                  min={0}
-                  data-retail-cash="1"
-                  className="field min-h-12 text-base tabular-nums"
-                  placeholder={t('cashReceived')}
-                  value={payAmount}
-                  onChange={(e) => onPayAmount(e.target.value)}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className="retail-cash-chip" onClick={() => onPayAmount(String(total))} disabled={!total}>
-                    {t('posExactCash')}
-                  </button>
-                  {CASH_QUICK.filter((amount) => amount >= total).map((amount) => (
-                    <button key={amount} type="button" className="retail-cash-chip" onClick={() => onPayAmount(String(amount))}>
-                      {formatRupiah(amount, locale)}
+                <div className="retail-pay-methods">
+                  {methods.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onMethod(item.id)}
+                      className={method === item.id ? 'bg-mint text-ink' : 'bg-fill text-muted'}
+                    >
+                      {item.label}
                     </button>
                   ))}
                 </div>
-                <div className="retail-pad">
-                  {PAD.map((key) => (
-                    <button key={key} type="button" onClick={() => tapPad(key)}>
-                      {key}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted">{t('change')}</span>
-                  <span className="font-display text-xl font-bold text-mint">{formatRupiah(change, locale)}</span>
-                </div>
+
+                {method === 'cash' ? (
+                  <>
+                    <input
+                      type="number"
+                      min={0}
+                      data-retail-cash="1"
+                      className="field min-h-12 text-base tabular-nums"
+                      placeholder={t('cashReceived')}
+                      value={payAmount}
+                      onChange={(e) => onPayAmount(e.target.value)}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className="retail-cash-chip" onClick={() => onPayAmount(String(total))} disabled={!total}>
+                        {t('posExactCash')}
+                      </button>
+                      {CASH_QUICK.filter((amount) => amount >= total).map((amount) => (
+                        <button key={amount} type="button" className="retail-cash-chip" onClick={() => onPayAmount(String(amount))}>
+                          {formatRupiah(amount, locale)}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="retail-pad">
+                      {PAD.map((key) => (
+                        <button key={key} type="button" onClick={() => tapPad(key)}>
+                          {key}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted">{t('change')}</span>
+                      <span className="font-display text-xl font-bold text-mint">{formatRupiah(change, locale)}</span>
+                    </div>
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
 
             <button
               type="submit"

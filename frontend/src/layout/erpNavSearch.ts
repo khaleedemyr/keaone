@@ -4,6 +4,8 @@ import { INVENTORY_NAV_ITEMS } from '../desktop/InventoryApp'
 import { HR_NAV_ITEMS } from '../desktop/HrApp'
 import { SALES_NAV_ITEMS } from '../desktop/SalesApp'
 import { PROCUREMENT_NAV_GROUPS } from '../desktop/PurchaseApp'
+import { FINANCE_NAV_GROUPS } from '../desktop/FinanceApp'
+import { STOREFRONT_NAV_ITEMS } from '../desktop/StorefrontApp'
 import type { MsgKey } from '../i18n'
 import { moduleForMenu } from '../lib/modules'
 import type { Settings, UserPreferences } from '../types'
@@ -62,6 +64,7 @@ export function buildErpSearchEntries(
   can: CanFn,
   hasModule: HasModuleFn,
   settings?: Settings | null,
+  storefrontSiteKind?: 'landing' | 'shop' | null,
 ): ErpSearchEntry[] {
   const entries: ErpSearchEntry[] = []
 
@@ -119,6 +122,28 @@ export function buildErpSearchEntries(
           if (!can(item.menu, 'view')) continue
           pushEntry(entries, appId, appLabel, item.id, t(item.label), groupLabel)
         }
+      }
+      continue
+    }
+
+    if (appId === 'finance') {
+      for (const group of FINANCE_NAV_GROUPS) {
+        const groupLabel = t(group.label)
+        for (const item of group.items) {
+          if (!can(item.menu, 'view')) continue
+          const mod = moduleForMenu(item.menu)
+          if (mod && !hasModule(mod)) continue
+          pushEntry(entries, appId, appLabel, item.id, t(item.label), groupLabel)
+        }
+      }
+      continue
+    }
+
+    if (appId === 'storefront') {
+      for (const item of STOREFRONT_NAV_ITEMS) {
+        if (!can(item.menu, 'view')) continue
+        if (item.shopOnly && storefrontSiteKind === 'landing') continue
+        pushEntry(entries, appId, appLabel, item.id, t(item.label))
       }
       continue
     }

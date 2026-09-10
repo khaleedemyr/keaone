@@ -279,8 +279,9 @@ class BudgetService
 
     private function assertAvailable(BudgetLine $line, int $amount): void
     {
-        $committed = $this->committedAmount((int) $line->id);
-        $available = (int) $line->amount - $committed;
+        $locked = BudgetLine::query()->whereKey($line->id)->lockForUpdate()->firstOrFail();
+        $committed = $this->committedAmount((int) $locked->id);
+        $available = (int) $locked->amount - $committed;
 
         if ($amount > $available) {
             throw ValidationException::withMessages([

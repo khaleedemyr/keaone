@@ -27,26 +27,32 @@ export function useErpSubNavContext() {
 
 export function useErpSubNavEffect(registration: ErpSubNavRegistration | null) {
   const ctx = useErpSubNavContext()
+  const setRegistration = ctx?.setRegistration
   const onSelectRef = useRef(registration?.onSelect)
   onSelectRef.current = registration?.onSelect
+  const groupsRef = useRef(registration?.groups ?? [])
+  groupsRef.current = registration?.groups ?? []
+  const itemsRef = useRef(registration?.items ?? [])
+  itemsRef.current = registration?.items ?? []
 
+  const enabled = registration !== null
   const groupsKey =
     registration?.groups.map((group) => `${group.id}:${group.items.map((item) => item.id).join(',')}`).join('|') ?? ''
   const itemsKey = registration?.items.map((item) => item.id).join(',') ?? ''
   const current = registration?.current ?? null
 
   useEffect(() => {
-    if (!ctx) return
-    if (!registration) {
-      ctx.setRegistration(null)
-      return () => ctx.setRegistration(null)
+    if (!setRegistration) return
+    if (!enabled) {
+      setRegistration(null)
+      return () => setRegistration(null)
     }
-    ctx.setRegistration({
-      groups: registration.groups,
-      items: registration.items,
+    setRegistration({
+      groups: groupsRef.current,
+      items: itemsRef.current,
       current,
       onSelect: (id) => onSelectRef.current?.(id),
     })
-    return () => ctx.setRegistration(null)
-  }, [ctx, groupsKey, itemsKey, current, registration?.groups, registration?.items])
+    return () => setRegistration(null)
+  }, [setRegistration, enabled, groupsKey, itemsKey, current])
 }

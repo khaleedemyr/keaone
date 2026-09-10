@@ -1,17 +1,36 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { api } from '../api/client'
 import { useAccess } from '../access'
 import { useAuth } from '../auth'
 import { useI18n } from '../i18n'
 import type { AppId } from '../desktop/DesktopContext'
+import type { ApiOk } from '../types'
+import type { StorefrontAdmin, StorefrontSiteKind } from '../pages/storefront/types'
 import { buildErpSearchEntries } from './erpNavSearch'
 
 export function useTenantErpSearchEntries(apps: AppId[], titles: Partial<Record<AppId, string>>) {
   const { t } = useI18n()
   const { can, hasModule } = useAccess()
   const { me } = useAuth()
+  const [siteKind, setSiteKind] = useState<StorefrontSiteKind | null>(null)
+
+  useEffect(() => {
+    if (!hasModule('storefront')) {
+      setSiteKind(null)
+      return
+    }
+    void (async () => {
+      try {
+        const { data } = await api.get<ApiOk<StorefrontAdmin>>('/storefront', { silent: true })
+        setSiteKind(data.data.site_kind)
+      } catch {
+        setSiteKind(null)
+      }
+    })()
+  }, [hasModule])
 
   return useMemo(
-    () => buildErpSearchEntries(apps, titles, t, can, hasModule, me?.settings ?? null),
-    [apps, titles, t, can, hasModule, me?.settings],
+    () => buildErpSearchEntries(apps, titles, t, can, hasModule, me?.settings ?? null, siteKind),
+    [apps, titles, t, can, hasModule, me?.settings, siteKind],
   )
 }

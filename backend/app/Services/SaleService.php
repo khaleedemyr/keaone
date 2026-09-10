@@ -8,21 +8,28 @@ use App\Models\Product;
 use App\Models\Promotion;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\StockMovement;
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Support\CurrentCompany;
 use App\Support\ReceiptLayout;
 use App\Support\TenantCache;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class SaleService
 {
+    private ?int $forceWarehouseId = null;
+
     public function create(array $payload, User $user): Sale
     {
         $existing = Sale::query()->where('client_uuid', $payload['client_uuid'])->first();
 
         if ($existing) {
+            $this->assertIdempotentPayload($existing, $payload);
+
             return $this->loadSale($existing);
         }
 
@@ -37,12 +44,205 @@ class SaleService
             $sale = Sale::query()->where('client_uuid', $payload['client_uuid'])->first();
 
             if ($sale) {
+                $this->assertIdempotentPayload($sale, $payload);
+
                 return $this->loadSale($sale);
             }
 
             throw ValidationException::withMessages([
                 'client_uuid' => ['Transaksi sudah ada.'],
             ]);
+        }
+    }
+
+    /**
+     * Convert a paid storefront order into a Sale (stock + GL) using order line prices.
+     * Merchandise total only; ongkir tetap di storefront order (dicatat di note).
+     */
+    public function createFromStorefrontOrder(\App\Models\StorefrontOrder $order, User $user): Sale
+    {
+        $order->loadMissing(['items', 'storefront.priceChannel']);
+
+        if ($order->sale_id) {
+            return $this->loadSale(Sale::query()->findOrFail($order->sale_id));
+        }
+
+        $storefront = $order->storefront;
+        if (! $storefront) {
+            throw ValidationException::withMessages([
+                'storefront' => ['Toko online tidak ditemukan.'],
+            ]);
+        }
+
+        $outletId = $storefront->outlet_id
+            ? (int) $storefront->outlet_id
+            : (int) (CurrentCompany::outlet()?->id ?? 0);
+        if ($outletId < 1) {
+            throw ValidationException::withMessages([
+                'outlet' => ['Atur outlet toko online di Setup situs sebelum konfirmasi order.'],
+            ]);
+        }
+
+        $inventory = app(InventoryService::class);
+        $warehouseId = $storefront->warehouse_id
+            ? (int) $storefront->warehouse_id
+            : (int) $inventory->resolveDefaultWarehouse((int) $order->company_id, $outletId)->id;
+
+        $clientUuid = $order->client_uuid ?: ('sf-order-'.$order->id);
+        $existing = Sale::query()->where('client_uuid', $clientUuid)->first();
+        if ($existing) {
+            return $this->loadSale($existing);
+        }
+
+        $channel = 'storefront';
+        if ($storefront->priceChannel?->code) {
+            $channel = (string) $storefront->priceChannel->code;
+        }
+
+        $this->forceWarehouseId = $warehouseId;
+        try {
+            $sale = DB::transaction(function () use ($order, $user, $outletId, $clientUuid, $channel) {
+                $items = $order->items;
+                if ($items->isEmpty()) {
+                    throw ValidationException::withMessages([
+                        'items' => ['Order tidak punya item.'],
+                    ]);
+                }
+
+                $productIds = $items->pluck('product_id')->unique()->all();
+                $products = Product::query()
+                    ->with(['bomItems.component'])
+                    ->whereIn('id', $productIds)
+                    ->get()
+                    ->keyBy('id');
+
+                $lineItems = [];
+                $subtotal = 0;
+                foreach ($items as $index => $item) {
+                    $product = $products->get((int) $item->product_id);
+                    if (! $product) {
+                        throw ValidationException::withMessages([
+                            "items.{$index}" => ['Produk tidak ditemukan: '.$item->name_snapshot],
+                        ]);
+                    }
+                    $qty = (int) $item->qty;
+                    $price = (int) $item->unit_price;
+                    $lineBase = $qty * $price;
+                    $subtotal += $lineBase;
+                    $lineItems[] = [
+                        'product' => $product,
+                        'qty' => $qty,
+                        'price' => $price,
+                        'discount' => 0,
+                        'line_base' => $lineBase,
+                        'tax' => 0,
+                        'total' => $lineBase,
+                        'name_snapshot' => (string) $item->name_snapshot,
+                    ];
+                }
+
+                $orderSubtotal = (int) $order->subtotal;
+                if ($orderSubtotal > 0 && $subtotal !== $orderSubtotal) {
+                    // Prefer order snapshot totals if line math drifts.
+                    $subtotal = $orderSubtotal;
+                }
+
+                $discount = (int) $order->discount;
+                $tax = (int) $order->tax;
+                $total = max(0, $subtotal - $discount + $tax);
+                $shipping = (int) $order->shipping_cost;
+                $noteParts = ['Storefront '.$order->number];
+                if ($shipping > 0) {
+                    $noteParts[] = 'Ongkir '.$shipping.' (di order web)';
+                }
+                if ($order->note) {
+                    $noteParts[] = (string) $order->note;
+                }
+
+                $sale = Sale::query()->create([
+                    'company_id' => $order->company_id,
+                    'outlet_id' => $outletId,
+                    'user_id' => $user->id,
+                    'contact_id' => $order->contact_id,
+                    'discount_id' => null,
+                    'promotion_id' => null,
+                    'channel' => $channel,
+                    'number' => $this->nextNumber((int) $order->company_id),
+                    'client_uuid' => $clientUuid,
+                    'status' => 'paid',
+                    'sold_at' => now(),
+                    'subtotal' => $subtotal,
+                    'discount' => $discount,
+                    'tax' => $tax,
+                    'total' => $total,
+                    'paid_amount' => $total,
+                    'change_amount' => 0,
+                    'note' => implode(' · ', $noteParts),
+                ]);
+
+                foreach ($lineItems as $line) {
+                    /** @var Product $product */
+                    $product = $line['product'];
+                    $hasBomStock = $product->bomItems->contains(
+                        fn ($row) => (bool) ($row->component?->track_stock),
+                    );
+
+                    $costSnapshot = (int) $product->cost_price;
+                    if ($product->track_stock && ! $hasBomStock) {
+                        $adj = $this->adjustStock($sale, $product, -1 * $line['qty'], 'sale', 'Penjualan '.$sale->number);
+                        $costSnapshot = $adj->unitCost;
+                    }
+
+                    SaleItem::query()->create([
+                        'company_id' => $order->company_id,
+                        'sale_id' => $sale->id,
+                        'product_id' => $product->id,
+                        'name_snapshot' => $line['name_snapshot'] !== '' ? $line['name_snapshot'] : $product->name,
+                        'qty' => $line['qty'],
+                        'unit' => $product->unit,
+                        'price' => $line['price'],
+                        'discount' => $line['discount'],
+                        'tax' => $line['tax'],
+                        'total' => $line['total'],
+                        'cost_snapshot' => $costSnapshot,
+                    ]);
+
+                    if ($hasBomStock) {
+                        $this->explodeBomStock($sale, $product, (int) $line['qty'], -1, 'sale', 'Penjualan '.$sale->number);
+                    }
+                }
+
+                $sale->payments()->create([
+                    'company_id' => $order->company_id,
+                    'outlet_id' => $outletId,
+                    'user_id' => $user->id,
+                    'direction' => 'in',
+                    'method' => 'transfer',
+                    'amount' => $total,
+                    'paid_at' => now(),
+                    'client_uuid' => $clientUuid.'-p0',
+                    'note' => 'Konfirmasi transfer storefront '.$order->number,
+                ]);
+
+                $sale = $this->loadSale($sale->fresh());
+                app(GlPostingService::class)->postSale($sale, $user);
+
+                return $sale;
+            });
+
+            $this->bumpSalesReportCache((int) $sale->company_id);
+
+            return $sale;
+        } catch (UniqueConstraintViolationException) {
+            $sale = Sale::query()->where('client_uuid', $clientUuid)->first();
+            if ($sale) {
+                return $this->loadSale($sale);
+            }
+            throw ValidationException::withMessages([
+                'client_uuid' => ['Transaksi penjualan sudah ada.'],
+            ]);
+        } finally {
+            $this->forceWarehouseId = null;
         }
     }
 
@@ -54,39 +254,75 @@ class SaleService
             ]);
         }
 
-        return DB::transaction(function () use ($sale, $payload, $user) {
-            $sale = Sale::query()->whereKey($sale->id)->lockForUpdate()->firstOrFail();
+        try {
+            return DB::transaction(function () use ($sale, $payload, $user) {
+                $sale = Sale::query()->whereKey($sale->id)->lockForUpdate()->firstOrFail();
 
-            $clientUuid = $payload['client_uuid'] ?? $this->nextPaymentUuid($sale);
+                if ($sale->status === 'cancelled') {
+                    throw ValidationException::withMessages([
+                        'sale' => ['Penjualan sudah dibatalkan.'],
+                    ]);
+                }
 
-            $existing = Payment::query()->where('client_uuid', $clientUuid)->first();
-            if ($existing) {
-                return $this->loadSale($sale);
-            }
+                $clientUuid = $payload['client_uuid'] ?? $this->nextPaymentUuid($sale);
 
-            $amount = (int) $payload['amount'];
-            if ($amount <= 0) {
-                throw ValidationException::withMessages([
-                    'amount' => ['Nominal pembayaran tidak valid.'],
+                $existing = Payment::query()->where('client_uuid', $clientUuid)->first();
+                if ($existing) {
+                    return $this->loadSale($sale);
+                }
+
+                $amount = (int) $payload['amount'];
+                if ($amount <= 0) {
+                    throw ValidationException::withMessages([
+                        'amount' => ['Nominal pembayaran tidak valid.'],
+                    ]);
+                }
+
+                $remaining = max(0, (int) $sale->total - (int) $sale->paid_amount);
+                if ($remaining <= 0) {
+                    throw ValidationException::withMessages([
+                        'sale' => ['Penjualan sudah lunas.'],
+                    ]);
+                }
+
+                $method = (string) ($payload['method'] ?? 'cash');
+                // Non-cash cannot overpay; cash may overpay so change can be returned.
+                if ($method !== 'cash' && $amount > $remaining) {
+                    throw ValidationException::withMessages([
+                        'amount' => ['Nominal melebihi sisa tagihan ('.$remaining.').'],
+                    ]);
+                }
+
+                $payment = $sale->payments()->create([
+                    'company_id' => $sale->company_id,
+                    'outlet_id' => $sale->outlet_id,
+                    'user_id' => $user->id,
+                    'direction' => 'in',
+                    'method' => $method,
+                    'amount' => $amount,
+                    'paid_at' => now(),
+                    'client_uuid' => $clientUuid,
+                    'note' => $payload['note'] ?? null,
                 ]);
+
+                $this->recalculatePayments($sale);
+                app(GlPostingService::class)->postSalePayment($sale->fresh(['payments']), $payment, $user);
+
+                return $this->loadSale($sale->fresh());
+            });
+        } catch (UniqueConstraintViolationException) {
+            $clientUuid = $payload['client_uuid'] ?? null;
+            if ($clientUuid) {
+                $existing = Payment::query()->where('client_uuid', $clientUuid)->first();
+                if ($existing) {
+                    return $this->loadSale($sale->fresh());
+                }
             }
 
-            $sale->payments()->create([
-                'company_id' => $sale->company_id,
-                'outlet_id' => $sale->outlet_id,
-                'user_id' => $user->id,
-                'direction' => 'in',
-                'method' => $payload['method'],
-                'amount' => $amount,
-                'paid_at' => now(),
-                'client_uuid' => $clientUuid,
-                'note' => $payload['note'] ?? null,
+            throw ValidationException::withMessages([
+                'client_uuid' => ['Pembayaran sudah tercatat.'],
             ]);
-
-            $this->recalculatePayments($sale);
-
-            return $this->loadSale($sale->fresh());
-        });
+        }
     }
 
     public function cancel(Sale $sale, User $user): Sale
@@ -96,31 +332,28 @@ class SaleService
         }
 
         $cancelled = DB::transaction(function () use ($sale, $user) {
-            $sale = Sale::query()->whereKey($sale->id)->lockForUpdate()->with('items.product.bomItems.component')->firstOrFail();
+            $sale = Sale::query()->whereKey($sale->id)->lockForUpdate()->firstOrFail();
 
-            foreach ($sale->items as $item) {
-                $product = $item->product;
-                if ($product?->track_stock) {
-                    $this->adjustStock(
-                        $sale,
-                        $product,
-                        (int) $item->qty,
-                        'cancel',
-                        'Pembatalan '.$sale->number,
-                        (int) $item->cost_snapshot,
-                        true,
-                    );
-                }
-                if ($product) {
-                    $this->explodeBomStock($sale, $product, (int) $item->qty, 1, 'cancel', 'Pembatalan '.$sale->number, true);
-                }
+            if ($sale->status === 'cancelled') {
+                return $this->loadSale($sale);
             }
 
-            $sale->update([
-                'status' => 'cancelled',
-                'cancelled_at' => now(),
-                'cancelled_by' => $user->id,
-            ]);
+            $this->reverseSaleStock($sale);
+
+            app(GlPostingService::class)->reverseSale($sale, $user);
+
+            $updated = Sale::query()
+                ->whereKey($sale->id)
+                ->where('status', '!=', 'cancelled')
+                ->update([
+                    'status' => 'cancelled',
+                    'cancelled_at' => now(),
+                    'cancelled_by' => $user->id,
+                ]);
+
+            if ($updated === 0) {
+                return $this->loadSale($sale->fresh());
+            }
 
             return $this->loadSale($sale->fresh());
         });
@@ -257,7 +490,7 @@ class SaleService
             'revenue' => $revenue,
             'paid' => $paid,
             'change' => $change,
-            'cash_net' => max(0, $methods['cash']['amount'] - $change),
+            'cash_net' => $this->cashNet($saleIds, (int) $methods['cash']['amount']),
             'average_ticket' => $salesCount > 0 ? (int) round($revenue / $salesCount) : 0,
             'first_sale_at' => $firstSaleAt ? \Illuminate\Support\Carbon::parse($firstSaleAt)->toIso8601String() : null,
             'last_sale_at' => $lastSaleAt ? \Illuminate\Support\Carbon::parse($lastSaleAt)->toIso8601String() : null,
@@ -532,11 +765,12 @@ class SaleService
         }
 
         $change = (int) (clone $active)->sum('change_amount');
+        $saleIds = (clone $active)->pluck('id');
 
         return [
             'payment_methods' => $methods,
             'change' => $change,
-            'cash_net' => max(0, $methods['cash']['amount'] - $change),
+            'cash_net' => $this->cashNet($saleIds, (int) $methods['cash']['amount']),
         ];
     }
 
@@ -724,11 +958,12 @@ class SaleService
 
         $promotionService = app(PromotionService::class);
         $promotion = null;
+        $skipAutoPromotion = (bool) ($payload['skip_auto_promotion'] ?? false);
         if (! empty($payload['promotion_id'])) {
             $promotion = $promotionService->findActive((int) $payload['promotion_id']);
         } elseif (! empty($payload['promo_code'])) {
             $promotion = $promotionService->findByCode(trim((string) $payload['promo_code']));
-        } elseif (empty($payload['discount_id'])) {
+        } elseif (empty($payload['discount_id']) && ! $skipAutoPromotion) {
             $autoCandidates = Promotion::query()
                 ->with(['products', 'categories'])
                 ->where('is_active', true)
@@ -791,6 +1026,9 @@ class SaleService
         }
 
         $discount = $itemDiscountTotal + $saleDiscount;
+        if ($saleDiscount > 0) {
+            $this->allocateSaleDiscount($lineItems, $saleDiscount);
+        }
         $taxable = max(0, $subtotal - $discount);
         $tax = (int) round($taxable * $taxPercent / 100);
         $total = $taxable + $tax;
@@ -816,6 +1054,7 @@ class SaleService
 
         $paymentsInput = $payload['payments'] ?? [];
         $paidAmount = 0;
+        $remainingBill = $total;
         foreach ($paymentsInput as $index => $payment) {
             $amount = (int) ($payment['amount'] ?? 0);
             if ($amount <= 0) {
@@ -823,7 +1062,15 @@ class SaleService
                     "payments.{$index}.amount" => ['Nominal pembayaran tidak valid.'],
                 ]);
             }
+            $method = (string) ($payment['method'] ?? 'cash');
+            // Non-cash cannot overpay the remaining bill; cash may overpay for change.
+            if ($method !== 'cash' && $amount > $remainingBill) {
+                throw ValidationException::withMessages([
+                    "payments.{$index}.amount" => ['Nominal melebihi sisa tagihan ('.$remainingBill.').'],
+                ]);
+            }
             $paidAmount += $amount;
+            $remainingBill = max(0, $remainingBill - $amount);
         }
 
         if ($paidAmount < $total && ! $allowCredit) {
@@ -860,8 +1107,13 @@ class SaleService
             /** @var Product $product */
             $product = $line['product'];
 
+            $hasBomStock = $product->bomItems->contains(
+                fn ($row) => (bool) ($row->component?->track_stock),
+            );
+
             $costSnapshot = (int) $product->cost_price;
-            if ($product->track_stock) {
+            // Recipe (BOM) products: deduct components only — avoid double-issuing FG + ingredients.
+            if ($product->track_stock && ! $hasBomStock) {
                 $adj = $this->adjustStock($sale, $product, -1 * $line['qty'], 'sale', 'Penjualan '.$sale->number);
                 $costSnapshot = $adj->unitCost;
             }
@@ -880,10 +1132,12 @@ class SaleService
                 'cost_snapshot' => $costSnapshot,
             ]);
 
-            $this->explodeBomStock($sale, $product, (int) $line['qty'], -1, 'sale', 'Penjualan '.$sale->number);
+            if ($hasBomStock) {
+                $this->explodeBomStock($sale, $product, (int) $line['qty'], -1, 'sale', 'Penjualan '.$sale->number);
+            }
         }
 
-        foreach ($paymentsInput as $index => $payment) {
+            foreach ($paymentsInput as $index => $payment) {
             $sale->payments()->create([
                 'company_id' => $company->id,
                 'outlet_id' => $outlet->id,
@@ -897,24 +1151,82 @@ class SaleService
             ]);
         }
 
-        return $this->loadSale($sale->fresh());
+        $sale = $this->loadSale($sale->fresh());
+        app(GlPostingService::class)->postSale($sale, $user);
+
+        return $sale;
     }
 
     private function nextNumber(int $companyId): string
     {
-        $prefix = 'INV-'.now()->format('ymd').'-';
+        return app(DocumentSequenceService::class)->next($companyId, 'sale_invoice', 'INV', 4);
+    }
 
-        $last = Sale::query()
+    /**
+     * Reverse stock using original sale movements so cancel matches what was issued
+     * (BOM unit conversion / leaf explode stay consistent even if recipes change later).
+     */
+    private function reverseSaleStock(Sale $sale): void
+    {
+        $movements = StockMovement::query()
             ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $prefix.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
+            ->where('company_id', $sale->company_id)
+            ->where('ref_type', 'sale')
+            ->where('ref_id', $sale->id)
+            ->orderBy('id')
+            ->get();
 
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
+        if ($movements->isEmpty()) {
+            // Legacy fallback: recompute from items (pre-movement-aware cancel).
+            $sale->loadMissing('items.product.bomItems.component');
+            foreach ($sale->items as $item) {
+                $product = $item->product;
+                if (! $product) {
+                    continue;
+                }
+                $hasBomStock = $product->bomItems->contains(
+                    fn ($row) => (bool) ($row->component?->track_stock),
+                );
+                if ($product->track_stock && ! $hasBomStock) {
+                    $this->adjustStock(
+                        $sale,
+                        $product,
+                        (int) $item->qty,
+                        'cancel',
+                        'Pembatalan '.$sale->number,
+                        (int) $item->cost_snapshot,
+                        true,
+                    );
+                }
+                if ($hasBomStock) {
+                    $this->explodeBomStock($sale, $product, (int) $item->qty, 1, 'cancel', 'Pembatalan '.$sale->number, true);
+                }
+            }
 
-        return $prefix.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+            return;
+        }
+
+        $inventory = app(InventoryService::class);
+        foreach ($movements as $movement) {
+            $qtyChange = -1 * (int) $movement->qty_change;
+            if ($qtyChange === 0) {
+                continue;
+            }
+            $inventory->adjust(
+                (int) $sale->company_id,
+                (int) $movement->warehouse_id,
+                (int) $movement->product_id,
+                $qtyChange,
+                'cancel',
+                'sale',
+                (int) $sale->id,
+                'Pembatalan '.$sale->number,
+                $movement->outlet_id ? (int) $movement->outlet_id : (int) $sale->outlet_id,
+                null,
+                (int) $movement->unit_cost,
+                true,
+            );
+        }
     }
 
     private function explodeBomStock(
@@ -926,17 +1238,33 @@ class SaleService
         string $note,
         bool $reverseCosting = false,
     ): void {
-        $items = $product->relationLoaded('bomItems')
-            ? $product->bomItems
-            : $product->bomItems()->with('component')->get();
+        if ($soldQty < 1) {
+            return;
+        }
 
-        foreach ($items as $row) {
-            $component = $row->component;
+        $lines = app(BomExplosionService::class)->explodeLeaves(
+            (int) $sale->company_id,
+            (int) $product->id,
+            $soldQty,
+        );
+
+        if ($lines === []) {
+            return;
+        }
+
+        $components = Product::query()
+            ->withoutGlobalScopes()
+            ->whereIn('id', array_column($lines, 'product_id'))
+            ->get()
+            ->keyBy('id');
+
+        foreach ($lines as $line) {
+            $component = $components->get($line['product_id']);
             if (! $component || ! $component->track_stock) {
                 continue;
             }
 
-            $qty = (int) round((float) $row->qty * $soldQty);
+            $qty = (int) $line['qty_planned'];
             if ($qty === 0) {
                 continue;
             }
@@ -953,6 +1281,91 @@ class SaleService
         }
     }
 
+    /**
+     * @param  list<array<string, mixed>>  $lineItems
+     */
+    private function allocateSaleDiscount(array &$lineItems, int $saleDiscount): void
+    {
+        $baseSum = 0;
+        foreach ($lineItems as $line) {
+            $baseSum += (int) $line['line_base'];
+        }
+        if ($saleDiscount <= 0 || $baseSum <= 0) {
+            return;
+        }
+        if ($saleDiscount > $baseSum) {
+            throw ValidationException::withMessages([
+                'discount' => ['Diskon melebihi subtotal.'],
+            ]);
+        }
+
+        $remaining = $saleDiscount;
+        $lastIndex = count($lineItems) - 1;
+        foreach ($lineItems as $i => &$line) {
+            if ($i === $lastIndex) {
+                $alloc = $remaining;
+            } else {
+                $alloc = (int) floor($saleDiscount * ((int) $line['line_base']) / $baseSum);
+                $remaining -= $alloc;
+            }
+            $line['discount'] = (int) $line['discount'] + $alloc;
+            $line['line_base'] = (int) $line['line_base'] - $alloc;
+        }
+        unset($line);
+    }
+
+    /**
+     * Cash in drawer = cash tenders minus change only for tickets that took cash.
+     *
+     * @param  Collection<int, int|string>|list<int>  $saleIds
+     */
+    private function cashNet($saleIds, int $cashAmount): int
+    {
+        $ids = $saleIds instanceof Collection ? $saleIds : collect($saleIds);
+        if ($ids->isEmpty() || $cashAmount <= 0) {
+            return max(0, $cashAmount);
+        }
+
+        $cashSaleIds = Payment::query()
+            ->where('payable_type', 'sale')
+            ->whereIn('payable_id', $ids->all())
+            ->where('method', 'cash')
+            ->distinct()
+            ->pluck('payable_id');
+
+        if ($cashSaleIds->isEmpty()) {
+            return max(0, $cashAmount);
+        }
+
+        $cashChange = (int) Sale::query()
+            ->whereIn('id', $cashSaleIds)
+            ->where('status', '!=', 'cancelled')
+            ->sum('change_amount');
+
+        return max(0, $cashAmount - $cashChange);
+    }
+
+    private function assertIdempotentPayload(Sale $sale, array $payload): void
+    {
+        $sale->loadMissing('items');
+        $incoming = collect($payload['items'] ?? [])
+            ->map(fn ($row) => [(int) ($row['product_id'] ?? 0), (int) ($row['qty'] ?? 0)])
+            ->sort()
+            ->values()
+            ->all();
+        $stored = $sale->items
+            ->map(fn (SaleItem $item) => [(int) $item->product_id, (int) $item->qty])
+            ->sort()
+            ->values()
+            ->all();
+
+        if ($incoming !== $stored) {
+            throw ValidationException::withMessages([
+                'client_uuid' => ['UUID transaksi sudah dipakai untuk keranjang berbeda.'],
+            ]);
+        }
+    }
+
     private function adjustStock(
         Sale $sale,
         Product $product,
@@ -963,7 +1376,10 @@ class SaleService
         bool $reverseCosting = false,
     ): \App\Support\InventoryAdjustment {
         $inventory = app(InventoryService::class);
-        $warehouse = $inventory->resolveDefaultWarehouse((int) $sale->company_id, (int) $sale->outlet_id);
+        $warehouse = $this->forceWarehouseId
+            ? Warehouse::query()->withoutGlobalScopes()->whereKey($this->forceWarehouseId)->first()
+            : null;
+        $warehouse ??= $inventory->resolveDefaultWarehouse((int) $sale->company_id, (int) $sale->outlet_id);
 
         return $inventory->adjust(
             (int) $sale->company_id,

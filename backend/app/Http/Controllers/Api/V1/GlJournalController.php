@@ -14,7 +14,7 @@ class GlJournalController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('gljournals', 'view');
 
         $query = GlJournalEntry::query()
@@ -45,7 +45,7 @@ class GlJournalController extends Controller
 
     public function show(GlJournalEntry $glJournalEntry): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('gljournals', 'view');
 
         return $this->ok($this->posting->serialize($glJournalEntry));

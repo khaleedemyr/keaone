@@ -12,11 +12,12 @@ import {
   formatHoldLabel,
   getPosHold,
   holdLinesToCart,
-  readPosHolds,
+  listPosHolds,
   savePosHold,
   type PosHoldScope,
   type PosHoldSnapshot,
 } from '../lib/posHolds'
+import { buildSalePayments, newTenderRow, sumTenders, type PosTenderRow } from '../lib/posTender'
 import type { ApiOk, CartLine, Discount, PosSettlement, PriceChannel, Product, Promotion, ReceiptPayload, Sale } from '../types'
 import { PageEnter } from '../components/motion'
 import { useFeedback } from '../components/feedback'
@@ -24,6 +25,7 @@ import { PageHeader, ReceiptModal, SettlementModal } from '../components/ui'
 import { DiscountSelectModal } from '../components/pos/DiscountSelectModal'
 import { HoldSelectModal } from '../components/pos/HoldSelectModal'
 import { PromoSelectModal } from '../components/pos/PromoSelectModal'
+import { SplitTenderPanel } from '../components/pos/SplitTenderPanel'
 import { useI18n, type MsgKey } from '../i18n'
 import { useAuth } from '../auth'
 import { RetailRegister } from './pos/RetailRegister'
@@ -44,6 +46,8 @@ export default function Pos() {
   const [cart, setCart] = useState<CartLine[]>([])
   const [method, setMethod] = useState<'cash' | 'transfer' | 'qris'>('cash')
   const [payAmount, setPayAmount] = useState('')
+  const [splitPay, setSplitPay] = useState(false)
+  const [tenders, setTenders] = useState<PosTenderRow[]>(() => [newTenderRow('cash'), newTenderRow('qris')])
   const [busy, setBusy] = useState(false)
   const [receipt, setReceipt] = useState<ReceiptPayload | null>(null)
   const [settlement, setSettlement] = useState<PosSettlement | null>(null)
@@ -65,6 +69,9 @@ export default function Pos() {
   const [channelCode, setChannelCode] = useState('pos')
   const [highlightId, setHighlightId] = useState<number | null>(null)
   const [highlightSeq, setHighlightSeq] = useState(0)
+  const [searchHits, setSearchHits] = useState<Product[]>([])
+  const checkoutLockRef = useRef(false)
+  const checkoutUuidRef = useRef<string | null>(null)
 
   const posMode = me?.settings?.pos_mode ?? 'retail'
   const posModeLabel = t(POS_MODE_LABEL[posMode] ?? 'posModeRetail')
@@ -78,21 +85,21 @@ export default function Pos() {
     }
   }, [me?.company?.id, me?.outlet?.id, me?.user?.id])
 
-  function refreshHolds() {
+  async function refreshHolds() {
     if (!holdScope) {
       setHolds([])
       return
     }
-    setHolds(readPosHolds(holdScope))
+    setHolds(await listPosHolds(holdScope))
   }
 
   useEffect(() => {
-    refreshHolds()
+    void refreshHolds()
   }, [holdScope?.companyId, holdScope?.outletId, holdScope?.userId])
 
   useEffect(() => {
     void api
-      .get<ApiOk<Product[]>>('/products', { params: { per_page: 100, for_pos: 1 } })
+      .get<ApiOk<Product[]>>('/products', { params: { per_page: 200, for_pos: 1 } })
       .then(({ data }) => setProducts(data.data))
       .catch((err) => feedback.error(apiMessage(err, t('loadFailed'))))
     if (!retail) {
@@ -114,6 +121,31 @@ export default function Pos() {
         .catch(() => setPromotions([]))
     }
   }, [feedback, t, retail, promoEnabled])
+
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) {
+      setSearchHits([])
+      return
+    }
+    const handle = window.setTimeout(() => {
+      void api
+        .get<ApiOk<Product[]>>('/products', {
+          params: { search: q, per_page: 30, for_pos: 1 },
+          silent: true,
+        })
+        .then(({ data }) => {
+          setSearchHits(data.data)
+          setProducts((current) => {
+            const have = new Set(current.map((item) => item.id))
+            const add = data.data.filter((item) => !have.has(item.id))
+            return add.length === 0 ? current : [...current, ...add]
+          })
+        })
+        .catch(() => setSearchHits([]))
+    }, 220)
+    return () => window.clearTimeout(handle)
+  }, [query])
 
   useEffect(() => {
     if (!promoEnabled || promotions.length === 0) return
@@ -152,16 +184,17 @@ export default function Pos() {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
+    const pool = q.length >= 2 && searchHits.length > 0 ? searchHits : products
     const list = q
-      ? products.filter(
+      ? pool.filter(
           (p) =>
             p.name.toLowerCase().includes(q) ||
             (p.sku ?? '').toLowerCase().includes(q) ||
             (p.barcode ?? '').toLowerCase().includes(q),
         )
       : products
-    return retail ? list.slice(0, 12) : list
-  }, [products, query, retail])
+    return retail ? list.slice(0, 12) : list.slice(0, q ? 60 : 120)
+  }, [products, query, retail, searchHits])
 
   function sellPrice(product: Product) {
     if (channelCode !== 'pos') {
@@ -171,7 +204,6 @@ export default function Pos() {
     return product.sell_price
   }
 
-  const subtotal = cart.reduce((sum, line) => sum + sellPrice(line.product) * line.qty, 0)
   const selectedDiscount = useMemo(
     () => (discountId ? discounts.find((item) => item.id === discountId) ?? null : null),
     [discountId, discounts],
@@ -254,8 +286,12 @@ export default function Pos() {
     () => computeCheckoutTotals(cartLines, effectivePromotion ? null : selectedDiscount, effectivePromotion, taxPercent),
     [cartLines, selectedDiscount, effectivePromotion, taxPercent],
   )
+  const subtotal = checkoutTotals.subtotal
   const pay = Number(payAmount || 0)
-  const change = Math.max(0, pay - checkoutTotals.total)
+  const splitPaid = sumTenders(tenders)
+  const change = splitPay
+    ? Math.max(0, splitPaid - checkoutTotals.total)
+    : Math.max(0, pay - checkoutTotals.total)
   const methods = [
     { id: 'cash' as const, label: t('cash') },
     { id: 'transfer' as const, label: t('transfer') },
@@ -291,11 +327,12 @@ export default function Pos() {
     }
     // Qty di UI termasuk unit gratis — jangan hitung ulang free sebagai bayar (bikin qty membengkak).
     setCart((current) =>
-      current.map((line) => {
-        if (line.product.id !== productId) return line
+      current.flatMap((line) => {
+        if (line.product.id !== productId) return [line]
         const free = line.promo_free_qty ?? 0
         const paid = Math.max(0, qty - free)
-        return { product: line.product, qty: paid, promo_free_qty: 0 }
+        if (paid <= 0) return []
+        return [{ product: line.product, qty: paid, promo_free_qty: 0 }]
       }),
     )
   }
@@ -306,25 +343,21 @@ export default function Pos() {
     try {
       const { data } = await api.get<ApiOk<Product>>(`/products/barcode/${encodeURIComponent(code)}`)
       addProduct(data.data)
+      setProducts((current) => (current.some((item) => item.id === data.data.id) ? current : [...current, data.data]))
       return
     } catch {
       const local = products.find(
         (p) =>
           p.barcode === code ||
           p.sku === code ||
-          (p.sku ?? '').toLowerCase() === code.toLowerCase() ||
-          p.name.toLowerCase() === code.toLowerCase(),
+          (p.sku ?? '').toLowerCase() === code.toLowerCase(),
       )
       if (local) {
         addProduct(local)
         return
       }
     }
-    const matches = visible
-    if (matches.length === 1) {
-      addProduct(matches[0])
-      return
-    }
+    // Ambiguous name filter must not auto-add — cashier picks from the list.
     feedback.warning(t('productNotFound'))
   }
 
@@ -380,7 +413,7 @@ export default function Pos() {
   }
 
   function openHoldModal() {
-    refreshHolds()
+    void refreshHolds()
     setHoldModalOpen(true)
   }
 
@@ -391,36 +424,45 @@ export default function Pos() {
     clearPromoSelection({ suppressAuto: false })
     setSuppressAutoPromo(false)
     setMethod('cash')
+    setSplitPay(false)
+    setTenders([newTenderRow('cash'), newTenderRow('qris')])
   }
 
-  function parkCurrentCart(silent = false) {
+  async function parkCurrentCart(silent = false) {
     if (!holdScope) return false
     if (cart.length === 0) {
       if (!silent) feedback.warning(t('posHoldEmptyCart'))
       return false
     }
-    const lines = cartToHoldLines(cart)
-    savePosHold(holdScope, {
-      label: formatHoldLabel(lines),
-      lines,
-      method,
-      discountId,
-      promotionId,
-      promoCodeInput,
-      promoCodeAppliedId: promoCodeApplied?.id ?? null,
-      suppressAutoPromo,
-      channelCode,
-      payAmount,
-    })
-    resetTxnState()
-    refreshHolds()
-    if (!silent) feedback.success(t('posHoldSaved'))
-    return true
+    const lines = cartToHoldLines(cart, sellPrice)
+    try {
+      await savePosHold(holdScope, {
+        label: formatHoldLabel(lines),
+        lines,
+        method,
+        discountId,
+        promotionId,
+        promoCodeInput,
+        promoCodeAppliedId: promoCodeApplied?.id ?? null,
+        suppressAutoPromo,
+        channelCode,
+        payAmount,
+        splitPay,
+        tenders,
+      })
+      resetTxnState()
+      await refreshHolds()
+      if (!silent) feedback.success(t('posHoldSaved'))
+      return true
+    } catch (err) {
+      if (!silent) feedback.error(apiMessage(err, t('saveFailed')))
+      return false
+    }
   }
 
   async function resumeHold(id: string) {
     if (!holdScope) return
-    const hold = getPosHold(holdScope, id)
+    const hold = getPosHold(holdScope, id) ?? holds.find((row) => row.id === id)
     if (!hold) return
 
     if (cart.length > 0) {
@@ -429,7 +471,7 @@ export default function Pos() {
         message: t('posHoldReplaceHint'),
       })
       if (!ok) return
-      parkCurrentCart(true)
+      await parkCurrentCart(true)
     }
 
     const { cart: nextCart, missing } = holdLinesToCart(hold.lines, products)
@@ -440,6 +482,12 @@ export default function Pos() {
 
     setCart(nextCart)
     setMethod(hold.method)
+    setSplitPay(Boolean(hold.splitPay))
+    setTenders(
+      hold.tenders?.length
+        ? hold.tenders
+        : [newTenderRow('cash', hold.payAmount), newTenderRow('qris')],
+    )
     setDiscountId(hold.discountId)
     setPromotionId(hold.promotionId)
     setPromoCodeInput(hold.promoCodeInput)
@@ -456,17 +504,26 @@ export default function Pos() {
       : null
     setChannelCode(hold.channelCode || 'pos')
     setPayAmount(hold.payAmount)
-    deletePosHold(holdScope, id)
-    refreshHolds()
+    if (missing.length) {
+      feedback.warning(t('posHoldPartialKept'))
+    } else {
+      await deletePosHold(holdScope, id)
+      feedback.success(t('posHoldResumed'))
+    }
+    await refreshHolds()
     setHoldModalOpen(false)
-    if (missing.length) feedback.warning(t('posHoldMissingItems'))
-    else feedback.success(t('posHoldResumed'))
   }
 
-  function removeHold(id: string) {
+  async function removeHold(id: string) {
     if (!holdScope) return
-    deletePosHold(holdScope, id)
-    refreshHolds()
+    const ok = await feedback.confirm({
+      title: t('posHoldListTitle'),
+      message: t('posHoldDeleteConfirm'),
+      tone: 'danger',
+    })
+    if (!ok) return
+    await deletePosHold(holdScope, id)
+    await refreshHolds()
   }
 
   function applyPromoCode(codeOverride?: string) {
@@ -490,10 +547,45 @@ export default function Pos() {
 
   async function checkout(event?: FormEvent) {
     event?.preventDefault()
-    if (cart.length === 0) return
+    if (cart.length === 0 || checkoutLockRef.current || busy) return
+
+    if (
+      !effectivePromotion &&
+      selectedDiscount?.min_subtotal &&
+      paidSubtotal < selectedDiscount.min_subtotal
+    ) {
+      feedback.warning(t('posDiscountIneligible'))
+      return
+    }
+    if (
+      effectivePromotion?.min_subtotal &&
+      paidSubtotal < effectivePromotion.min_subtotal
+    ) {
+      feedback.warning(t('posPromoIneligible'))
+      return
+    }
+
+    checkoutLockRef.current = true
     setBusy(true)
-    const amount = method === 'cash' ? Math.max(pay, checkoutTotals.total) : checkoutTotals.total
-    const clientUuid = crypto.randomUUID()
+    const clientUuid = checkoutUuidRef.current ?? crypto.randomUUID()
+    checkoutUuidRef.current = clientUuid
+
+    const built = buildSalePayments({
+      split: splitPay,
+      method,
+      payAmount,
+      tenders,
+      total: checkoutTotals.total,
+      clientUuid,
+    })
+    if (!built.ok) {
+      checkoutLockRef.current = false
+      setBusy(false)
+      if (built.error === 'underpay') feedback.warning(t('posCashUnderpay'))
+      else if (built.error === 'noncash_over') feedback.warning(t('posSplitNonCashOver'))
+      else feedback.warning(t('posSplitEmpty'))
+      return
+    }
 
     try {
       const { data } = await api.post<ApiOk<Sale>>('/sales', {
@@ -502,22 +594,33 @@ export default function Pos() {
         discount_id: effectivePromotion ? undefined : discountId || undefined,
         promotion_id: effectivePromotion && !promoCodeApplied ? effectivePromotion.id : undefined,
         promo_code: promoCodeApplied?.code ?? undefined,
+        skip_auto_promotion: suppressAutoPromo || undefined,
         items: cart.map((line) => ({ product_id: line.product.id, qty: line.qty })),
-        payments: [{ method, amount, client_uuid: `${clientUuid}-p0` }],
+        payments: built.payments,
       })
-      const receiptRes = await api.get<ApiOk<ReceiptPayload>>(`/sales/${data.data.id}/receipt`)
-      setReceipt(receiptRes.data.data)
-      setCart([])
-      setPayAmount('')
-      setDiscountId('')
-      clearPromoSelection({ suppressAuto: false })
-      setSuppressAutoPromo(false)
-      const refreshed = await api.get<ApiOk<Product[]>>('/products', { params: { per_page: 100, for_pos: 1 } })
-      setProducts(refreshed.data.data)
+
+      // Clear cart immediately after sale succeeds so a receipt failure cannot double-charge.
+      resetTxnState()
+      checkoutUuidRef.current = null
       feedback.success(t('saleOk'))
+
+      try {
+        const receiptRes = await api.get<ApiOk<ReceiptPayload>>(`/sales/${data.data.id}/receipt`)
+        setReceipt(receiptRes.data.data)
+      } catch {
+        feedback.warning(t('posReceiptLoadFailed'))
+      }
+
+      try {
+        const refreshed = await api.get<ApiOk<Product[]>>('/products', { params: { per_page: 200, for_pos: 1 } })
+        setProducts(refreshed.data.data)
+      } catch {
+        // ignore catalog refresh errors after successful sale
+      }
     } catch (err) {
       feedback.error(apiMessage(err, t('saleFailed')))
     } finally {
+      checkoutLockRef.current = false
       setBusy(false)
     }
   }
@@ -553,6 +656,7 @@ export default function Pos() {
   }
 
   useEffect(() => {
+    if (retail) return
     function onKey(event: globalThis.KeyboardEvent) {
       if (event.key === 'F8') {
         event.preventDefault()
@@ -572,7 +676,7 @@ export default function Pos() {
       }
       if (event.key === 'F9') {
         event.preventDefault()
-        parkCurrentCart()
+        void parkCurrentCart()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -601,6 +705,10 @@ export default function Pos() {
           onMethod={setMethod}
           payAmount={payAmount}
           onPayAmount={setPayAmount}
+          splitPay={splitPay}
+          onSplitPay={setSplitPay}
+          tenders={tenders}
+          onTenders={setTenders}
           subtotal={paidSubtotal}
           discountAmount={checkoutTotals.discountTotal}
           discountSource={checkoutTotals.source}
@@ -616,7 +724,7 @@ export default function Pos() {
           promotionId={promotionId}
           onOpenPromoList={promoEnabled ? openPromoModal : undefined}
           onClearPromo={() => clearPromoSelection()}
-          onParkCart={() => parkCurrentCart()}
+          onParkCart={() => void parkCurrentCart()}
           onOpenHoldList={openHoldModal}
           holdCount={holds.length}
           autoPromotion={autoPromotion}
@@ -659,7 +767,7 @@ export default function Pos() {
           open={holdModalOpen}
           holds={holds}
           onResume={(id) => void resumeHold(id)}
-          onDelete={removeHold}
+          onDelete={(id) => void removeHold(id)}
           onClose={() => setHoldModalOpen(false)}
           formatMoney={(value) => formatRupiah(value, locale)}
           formatWhen={(iso) =>
@@ -685,7 +793,7 @@ export default function Pos() {
         subtitle={`${posModeLabel} · ${t('posSubtitle')}`}
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="btn-ghost" onClick={() => parkCurrentCart()}>
+            <button type="button" className="btn-ghost" onClick={() => void parkCurrentCart()}>
               {t('posHoldShortcut')}
             </button>
             <button type="button" className="btn-ghost" onClick={openHoldModal}>
@@ -871,33 +979,61 @@ export default function Pos() {
                 </button>
               </div>
             ) : null}
-            <div className="flex gap-2">
-              {methods.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setMethod(item.id)}
-                  className={`flex-1 rounded-xl px-2 py-2 text-sm ${
-                    method === item.id ? 'bg-mint text-ink font-semibold' : 'bg-fill text-muted'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                className={`rounded-xl px-3 py-1.5 text-xs ${
+                  splitPay ? 'bg-mint text-ink font-semibold' : 'bg-fill text-muted'
+                }`}
+                onClick={() => {
+                  setSplitPay((v) => {
+                    const next = !v
+                    if (next && tenders.every((row) => !row.amount)) {
+                      setTenders([
+                        newTenderRow('cash', ''),
+                        newTenderRow('qris', String(checkoutTotals.total || '')),
+                      ])
+                    }
+                    return next
+                  })
+                }}
+              >
+                {t('posSplitToggle')}
+              </button>
             </div>
-            {method === 'cash' ? (
+            {splitPay ? (
+              <SplitTenderPanel total={checkoutTotals.total} rows={tenders} onChange={setTenders} />
+            ) : (
               <>
-                <input
-                  type="number"
-                  min={0}
-                  className="field"
-                  placeholder={t('cashReceived')}
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                />
-                <div className="text-sm text-muted">{t('change')} {formatRupiah(change, locale)}</div>
+                <div className="flex gap-2">
+                  {methods.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setMethod(item.id)}
+                      className={`flex-1 rounded-xl px-2 py-2 text-sm ${
+                        method === item.id ? 'bg-mint text-ink font-semibold' : 'bg-fill text-muted'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+                {method === 'cash' ? (
+                  <>
+                    <input
+                      type="number"
+                      min={0}
+                      className="field"
+                      placeholder={t('cashReceived')}
+                      value={payAmount}
+                      onChange={(e) => setPayAmount(e.target.value)}
+                    />
+                    <div className="text-sm text-muted">{t('change')} {formatRupiah(change, locale)}</div>
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
             <button type="submit" disabled={busy || cart.length === 0} className="btn-primary w-full py-3">
               {busy ? t('processing') : t('pay')}
             </button>
@@ -936,7 +1072,7 @@ export default function Pos() {
         open={holdModalOpen}
         holds={holds}
         onResume={(id) => void resumeHold(id)}
-        onDelete={removeHold}
+        onDelete={(id) => void removeHold(id)}
         onClose={() => setHoldModalOpen(false)}
         formatMoney={(value) => formatRupiah(value, locale)}
         formatWhen={(iso) =>

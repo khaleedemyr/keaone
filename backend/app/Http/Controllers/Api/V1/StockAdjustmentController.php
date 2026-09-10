@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ProductUnit;
 use App\Models\StockAdjustment;
 use App\Services\StockAdjustmentService;
 use App\Support\InventoryOps;
@@ -66,10 +67,7 @@ class StockAdjustmentController extends Controller
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer'],
             'items.*.qty_change' => ['required', 'integer', 'not_in:0'],
-            'items.*.qty_input' => ['nullable', 'integer', 'min:1'],
-            'items.*.unit' => ['nullable', 'string', 'max:50'],
-            'items.*.unit_level' => ['nullable', 'string', 'max:20'],
-            'items.*.factor_to_base' => ['nullable', 'integer', 'min:1'],
+            'items.*.unit_level' => ['nullable', Rule::in(ProductUnit::LEVELS)],
         ]);
 
         if (InventoryOps::isWasteReason((string) $data['reason'])) {
@@ -103,10 +101,7 @@ class StockAdjustmentController extends Controller
             'items' => ['sometimes', 'array', 'min:1'],
             'items.*.product_id' => ['required_with:items', 'integer'],
             'items.*.qty_change' => ['required_with:items', 'integer', 'not_in:0'],
-            'items.*.qty_input' => ['nullable', 'integer', 'min:1'],
-            'items.*.unit' => ['nullable', 'string', 'max:50'],
-            'items.*.unit_level' => ['nullable', 'string', 'max:20'],
-            'items.*.factor_to_base' => ['nullable', 'integer', 'min:1'],
+            'items.*.unit_level' => ['nullable', Rule::in(ProductUnit::LEVELS)],
         ]);
 
         if (isset($data['reason']) && InventoryOps::isWasteReason((string) $data['reason'])) {

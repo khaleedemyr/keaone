@@ -14,7 +14,7 @@ class VendorPaymentBatchController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorpaymentbatches', 'view');
 
         $query = VendorPaymentBatch::query()
@@ -40,7 +40,7 @@ class VendorPaymentBatchController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorpaymentbatches', 'create');
         $this->ensureBilling();
 
@@ -62,7 +62,7 @@ class VendorPaymentBatchController extends Controller
 
     public function show(VendorPaymentBatch $vendorPaymentBatch): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorpaymentbatches', 'view');
 
         return $this->ok($this->batches->serialize($vendorPaymentBatch));
@@ -70,7 +70,7 @@ class VendorPaymentBatchController extends Controller
 
     public function update(Request $request, VendorPaymentBatch $vendorPaymentBatch): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorpaymentbatches', 'edit');
 
         $data = $request->validate([
@@ -90,7 +90,7 @@ class VendorPaymentBatchController extends Controller
 
     public function submit(VendorPaymentBatch $vendorPaymentBatch): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorpaymentbatches', 'edit');
 
         return $this->ok($this->batches->serialize($this->batches->submit($vendorPaymentBatch)));
@@ -98,7 +98,7 @@ class VendorPaymentBatchController extends Controller
 
     public function approve(VendorPaymentBatch $vendorPaymentBatch): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorpaymentbatches', 'edit');
 
         return $this->ok($this->batches->serialize($this->batches->approve($vendorPaymentBatch, request()->user())));
@@ -106,7 +106,7 @@ class VendorPaymentBatchController extends Controller
 
     public function reject(Request $request, VendorPaymentBatch $vendorPaymentBatch): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorpaymentbatches', 'edit');
 
         $data = $request->validate([
@@ -118,7 +118,7 @@ class VendorPaymentBatchController extends Controller
 
     public function pay(VendorPaymentBatch $vendorPaymentBatch): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('vendorpaymentbatches', 'edit');
 
         return $this->ok($this->batches->serialize($this->batches->pay($vendorPaymentBatch, request()->user())));
@@ -126,7 +126,7 @@ class VendorPaymentBatchController extends Controller
 
     public function cancel(VendorPaymentBatch $vendorPaymentBatch): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCanAny([['vendorpaymentbatches', 'edit'], ['vendorpaymentbatches', 'delete']]);
 
         return $this->ok($this->batches->serialize($this->batches->cancel($vendorPaymentBatch)));

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Product;
 use App\Models\ProductBomItem;
+use App\Models\ProductUnit;
 use Illuminate\Validation\ValidationException;
 
 class BomExplosionService
@@ -39,7 +40,7 @@ class BomExplosionService
 
         $totals = [];
         $meta = [];
-        $this->walkLeaves($companyId, $productId, $qty, [], 0, $totals, $meta);
+        $this->walkLeaves($companyId, $productId, (float) $qty, [], 0, $totals, $meta);
 
         $lines = [];
         foreach ($totals as $componentId => $planned) {
@@ -96,7 +97,8 @@ class BomExplosionService
                 continue;
             }
 
-            $childQty = (float) $row->qty * $qtyScale;
+            $factor = $this->factorToBase($component, $row->unit_id ? (int) $row->unit_id : null);
+            $childQty = (float) $row->qty * $factor * $qtyScale;
             $childBom = $this->directBom($companyId, (int) $component->id);
             if ($childBom->isNotEmpty()) {
                 $this->walkLeaves($companyId, (int) $component->id, $childQty, $nextPath, $depth + 1, $totals, $meta);
@@ -104,7 +106,10 @@ class BomExplosionService
                 continue;
             }
 
-            $planned = (int) max(1, (int) round($childQty));
+            $planned = $this->ceilBaseQty($childQty);
+            if ($planned <= 0) {
+                continue;
+            }
             $id = (int) $component->id;
             $totals[$id] = ($totals[$id] ?? 0) + $planned;
             $meta[$id] = [
@@ -121,7 +126,7 @@ class BomExplosionService
     {
         return ProductBomItem::query()
             ->withoutGlobalScopes()
-            ->with('component:id,name,unit,track_stock,is_active,company_id')
+            ->with('component:id,name,unit,unit_id,track_stock,is_active,company_id')
             ->where('company_id', $companyId)
             ->where('product_id', $productId)
             ->orderBy('sort_order')
@@ -144,7 +149,11 @@ class BomExplosionService
                 continue;
             }
 
-            $planned = (int) max(1, (int) round((float) $row->qty * $qty));
+            $factor = $this->factorToBase($component, $row->unit_id ? (int) $row->unit_id : null);
+            $planned = $this->ceilBaseQty((float) $row->qty * $factor * $qty);
+            if ($planned <= 0) {
+                continue;
+            }
             $lines[] = [
                 'product_id' => (int) $component->id,
                 'qty_planned' => $planned,
@@ -154,5 +163,41 @@ class BomExplosionService
         }
 
         return $lines;
+    }
+
+    /**
+     * Resolve BOM line unit to base/small factor using the component's product units.
+     */
+    private function factorToBase(Product $component, ?int $unitId): int
+    {
+        if (! $unitId || (int) ($component->unit_id ?? 0) === $unitId) {
+            return 1;
+        }
+
+        $row = ProductUnit::query()
+            ->where('product_id', $component->id)
+            ->where('unit_id', $unitId)
+            ->first();
+
+        if ($row) {
+            return max(1, (int) $row->factor_to_base);
+        }
+
+        throw ValidationException::withMessages([
+            'bom_items' => ["Satuan BOM untuk {$component->name} tidak cocok dengan satuan produk."],
+        ]);
+    }
+
+    /**
+     * Issue materials with ceil so fractional recipes do not under-consume.
+     * Zero after ceil is allowed (no forced minimum of 1).
+     */
+    private function ceilBaseQty(float $qty): int
+    {
+        if ($qty <= 0) {
+            return 0;
+        }
+
+        return (int) max(0, (int) ceil($qty - 1e-12));
     }
 }

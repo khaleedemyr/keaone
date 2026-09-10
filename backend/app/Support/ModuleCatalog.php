@@ -14,7 +14,9 @@ class ModuleCatalog
             'stock',
             'invoice',
             'purchase',
+            'finance',
             'work_order',
+            'storefront',
             'promotions',
             'choices',
         ];
@@ -32,7 +34,9 @@ class ModuleCatalog
             'stock' => true,
             'invoice' => true,
             'purchase' => false,
+            'finance' => true,
             'work_order' => false,
+            'storefront' => false,
             'promotions' => true,
             'choices' => true,
         ];

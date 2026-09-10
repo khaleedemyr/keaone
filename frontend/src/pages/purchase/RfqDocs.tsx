@@ -6,7 +6,7 @@ import type { ApiOk, Outlet, Party, Product, Warehouse } from '../../types'
 import { useFeedback } from '../../components/feedback'
 import { PageHeader } from '../../components/ui'
 import { MasterFilters, MasterPager, useListQuery } from '../../components/MasterListBar'
-import { MasterModal, MasterViewModal, MasterNameButton, ViewField } from '../../components/MasterModal'
+import { MasterModal, MasterViewModal } from '../../components/MasterModal'
 import { SearchMultiSelect } from '../../components/SearchMultiSelect'
 import { PurchaseLineEditor } from './PurchaseLineEditor'
 import { ProcurementCostCenterFields } from './ProcurementCostCenterFields'
@@ -17,6 +17,7 @@ import {
   purchaseLineUuid,
   type PurchaseLineDraft,
 } from './purchaseLineUtils'
+import { DocHeader, DocItemsTable, DocStatusBadge, DocTh, MetaField } from './purchaseDocShared'
 import { useAccess } from '../../access'
 import { useAuth } from '../../auth'
 import { useI18n, type MsgKey } from '../../i18n'
@@ -119,7 +120,7 @@ function quoteStatusLabel(t: (k: MsgKey) => string, status: string) {
 }
 
 export default function RfqDocs() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const { me } = useAuth()
   const { can } = useAccess()
   const feedback = useFeedback()
@@ -357,13 +358,17 @@ export default function RfqDocs() {
   async function saveQuote(e: FormEvent) {
     e.preventDefault()
     if (!viewing || !quoteSupplierId) return
+    const items = (viewing.items ?? []).map((item) => ({
+      rfq_item_id: item.id,
+      unit_cost: Number(quoteItems[item.id]?.replace(/[^\d]/g, '') || 0),
+      qty: item.qty,
+    }))
+    if (items.length === 0 || items.some((row) => row.unit_cost <= 0)) {
+      feedback.error(t('rfqQuoteNeedPositiveCost'))
+      return
+    }
     setSaving(true)
     try {
-      const items = (viewing.items ?? []).map((item) => ({
-        rfq_item_id: item.id,
-        unit_cost: Number(quoteItems[item.id]?.replace(/[^\d]/g, '') || 0),
-        qty: item.qty,
-      }))
       const { data } = await api.put<ApiOk<QuoteRow>>(`/rfqs/${viewing.id}/quotes/${quoteSupplierId}`, {
         client_uuid: uuid(),
         lead_days: quoteLeadDays ? Number(quoteLeadDays) : null,
@@ -432,6 +437,18 @@ export default function RfqDocs() {
     }
   }
 
+  async function deleteRfq(row: RfqRow) {
+    if (!window.confirm(t('deleteConfirm', { name: row.number }))) return
+    try {
+      await api.delete(`/rfqs/${row.id}`)
+      if (viewing?.id === row.id) setViewing(null)
+      feedback.success(t('deleted'))
+      await loadRows()
+    } catch (err) {
+      feedback.error(apiMessage(err, t('saveFailed')))
+    }
+  }
+
   if (!rfqEnabled) {
     return (
       <div className="space-y-4">
@@ -467,33 +484,73 @@ export default function RfqDocs() {
       />
 
       <div className="glass overflow-x-auto rounded-3xl">
-        <table className="master-table">
-          <thead>
+        <table className="min-w-full text-left text-sm">
+          <thead className="border-b border-line text-[11px] uppercase tracking-wide text-muted">
             <tr>
-              <th>{t('number')}</th>
-              <th>{t('procurementRfqTitleField')}</th>
-              <th>{t('status')}</th>
-              <th>{t('procurementRfqDueAt')}</th>
-              <th>{t('navDepartments')}</th>
-              <th>{t('createdAt')}</th>
+              <th className="px-4 py-3">{t('number')}</th>
+              <th className="px-4 py-3">{t('procurementRfqTitleField')}</th>
+              <th className="px-4 py-3">{t('status')}</th>
+              <th className="px-4 py-3">{t('procurementRfqDueAt')}</th>
+              <th className="px-4 py-3">{t('navDepartments')}</th>
+              <th className="px-4 py-3">{t('createdAt')}</th>
+              <th className="px-4 py-3 text-right">{t('actions')}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id}>
-                <td>
-                  <MasterNameButton onClick={() => void openDetail(row)}>{row.number}</MasterNameButton>
+              <tr key={row.id} className="border-b border-line/70 last:border-0">
+                <td className="px-4 py-3 font-medium">
+                  <button
+                    type="button"
+                    className="text-left font-medium text-fg hover:text-mint"
+                    onClick={() => void openDetail(row)}
+                  >
+                    {row.number}
+                  </button>
                 </td>
-                <td>{row.title}</td>
-                <td>{statusLabel(t, row.status)}</td>
-                <td>{row.due_at ?? '—'}</td>
-                <td>{row.department?.name ?? '—'}</td>
-                <td>{row.created_at ? new Date(row.created_at).toLocaleDateString() : '—'}</td>
+                <td className="max-w-[18rem] px-4 py-3">
+                  <div className="truncate font-medium text-fg" title={row.title}>
+                    {row.title}
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <DocStatusBadge status={row.status} label={statusLabel(t, row.status)} />
+                </td>
+                <td className="px-4 py-3 tabular-nums text-muted">{row.due_at ?? '—'}</td>
+                <td className="px-4 py-3 text-muted">{row.department?.name ?? '—'}</td>
+                <td className="px-4 py-3 tabular-nums text-muted">
+                  {row.created_at ? new Date(row.created_at).toLocaleDateString(locale) : '—'}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex flex-wrap justify-end gap-1">
+                    <button
+                      type="button"
+                      className="btn-ghost !px-2 !text-xs"
+                      onClick={() => void openDetail(row)}
+                    >
+                      {t('purchaseViewDetail')}
+                    </button>
+                    {canEdit && row.status === 'draft' ? (
+                      <button type="button" className="btn-ghost !px-2 !text-xs" onClick={() => openEdit(row)}>
+                        {t('edit')}
+                      </button>
+                    ) : null}
+                    {canDelete && row.status === 'draft' ? (
+                      <button
+                        type="button"
+                        className="btn-ghost !px-2 !text-xs text-rose-500"
+                        onClick={() => void deleteRfq(row)}
+                      >
+                        {t('delete')}
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
               </tr>
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-sm text-muted">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted">
                   {t('emptyMaster')}
                 </td>
               </tr>
@@ -573,55 +630,76 @@ export default function RfqDocs() {
         </div>
       </MasterModal>
 
-      <MasterViewModal open={Boolean(viewing)} title={viewing?.number ?? ''} onClose={() => setViewing(null)} size="2xl">
+      <MasterViewModal
+        open={Boolean(viewing)}
+        title={viewing?.number ?? ''}
+        onClose={() => setViewing(null)}
+        size="2xl"
+        documentMode
+        onEdit={viewing && canEdit && viewing.status === 'draft' ? () => openEdit(viewing) : undefined}
+      >
         {viewing ? (
-          <div className="space-y-6">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <ViewField label={t('procurementRfqTitleField')} value={viewing.title} />
-              <ViewField label={t('status')} value={statusLabel(t, viewing.status)} />
-              <ViewField label={t('procurementRfqDueAt')} value={viewing.due_at ?? '—'} />
-              <ViewField label={t('navDepartments')} value={viewing.department?.name ?? '—'} />
-              <ViewField label={t('navWarehouses')} value={viewing.warehouse?.name ?? '—'} />
-              <ViewField label={t('purchaseNote')} value={viewing.note ?? '—'} />
-            </div>
+          <div className="space-y-6 font-sans text-sm leading-relaxed text-fg">
+            <DocHeader
+              docLabel={t('procurementRfqTitle')}
+              number={viewing.number}
+              status={viewing.status}
+              statusLabel={statusLabel(t, viewing.status)}
+              createdAt={viewing.created_at}
+              createdAtLabel={t('createdAt')}
+              locale={locale}
+              subtitle={viewing.title}
+            />
+
+            <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+              <MetaField label={t('procurementRfqDueAt')} value={viewing.due_at ?? '—'} />
+              <MetaField label={t('navDepartments')} value={viewing.department?.name ?? '—'} />
+              <MetaField label={t('navWarehouses')} value={viewing.warehouse?.name ?? '—'} />
+              {multiOutlet ? <MetaField label={t('outlet')} value={viewing.outlet?.name ?? '—'} /> : null}
+              <MetaField label={t('purchaseNote')} value={viewing.note?.trim() ? viewing.note : '—'} />
+            </dl>
 
             <div>
-              <h4 className="mb-2 text-sm font-semibold text-fg">{t('items')}</h4>
-              <div className="overflow-x-auto rounded-2xl border border-line/40">
-                <table className="master-table">
-                  <thead>
-                    <tr>
-                      <th>{t('product')}</th>
-                      <th>{t('qty')}</th>
-                      <th>{t('unit')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(viewing.items ?? []).map((item) => (
-                      <tr key={item.id}>
-                        <td>{item.name_snapshot}</td>
-                        <td>{item.qty}</td>
-                        <td>{item.unit ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <h4 className="text-sm font-semibold text-fg">{t('items')}</h4>
+              <DocItemsTable
+                columns={
+                  <>
+                    <DocTh>{t('product')}</DocTh>
+                    <DocTh align="right">{t('qty')}</DocTh>
+                    <DocTh>{t('unit')}</DocTh>
+                  </>
+                }
+              >
+                {(viewing.items ?? []).map((item) => (
+                  <tr key={item.id} className="border-b border-line/70 last:border-0">
+                    <td className="px-3 py-2.5 align-top font-medium text-fg">{item.name_snapshot}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{item.qty}</td>
+                    <td className="px-3 py-2.5 text-muted">{item.unit ?? '—'}</td>
+                  </tr>
+                ))}
+              </DocItemsTable>
             </div>
 
             <div>
               <h4 className="mb-2 text-sm font-semibold text-fg">{t('procurementRfqInvitedSuppliers')}</h4>
               <div className="flex flex-wrap gap-2">
-                {(viewing.suppliers ?? []).map((row) => (
-                  <span key={row.supplier_id} className="rounded-full bg-surface px-3 py-1 text-sm">
-                    {row.supplier?.name}
-                  </span>
-                ))}
+                {(viewing.suppliers ?? []).length > 0 ? (
+                  (viewing.suppliers ?? []).map((row) => (
+                    <span
+                      key={row.supplier_id}
+                      className="inline-flex items-center rounded-md bg-fill px-2.5 py-1 text-xs font-medium text-fg ring-1 ring-inset ring-line"
+                    >
+                      {row.supplier?.name ?? `#${row.supplier_id}`}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-sm text-muted">—</span>
+                )}
               </div>
             </div>
 
             {viewing.status === 'draft' && canEdit ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 border-t border-line pt-4">
                 <button type="button" className="btn-secondary" onClick={() => openEdit(viewing)}>
                   {t('edit')}
                 </button>
@@ -638,12 +716,7 @@ export default function RfqDocs() {
                     type="button"
                     className="btn-danger"
                     disabled={acting}
-                    onClick={async () => {
-                      if (!window.confirm(t('deleteConfirm', { name: viewing.number }))) return
-                      await api.delete(`/rfqs/${viewing.id}`)
-                      setViewing(null)
-                      await loadRows()
-                    }}
+                    onClick={() => void deleteRfq(viewing)}
                   >
                     {t('delete')}
                   </button>
@@ -651,34 +724,51 @@ export default function RfqDocs() {
               </div>
             ) : null}
 
-            {['open', 'awarded'].includes(viewing.status) ? (
-              <div className="space-y-4">
+            {['open', 'awarded', 'closed'].includes(viewing.status) ? (
+              <div className="space-y-4 border-t border-line pt-4">
                 <h4 className="text-sm font-semibold text-fg">{t('procurementRfqQuotes')}</h4>
-                <div className="space-y-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   {(viewing.suppliers ?? []).map((row) => {
                     const quote = viewing.quotes?.find((q) => q.supplier_id === row.supplier_id)
+                    const isWinner = viewing.winner_vendor_quote_id != null && quote?.id === viewing.winner_vendor_quote_id
                     return (
                       <div
                         key={row.supplier_id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-line/40 p-3"
+                        className={`rounded-xl border p-3 ${
+                          isWinner ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-line bg-fill/20'
+                        }`}
                       >
-                        <div>
-                          <div className="font-medium text-fg">{row.supplier?.name}</div>
-                          <div className="text-xs text-muted">
-                            {quote
-                              ? `${quoteStatusLabel(t, quote.status)} · ${formatRupiah(quote.total)}`
-                              : t('procurementRfqQuoteDraft')}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-fg">{row.supplier?.name}</div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              {quote ? (
+                                <DocStatusBadge status={quote.status} label={quoteStatusLabel(t, quote.status)} />
+                              ) : (
+                                <span className="text-xs text-muted">{t('procurementRfqQuoteDraft')}</span>
+                              )}
+                              {isWinner ? (
+                                <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
+                                  {t('procurementRfqWinner')}
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
+                          {quote ? (
+                            <div className="shrink-0 text-right text-sm font-semibold tabular-nums text-fg">
+                              {formatRupiah(quote.total)}
+                            </div>
+                          ) : null}
                         </div>
                         {canEdit && viewing.status === 'open' ? (
-                          <div className="flex flex-wrap gap-2">
-                            <button type="button" className="btn-secondary" onClick={() => beginQuote(row.supplier_id)}>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button type="button" className="btn-secondary !px-2.5 !py-1 !text-xs" onClick={() => beginQuote(row.supplier_id)}>
                               {quote ? t('edit') : t('procurementRfqInputQuote')}
                             </button>
                             {quote && quote.status === 'draft' ? (
                               <button
                                 type="button"
-                                className="btn-primary"
+                                className="btn-primary !px-2.5 !py-1 !text-xs"
                                 disabled={acting}
                                 onClick={() => void submitQuote(quote.id)}
                               >
@@ -688,7 +778,7 @@ export default function RfqDocs() {
                             {quote && quote.status === 'submitted' ? (
                               <button
                                 type="button"
-                                className="btn-primary"
+                                className="btn-primary !px-2.5 !py-1 !text-xs"
                                 disabled={acting}
                                 onClick={() => void selectWinner(quote.id)}
                               >
@@ -704,62 +794,77 @@ export default function RfqDocs() {
 
                 {comparison && submittedQuotes.length > 0 ? (
                   <div>
-                    <h4 className="mb-2 text-sm font-semibold text-fg">{t('procurementRfqCompare')}</h4>
-                    <div className="overflow-x-auto rounded-2xl border border-line/40">
-                      <table className="master-table">
-                        <thead>
-                          <tr>
-                            <th>{t('product')}</th>
-                            <th>{t('qty')}</th>
-                            {submittedQuotes.map((q) => (
-                              <th key={q.id}>{q.supplier?.name}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(comparison.rows ?? []).map((row) => (
-                            <tr key={row.rfq_item_id}>
-                              <td>{row.name}</td>
-                              <td>
-                                {row.qty} {row.unit ?? ''}
-                              </td>
-                              {submittedQuotes.map((q) => {
-                                const cell = row.cells.find((c) => c.vendor_quote_id === q.id)
-                                const isLowest =
-                                  cell?.unit_cost != null &&
-                                  row.lowest_unit_cost != null &&
-                                  cell.unit_cost === row.lowest_unit_cost
-                                return (
-                                  <td key={q.id} className={isLowest ? 'font-semibold text-emerald-600' : undefined}>
-                                    {cell?.unit_cost != null ? formatRupiah(cell.unit_cost) : '—'}
-                                    {isLowest ? (
-                                      <span className="ml-1 text-xs text-emerald-600">({t('procurementRfqLowest')})</span>
-                                    ) : null}
-                                  </td>
-                                )
-                              })}
-                            </tr>
+                    <h4 className="text-sm font-semibold text-fg">{t('procurementRfqCompare')}</h4>
+                    <DocItemsTable
+                      columns={
+                        <>
+                          <DocTh>{t('product')}</DocTh>
+                          <DocTh align="right">{t('qty')}</DocTh>
+                          {submittedQuotes.map((q) => (
+                            <DocTh key={q.id} align="right">
+                              {q.supplier?.name}
+                            </DocTh>
                           ))}
-                          <tr className="font-semibold">
-                            <td colSpan={2}>{t('total')}</td>
-                            {submittedQuotes.map((q) => (
-                              <td key={q.id}>{formatRupiah(q.total)}</td>
-                            ))}
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
+                        </>
+                      }
+                    >
+                      {(comparison.rows ?? []).map((row) => (
+                        <tr key={row.rfq_item_id} className="border-b border-line/70 last:border-0">
+                          <td className="px-3 py-2.5 align-top font-medium text-fg">{row.name}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-muted">
+                            {row.qty}
+                            {row.unit ? ` ${row.unit}` : ''}
+                          </td>
+                          {submittedQuotes.map((q) => {
+                            const cell = row.cells.find((c) => c.vendor_quote_id === q.id)
+                            const isLowest =
+                              cell?.unit_cost != null &&
+                              row.lowest_unit_cost != null &&
+                              cell.unit_cost === row.lowest_unit_cost
+                            return (
+                              <td
+                                key={q.id}
+                                className={`px-3 py-2.5 text-right tabular-nums ${
+                                  isLowest ? 'font-semibold text-emerald-600 dark:text-emerald-300' : ''
+                                }`}
+                              >
+                                {cell?.unit_cost != null ? formatRupiah(cell.unit_cost) : '—'}
+                                {isLowest ? (
+                                  <div className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-300">
+                                    {t('procurementRfqLowest')}
+                                  </div>
+                                ) : null}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                      <tr className="border-t border-line bg-fill/40 font-semibold">
+                        <td className="px-3 py-2.5" colSpan={2}>
+                          {t('total')}
+                        </td>
+                        {submittedQuotes.map((q) => (
+                          <td key={q.id} className="px-3 py-2.5 text-right tabular-nums">
+                            {formatRupiah(q.total)}
+                          </td>
+                        ))}
+                      </tr>
+                    </DocItemsTable>
                   </div>
                 ) : null}
 
                 {viewing.winner_quote ? (
-                  <div className="rounded-2xl bg-emerald-500/10 p-3 text-sm">
-                    {t('procurementRfqWinner')}: {viewing.winner_quote.supplier?.name} (
-                    {formatRupiah(viewing.winner_quote.total)})
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm">
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-200">
+                      {t('procurementRfqWinner')}:
+                    </span>{' '}
+                    <span className="text-fg">
+                      {viewing.winner_quote.supplier?.name} ({formatRupiah(viewing.winner_quote.total)})
+                    </span>
                   </div>
                 ) : null}
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {canEdit && viewing.status === 'open' ? (
                     <button
                       type="button"
@@ -789,7 +894,7 @@ export default function RfqDocs() {
                     </button>
                   ) : null}
                   {viewing.has_purchase_requisition ? (
-                    <span className="self-center text-sm text-muted">{t('procurementRfqHasPr')}</span>
+                    <span className="text-sm text-muted">{t('procurementRfqHasPr')}</span>
                   ) : null}
                 </div>
               </div>

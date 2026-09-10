@@ -6,6 +6,8 @@ import HrApp from '../desktop/HrApp'
 import MasterApp from '../desktop/MasterApp'
 import InventoryApp from '../desktop/InventoryApp'
 import PurchaseApp from '../desktop/PurchaseApp'
+import FinanceApp from '../desktop/FinanceApp'
+import StorefrontApp from '../desktop/StorefrontApp'
 import SalesApp from '../desktop/SalesApp'
 import SettingsApp from '../desktop/SettingsApp'
 import Beranda from '../pages/Beranda'
@@ -22,6 +24,8 @@ export function TenantAppView({ appId }: { appId: TenantAppId }) {
       {appId === 'inventory' ? <InventoryApp /> : null}
       {appId === 'sales' ? <SalesApp /> : null}
       {appId === 'purchase' ? <PurchaseApp /> : null}
+      {appId === 'finance' ? <FinanceApp /> : null}
+      {appId === 'storefront' ? <StorefrontApp /> : null}
       {appId === 'hr' ? <HrApp /> : null}
       {appId === 'approvals' ? <ApprovalsApp /> : null}
       {appId === 'admin' ? <AdminApp /> : null}

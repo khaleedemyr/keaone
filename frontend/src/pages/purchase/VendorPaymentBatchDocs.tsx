@@ -14,6 +14,7 @@ import { useI18n } from '../../i18n'
 import { approvalRowLabel, buildApproverMemberOptions } from './approverOptions'
 import { purchaseLineUuid } from './purchaseLineUtils'
 import { formatRupiah } from '../../lib/money'
+import { PaymentBatchDetailModal } from './PaymentBatchDetailModal'
 
 type PayableInvoice = {
   id: number
@@ -85,6 +86,7 @@ export default function VendorPaymentBatchDocs() {
 
   const [rows, setRows] = useState<BatchRow[]>([])
   const [open, setOpen] = useState(false)
+  const [detailId, setDetailId] = useState<number | null>(null)
   const [editing, setEditing] = useState<BatchRow | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -362,22 +364,32 @@ export default function VendorPaymentBatchDocs() {
               <th className="px-4 py-3 font-medium">{t('procurementPaymentMethod')}</th>
               <th className="px-4 py-3 font-medium">{t('total')}</th>
               <th className="px-4 py-3 font-medium">{t('cashier')}</th>
-              {canEdit ? <th className="px-4 py-3 font-medium"></th> : null}
+              <th className="px-4 py-3 font-medium">{t('actions')}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.id} className="border-t border-line hover:bg-fill">
-                <td className="px-4 py-3 font-medium text-fg">{row.number}</td>
+                <td className="px-4 py-3 font-medium text-fg">
+                  <button
+                    type="button"
+                    className="text-left font-medium text-fg hover:text-mint"
+                    onClick={() => setDetailId(row.id)}
+                  >
+                    {row.number}
+                  </button>
+                </td>
                 <td className="px-4 py-3 text-muted">{statusLabel[row.status] ?? row.status}</td>
                 <td className="px-4 py-3 text-muted">
                   {row.payment_method ? methodOptions.find((m) => m.value === row.payment_method)?.label ?? row.payment_method : '—'}
                 </td>
                 <td className="px-4 py-3 text-muted">{formatRupiah(row.total, locale)}</td>
                 <td className="px-4 py-3 text-muted">{row.user?.name ?? '—'}</td>
-                {canEdit ? (
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
-                    {['draft', 'rejected'].includes(row.status) ? (
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <button type="button" className="mr-3 text-mint" onClick={() => setDetailId(row.id)}>
+                    {t('purchaseViewDetail')}
+                  </button>
+                  {canEdit && ['draft', 'rejected'].includes(row.status) ? (
                       <>
                         <button type="button" className="mr-3 text-mint" onClick={() => void openEdit(row)}>
                           {t('edit')}
@@ -392,7 +404,7 @@ export default function VendorPaymentBatchDocs() {
                         ) : null}
                       </>
                     ) : null}
-                    {row.status === 'submitted' && row.can_approve ? (
+                    {canEdit && row.status === 'submitted' && row.can_approve ? (
                       <>
                         <button type="button" className="mr-3 text-mint" onClick={() => void runAction(row, 'approve')}>
                           {t('purchaseApprove')}
@@ -402,18 +414,17 @@ export default function VendorPaymentBatchDocs() {
                         </button>
                       </>
                     ) : null}
-                    {canPay(row) ? (
+                    {canEdit && canPay(row) ? (
                       <button type="button" className="text-mint" onClick={() => void runAction(row, 'pay')}>
                         {t('procurementPaymentPay')}
                       </button>
                     ) : null}
-                  </td>
-                ) : null}
+                </td>
               </tr>
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td className="px-4 py-8 text-center text-muted" colSpan={canEdit ? 6 : 5}>
+                <td className="px-4 py-8 text-center text-muted" colSpan={6}>
                   {t('procurementPaymentEmpty')}
                 </td>
               </tr>
@@ -526,6 +537,14 @@ export default function VendorPaymentBatchDocs() {
           {t('total')}: <span className="font-medium text-fg">{formatRupiah(batchTotal, locale)}</span>
         </div>
       </MasterModal>
+
+      <PaymentBatchDetailModal
+        batchId={detailId}
+        open={detailId !== null}
+        onClose={() => setDetailId(null)}
+        statusLabel={(status) => statusLabel[status] ?? status}
+        methodLabel={(method) => methodOptions.find((m) => m.value === method)?.label ?? method ?? '—'}
+      />
     </div>
   )
 }

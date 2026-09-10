@@ -23,7 +23,12 @@ class PurchaseOrderController extends Controller
             ->orderByDesc('id');
 
         if ($status = $request->string('status')->toString()) {
-            $query->where('status', $status);
+            $statuses = array_values(array_filter(array_map('trim', explode(',', $status))));
+            if (count($statuses) > 1) {
+                $query->whereIn('status', $statuses);
+            } elseif ($statuses !== []) {
+                $query->where('status', $statuses[0]);
+            }
         }
         if ($search = $request->string('search')->toString()) {
             $query->where(function ($q) use ($search) {
@@ -119,6 +124,44 @@ class PurchaseOrderController extends Controller
         $po = $this->purchases->createOrder($data, $request->user());
 
         return $this->ok($this->purchases->serializePo($po), [], 201);
+    }
+
+    public function storeBatch(Request $request): JsonResponse
+    {
+        $this->ensureModule('purchase');
+        $this->ensureCan('purchaseorders', 'create');
+        $this->ensureBilling();
+
+        $data = $request->validate([
+            'orders' => ['required', 'array', 'min:1'],
+            'orders.*.client_uuid' => ['required', 'uuid'],
+            'orders.*.supplier_id' => ['required', 'integer'],
+            'orders.*.purchase_requisition_id' => ['nullable', 'integer'],
+            'orders.*.warehouse_id' => ['nullable', 'integer'],
+            'orders.*.outlet_id' => ['nullable', 'integer'],
+            'orders.*.department_id' => ['nullable', 'integer'],
+            'orders.*.expected_at' => ['nullable', 'date'],
+            'orders.*.note' => ['nullable', 'string'],
+            'orders.*.items' => ['sometimes', 'array', 'min:1'],
+            'orders.*.items.*.product_id' => ['required_with:orders.*.items', 'integer'],
+            'orders.*.items.*.qty' => ['required_with:orders.*.items', 'integer', 'min:1'],
+            'orders.*.items.*.unit_cost' => ['nullable', 'integer', 'min:0'],
+            'orders.*.items.*.discount' => ['nullable', 'integer', 'min:0'],
+            'orders.*.items.*.unit' => ['nullable', 'string', 'max:40'],
+            'orders.*.items.*.unit_level' => ['nullable', 'string', 'in:small,medium,large'],
+            'orders.*.items.*.note' => ['nullable', 'string'],
+            'orders.*.items.*.purchase_requisition_item_id' => ['nullable', 'integer'],
+            'orders.*.approvals' => ['sometimes', 'array'],
+            'orders.*.approvals.*.user_id' => ['required_with:orders.*.approvals', 'integer'],
+        ]);
+
+        $created = $this->purchases->createOrdersBatch($data['orders'], $request->user());
+
+        return $this->ok(
+            collect($created)->map(fn (PurchaseOrder $po) => $this->purchases->serializePo($po))->values(),
+            [],
+            201,
+        );
     }
 
     public function show(PurchaseOrder $purchaseOrder): JsonResponse

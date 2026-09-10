@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, apiMessage } from '../api/client'
+import { useAccess } from '../access'
 import { formatDateTime, formatRupiah } from '../lib/money'
 import type { ApiOk, ReceiptPayload, Sale } from '../types'
 import { PageEnter } from '../components/motion'
@@ -10,10 +11,12 @@ import { useI18n } from '../i18n'
 
 export default function Sales() {
   const { t, locale } = useI18n()
+  const { can } = useAccess()
   const feedback = useFeedback()
   const list = useListQuery()
   const [sales, setSales] = useState<Sale[]>([])
   const [receipt, setReceipt] = useState<ReceiptPayload | null>(null)
+  const canCancel = can('sales', 'delete')
 
   async function load() {
     try {
@@ -123,7 +126,7 @@ export default function Sales() {
                   <button type="button" className="mr-3 text-mint" onClick={() => void openReceipt(sale)}>
                     {t('receipt')}
                   </button>
-                  {sale.status !== 'cancelled' ? (
+                  {sale.status !== 'cancelled' && canCancel ? (
                     <button type="button" className="text-rose-300" onClick={() => void cancel(sale)}>
                       {t('cancel')}
                     </button>

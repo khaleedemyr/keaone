@@ -22,6 +22,8 @@ import { APP_TILE, AppGlyph } from './glyphs'
 import MasterApp from './MasterApp'
 import InventoryApp from './InventoryApp'
 import PurchaseApp from './PurchaseApp'
+import FinanceApp from './FinanceApp'
+import StorefrontApp from './StorefrontApp'
 import ApprovalsApp from './ApprovalsApp'
 import HrApp from './HrApp'
 import SalesApp from './SalesApp'
@@ -127,6 +129,8 @@ export default function Desktop() {
               {win.id === 'inventory' ? <InventoryApp /> : null}
               {win.id === 'sales' ? <SalesApp /> : null}
               {win.id === 'purchase' ? <PurchaseApp /> : null}
+              {win.id === 'finance' ? <FinanceApp /> : null}
+              {win.id === 'storefront' ? <StorefrontApp /> : null}
               {win.id === 'hr' ? <HrApp /> : null}
               {win.id === 'approvals' ? <ApprovalsApp /> : null}
               {win.id === 'admin' ? <AdminApp /> : null}

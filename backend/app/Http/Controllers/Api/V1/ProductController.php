@@ -8,6 +8,7 @@ use App\Models\Choice;
 use App\Models\Product;
 use App\Models\ProductBomItem;
 use App\Models\ProductImage;
+use App\Models\ProductUnit;
 use App\Models\StockBalance;
 use App\Models\SubCategory;
 use App\Models\Unit;
@@ -629,6 +630,22 @@ class ProductController extends Controller
                 throw ValidationException::withMessages([
                     'bom_items' => ['BOM membentuk siklus. Pilih komponen lain.'],
                 ]);
+            }
+
+            if (! empty($row['unit_id'])) {
+                $component = Product::query()->withoutGlobalScopes()->whereKey($row['component_id'])->first();
+                if ($component) {
+                    $ok = (int) ($component->unit_id ?? 0) === (int) $row['unit_id']
+                        || ProductUnit::query()
+                            ->where('product_id', $component->id)
+                            ->where('unit_id', (int) $row['unit_id'])
+                            ->exists();
+                    if (! $ok) {
+                        throw ValidationException::withMessages([
+                            'bom_items' => ['Satuan BOM harus salah satu satuan yang dikonfigurasi pada komponen.'],
+                        ]);
+                    }
+                }
             }
         }
     }

@@ -92,6 +92,7 @@ class InventoryService
         ?array $unitMeta = null,
         ?int $unitCost = null,
         bool $reverseCosting = false,
+        bool $syncProductCost = true,
     ): InventoryAdjustment {
         $warehouse = Warehouse::query()
             ->withoutGlobalScopes()
@@ -123,19 +124,28 @@ class InventoryService
 
         $company = Company::query()->findOrFail($companyId);
 
-        $balance = StockBalance::query()->withoutGlobalScopes()->firstOrCreate(
-            [
-                'company_id' => $companyId,
-                'warehouse_id' => $warehouseId,
-                'product_id' => $productId,
-            ],
-            [
-                'outlet_id' => $resolvedOutletId,
-                'qty' => 0,
-                'avg_cost' => (int) $product->cost_price,
-                'cost_value' => 0,
-            ],
-        );
+        try {
+            $balance = StockBalance::query()->withoutGlobalScopes()->firstOrCreate(
+                [
+                    'company_id' => $companyId,
+                    'warehouse_id' => $warehouseId,
+                    'product_id' => $productId,
+                ],
+                [
+                    'outlet_id' => $resolvedOutletId,
+                    'qty' => 0,
+                    'avg_cost' => (int) $product->cost_price,
+                    'cost_value' => 0,
+                ],
+            );
+        } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+            $balance = StockBalance::query()
+                ->withoutGlobalScopes()
+                ->where('company_id', $companyId)
+                ->where('warehouse_id', $warehouseId)
+                ->where('product_id', $productId)
+                ->firstOrFail();
+        }
 
         $balance = StockBalance::query()
             ->withoutGlobalScopes()
@@ -166,6 +176,7 @@ class InventoryService
             $refId,
             $unitCost,
             $reverseCosting,
+            $syncProductCost,
         );
 
         $balance->qty = $nextQty;

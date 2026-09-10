@@ -16,6 +16,7 @@ import { useAuth } from '../../auth'
 import { useI18n } from '../../i18n'
 import { ProcurementSimpleLineEditor } from './ProcurementSimpleLineEditor'
 import { purchaseLineUuid } from './purchaseLineUtils'
+import { ReturnDetailModal } from './ReturnDetailModal'
 
 type ApprovalDraft = {
   key: string
@@ -87,6 +88,7 @@ export default function PurchaseReturnDocs() {
   const [note, setNote] = useState('')
   const [lines, setLines] = useState<LineDraft[]>([{ key: uuid(), product_id: 0, name: '', qty: 1, unit: '' }])
   const [approvers, setApprovers] = useState<ApprovalDraft[]>([])
+  const [detailId, setDetailId] = useState<number | null>(null)
 
   const { options: supplierOptions } = useSupplierSelect(suppliers)
 
@@ -305,12 +307,27 @@ export default function PurchaseReturnDocs() {
           <tbody>
             {rows.map((row) => (
               <tr key={row.id} className="border-b border-line/70 last:border-0">
-                <td className="px-4 py-3 font-medium">{row.number}</td>
+                <td className="px-4 py-3 font-medium">
+                  <button
+                    type="button"
+                    className="text-left font-medium text-fg hover:text-mint"
+                    onClick={() => setDetailId(row.id)}
+                  >
+                    {row.number}
+                  </button>
+                </td>
                 <td className="px-4 py-3">{row.supplier?.name ?? '—'}</td>
                 <td className="px-4 py-3">{row.warehouse?.name ?? '—'}</td>
                 <td className="px-4 py-3">{statusLabel(row.status)}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      className="btn-ghost !px-2 !text-xs"
+                      onClick={() => setDetailId(row.id)}
+                    >
+                      {t('purchaseViewDetail')}
+                    </button>
                     {canEdit && ['draft', 'rejected'].includes(row.status) ? (
                       <button type="button" className="btn-ghost !px-2 !text-xs" onClick={() => void openEdit(row)}>
                         {t('edit')}
@@ -416,6 +433,13 @@ export default function PurchaseReturnDocs() {
 
           <ProcurementSimpleLineEditor mode="return" lines={lines} setLines={setLines} products={products} />
       </MasterModal>
+
+      <ReturnDetailModal
+        returnId={detailId}
+        open={detailId !== null}
+        onClose={() => setDetailId(null)}
+        statusLabel={statusLabel}
+      />
     </div>
   )
 }

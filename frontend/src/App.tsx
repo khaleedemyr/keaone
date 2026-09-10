@@ -15,6 +15,9 @@ import PublicPoPage from './pages/PublicPoPage'
 import PublicPrPage from './pages/PublicPrPage'
 import PublicInvitePage from './pages/PublicInvitePage'
 import PublicVendorPortalPage from './pages/PublicVendorPortalPage'
+import StorefrontPreviewPage from './pages/storefront/StorefrontPreviewPage'
+import StorefrontPublicPage from './pages/storefront/StorefrontPublicPage'
+import { isTenantStorefrontHost } from './pages/storefront/lib/storefrontHost'
 import { useUiSkin } from './uiSkin'
 import { MasterTableLabels } from './components/MasterTableLabels'
 
@@ -41,7 +44,21 @@ function AppHome() {
   )
 }
 
+function TenantStorefrontApp() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="*" element={<StorefrontPublicPage />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+
 export default function App() {
+  if (typeof window !== 'undefined' && isTenantStorefrontHost()) {
+    return <TenantStorefrontApp />
+  }
+
   return (
     <AuthProvider>
       <BrowserRouter>
@@ -56,6 +73,15 @@ export default function App() {
           <Route path="/pr/:token" element={<PublicPrPage />} />
           <Route path="/invite/:token" element={<PublicInvitePage />} />
           <Route path="/vendor-portal/:token" element={<PublicVendorPortalPage />} />
+          <Route
+            path="/storefront/preview"
+            element={
+              <RequireAuth>
+                <StorefrontPreviewPage />
+              </RequireAuth>
+            }
+          />
+          <Route path="/storefront/live" element={<StorefrontPublicPage />} />
           <Route path="/platform" element={<Navigate to="/app" replace />} />
           <Route
             path="/app"

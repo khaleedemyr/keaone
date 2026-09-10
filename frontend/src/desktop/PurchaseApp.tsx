@@ -4,6 +4,7 @@ import { useAccess } from '../access'
 import { useAuth } from '../auth'
 import { useI18n, type MsgKey } from '../i18n'
 import { AppNavShell, type AppNavGroup } from './AppNavShell'
+import { useDesktop } from './DesktopContext'
 
 export type PurchaseSection =
   | 'dashboard'
@@ -14,14 +15,6 @@ export type PurchaseSection =
   | 'return'
   | 'adjustments'
   | 'delivery'
-  | 'invoices'
-  | 'match'
-  | 'payments'
-  | 'prepayments'
-  | 'withholding'
-  | 'journals'
-  | 'budgets'
-  | 'assets'
   | 'rfqs'
   | 'vendorpricelists'
   | 'contracts'
@@ -148,26 +141,6 @@ export const PROCUREMENT_NAV_GROUPS: { id: string; label: MsgKey; items: Purchas
     ],
   },
   {
-    id: 'ap',
-    label: 'procurementGroupAp',
-    items: [
-      { id: 'invoices', label: 'procurementInvoiceTitle', menu: 'vendorinvoices' },
-      { id: 'match', label: 'procurementMatchTitle', menu: 'matchexceptions' },
-      { id: 'payments', label: 'procurementPaymentTitle', menu: 'vendorpaymentbatches' },
-      { id: 'prepayments', label: 'procurementPrepaymentTitle', menu: 'vendorprepayments' },
-      { id: 'withholding', label: 'procurementWithholdingTitle', menu: 'vendorwithholding' },
-    ],
-  },
-  {
-    id: 'finance',
-    label: 'procurementGroupFinance',
-    items: [
-      { id: 'journals', label: 'glJournalTitle', menu: 'gljournals' },
-      { id: 'budgets', label: 'procurementBudgetTitle', menu: 'procurementbudgets' },
-      { id: 'assets', label: 'procurementFixedAssetTitle', menu: 'fixedassets' },
-    ],
-  },
-  {
     id: 'settings',
     label: 'procurementGroupSettings',
     items: [
@@ -187,9 +160,19 @@ export function getPurchaseNavDefs(
   priceListEnabled: boolean,
   contractEnabled: boolean,
   planEnabled: boolean,
-): PurchaseNavDef[] {
-  const ctx: PurchaseNavContext = { flow, returnEnabled, adjustmentEnabled, deliveryEnabled, rfqEnabled, priceListEnabled, contractEnabled, planEnabled, autoReorderEnabled: false, demandPlanningEnabled: false }
-
+) {
+  const ctx: PurchaseNavContext = {
+    flow,
+    returnEnabled,
+    adjustmentEnabled,
+    deliveryEnabled,
+    rfqEnabled,
+    priceListEnabled,
+    contractEnabled,
+    planEnabled,
+    autoReorderEnabled: false,
+    demandPlanningEnabled: false,
+  }
   return PROCUREMENT_NAV_GROUPS.flatMap((group) =>
     group.items.filter((item) => !item.visible || item.visible(ctx)),
   )
@@ -199,14 +182,6 @@ const PurchaseDocs = lazy(() => import('../pages/purchase/PurchaseDocs'))
 const PurchaseReturnDocs = lazy(() => import('../pages/purchase/PurchaseReturnDocs'))
 const VendorAdjustmentDocs = lazy(() => import('../pages/purchase/VendorAdjustmentDocs'))
 const DeliveryScheduleDocs = lazy(() => import('../pages/purchase/DeliveryScheduleDocs'))
-const VendorInvoiceDocs = lazy(() => import('../pages/purchase/VendorInvoiceDocs'))
-const MatchExceptionDocs = lazy(() => import('../pages/purchase/MatchExceptionDocs'))
-const VendorPaymentBatchDocs = lazy(() => import('../pages/purchase/VendorPaymentBatchDocs'))
-const VendorPrepaymentDocs = lazy(() => import('../pages/purchase/VendorPrepaymentDocs'))
-const WithholdingTaxDocs = lazy(() => import('../pages/purchase/WithholdingTaxDocs'))
-const GlJournalDocs = lazy(() => import('../pages/purchase/GlJournalDocs'))
-const BudgetDocs = lazy(() => import('../pages/purchase/BudgetDocs'))
-const AssetDocs = lazy(() => import('../pages/purchase/AssetDocs'))
 const RfqDocs = lazy(() => import('../pages/purchase/RfqDocs'))
 const VendorPriceListDocs = lazy(() => import('../pages/purchase/VendorPriceListDocs'))
 const ContractDocs = lazy(() => import('../pages/purchase/ContractDocs'))
@@ -221,6 +196,7 @@ export default function PurchaseApp() {
   const { t } = useI18n()
   const { me } = useAuth()
   const { can } = useAccess()
+  const desktop = useDesktop()
   const flow = (me?.settings?.purchase_flow ?? 'direct') as PurchaseFlow
   const returnEnabled = me?.settings?.return_enabled !== false
   const adjustmentEnabled = me?.settings?.vendor_adjustment_enabled !== false
@@ -233,8 +209,30 @@ export default function PurchaseApp() {
   const demandPlanningEnabled = me?.settings?.procurement_demand_planning_enabled === true
 
   const navContext = useMemo<PurchaseNavContext>(
-    () => ({ flow, returnEnabled, adjustmentEnabled, deliveryEnabled, rfqEnabled, priceListEnabled, contractEnabled, planEnabled, autoReorderEnabled, demandPlanningEnabled }),
-    [flow, returnEnabled, adjustmentEnabled, deliveryEnabled, rfqEnabled, priceListEnabled, contractEnabled, planEnabled, autoReorderEnabled, demandPlanningEnabled],
+    () => ({
+      flow,
+      returnEnabled,
+      adjustmentEnabled,
+      deliveryEnabled,
+      rfqEnabled,
+      priceListEnabled,
+      contractEnabled,
+      planEnabled,
+      autoReorderEnabled,
+      demandPlanningEnabled,
+    }),
+    [
+      flow,
+      returnEnabled,
+      adjustmentEnabled,
+      deliveryEnabled,
+      rfqEnabled,
+      priceListEnabled,
+      contractEnabled,
+      planEnabled,
+      autoReorderEnabled,
+      demandPlanningEnabled,
+    ],
   )
 
   const groups = useMemo<AppNavGroup<PurchaseSection>[]>(
@@ -259,11 +257,19 @@ export default function PurchaseApp() {
     logActivity('open_section', `procurement:${sectionId}`)
   }
 
+  function goFromDashboard(sectionId: string) {
+    if (sectionId === 'finance' || sectionId === 'invoices' || sectionId === 'match' || sectionId === 'payments') {
+      desktop.openApp('finance')
+      return
+    }
+    go(sectionId as PurchaseSection)
+  }
+
   if (groups.length === 0) return null
 
   return (
     <AppNavShell groups={groups} current={current} onSelect={go}>
-      {current === 'dashboard' ? <ProcurementDashboard onNavigate={go} /> : null}
+      {current === 'dashboard' ? <ProcurementDashboard onNavigate={goFromDashboard} /> : null}
       {current === 'reports' ? <ProcurementReports /> : null}
       {current === 'pr' ? <PurchaseDocs kind="pr" /> : null}
       {current === 'po' ? <PurchaseDocs kind="po" /> : null}
@@ -272,14 +278,6 @@ export default function PurchaseApp() {
       {current === 'return' ? <PurchaseReturnDocs /> : null}
       {current === 'adjustments' ? <VendorAdjustmentDocs /> : null}
       {current === 'delivery' ? <DeliveryScheduleDocs /> : null}
-      {current === 'invoices' ? <VendorInvoiceDocs /> : null}
-      {current === 'match' ? <MatchExceptionDocs /> : null}
-      {current === 'payments' ? <VendorPaymentBatchDocs /> : null}
-      {current === 'prepayments' ? <VendorPrepaymentDocs /> : null}
-      {current === 'withholding' ? <WithholdingTaxDocs /> : null}
-      {current === 'journals' ? <GlJournalDocs /> : null}
-      {current === 'budgets' ? <BudgetDocs /> : null}
-      {current === 'assets' ? <AssetDocs /> : null}
       {current === 'rfqs' ? <RfqDocs /> : null}
       {current === 'contracts' ? <ContractDocs /> : null}
       {current === 'plans' ? <PlanDocs /> : null}

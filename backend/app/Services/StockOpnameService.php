@@ -16,7 +16,11 @@ use Illuminate\Validation\ValidationException;
 
 class StockOpnameService
 {
-    public function __construct(private InventoryService $inventory) {}
+    public function __construct(
+        private InventoryService $inventory,
+        private ProductUnitService $productUnits,
+        private DocumentSequenceService $documentSequences,
+    ) {}
 
     public function create(array $payload, User $user): StockOpname
     {
@@ -34,9 +38,10 @@ class StockOpnameService
 
     public function update(StockOpname $opname, array $payload): StockOpname
     {
-        $this->assertDraft($opname);
-
         return DB::transaction(function () use ($opname, $payload) {
+            $opname = StockOpname::query()->withoutGlobalScopes()->whereKey($opname->id)->lockForUpdate()->firstOrFail();
+            $this->assertDraft($opname);
+
             $warehouseId = (int) ($payload['warehouse_id'] ?? $opname->warehouse_id);
             $warehouse = $this->assertWarehouse((int) $opname->company_id, $warehouseId);
 
@@ -72,8 +77,16 @@ class StockOpnameService
             }
 
             foreach ($opname->items as $item) {
-                $variance = (int) $item->counted_qty - (int) $item->book_qty;
-                $item->update(['variance' => $variance]);
+                // Set stock to counted qty relative to current balance (not a stale book snapshot).
+                $currentQty = $this->inventory->qtyAtWarehouse((int) $opname->warehouse_id, (int) $item->product_id);
+                $countedQty = (int) $item->counted_qty;
+                $variance = $countedQty - $currentQty;
+
+                $item->update([
+                    'book_qty' => $currentQty,
+                    'variance' => $variance,
+                ]);
+
                 if ($variance === 0) {
                     continue;
                 }
@@ -105,11 +118,18 @@ class StockOpnameService
                 );
             }
 
-            $opname->update([
-                'status' => 'confirmed',
-                'confirmed_at' => now(),
-                'counted_at' => $opname->counted_at ?? now(),
-            ]);
+            $updated = StockOpname::query()
+                ->withoutGlobalScopes()
+                ->whereKey($opname->id)
+                ->where('status', 'draft')
+                ->update([
+                    'status' => 'confirmed',
+                    'confirmed_at' => now(),
+                    'counted_at' => $opname->counted_at ?? now(),
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Hanya draft yang bisa dikonfirmasi.']]);
+            }
 
             return $this->load($opname->fresh());
         });
@@ -117,10 +137,21 @@ class StockOpnameService
 
     public function cancel(StockOpname $opname): StockOpname
     {
-        $this->assertDraft($opname);
-        $opname->update(['status' => 'cancelled']);
+        return DB::transaction(function () use ($opname) {
+            $opname = StockOpname::query()->withoutGlobalScopes()->whereKey($opname->id)->lockForUpdate()->firstOrFail();
+            $this->assertDraft($opname);
 
-        return $this->load($opname->fresh());
+            $updated = StockOpname::query()
+                ->withoutGlobalScopes()
+                ->whereKey($opname->id)
+                ->where('status', 'draft')
+                ->update(['status' => 'cancelled']);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Dokumen hanya bisa diubah saat draft.']]);
+            }
+
+            return $this->load($opname->fresh());
+        });
     }
 
     /**
@@ -149,8 +180,14 @@ class StockOpnameService
                 'name_snapshot' => $item->name_snapshot,
                 'book_qty' => (int) $item->book_qty,
                 'counted_qty' => (int) $item->counted_qty,
+                'counted_qty_input' => $item->counted_qty_input !== null
+                    ? (int) $item->counted_qty_input
+                    : (int) $item->counted_qty,
                 'variance' => (int) $item->variance,
                 'unit' => $item->unit,
+                'unit_level' => $item->unit_level ?: 'small',
+                'factor_to_base' => max(1, (int) $item->factor_to_base),
+                'base_unit' => $item->product?->unit,
             ])->values()->all(),
         ];
     }
@@ -168,7 +205,7 @@ class StockOpnameService
             'warehouse_id' => $warehouse->id,
             'outlet_id' => $warehouse->outlet_id,
             'user_id' => $user->id,
-            'number' => $this->nextNumber($company->id),
+            'number' => $this->documentSequences->next($company->id, 'stock_opname', 'OPN', 4),
             'client_uuid' => $payload['client_uuid'],
             'status' => 'draft',
             'note' => $payload['note'] ?? null,
@@ -185,12 +222,25 @@ class StockOpnameService
      */
     private function attachItems(StockOpname $opname, array $items): void
     {
+        $seen = [];
         foreach ($items as $row) {
-            $product = $this->assertTrackableProduct((int) $opname->company_id, (int) $row['product_id']);
-            $bookQty = array_key_exists('book_qty', $row)
-                ? (int) $row['book_qty']
-                : $this->inventory->qtyAtWarehouse((int) $opname->warehouse_id, $product->id);
-            $countedQty = (int) ($row['counted_qty'] ?? $bookQty);
+            $productId = (int) $row['product_id'];
+            if (isset($seen[$productId])) {
+                throw ValidationException::withMessages(['items' => ['Produk tidak boleh dobel dalam satu opname.']]);
+            }
+            $seen[$productId] = true;
+
+            $product = $this->assertTrackableProduct((int) $opname->company_id, $productId);
+            // Always take book qty from live stock — never trust client baseline.
+            $bookQty = $this->inventory->qtyAtWarehouse((int) $opname->warehouse_id, $product->id);
+            $hasCounted = array_key_exists('counted_qty', $row);
+            $resolved = $this->productUnits->resolveInventoryLine(
+                $product,
+                $hasCounted ? (int) $row['counted_qty'] : $bookQty,
+                $hasCounted && isset($row['unit_level']) ? (string) $row['unit_level'] : null,
+                isset($row['unit']) ? (string) $row['unit'] : null,
+            );
+            $countedQty = $resolved['qty_base'];
 
             StockOpnameItem::query()->create([
                 'company_id' => $opname->company_id,
@@ -198,9 +248,12 @@ class StockOpnameService
                 'product_id' => $product->id,
                 'book_qty' => $bookQty,
                 'counted_qty' => $countedQty,
+                'counted_qty_input' => $resolved['qty_input'],
                 'variance' => $countedQty - $bookQty,
                 'name_snapshot' => $product->name,
-                'unit' => $row['unit'] ?? $product->unit,
+                'unit' => $resolved['unit'],
+                'unit_level' => $resolved['level'],
+                'factor_to_base' => $resolved['factor_to_base'],
             ]);
         }
     }
@@ -245,22 +298,6 @@ class StockOpnameService
 
     private function load(StockOpname $opname): StockOpname
     {
-        return $opname->load(['items', 'warehouse:id,name', 'user:id,name']);
-    }
-
-    private function nextNumber(int $companyId): string
-    {
-        $full = 'OPN-'.now()->format('ymd').'-';
-        $last = StockOpname::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+        return $opname->load(['items.product:id,unit', 'warehouse:id,name', 'user:id,name']);
     }
 }

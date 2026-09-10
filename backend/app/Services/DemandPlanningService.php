@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\PurchaseRequisition;
 use App\Models\StockMovement;
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Support\CurrentCompany;
 use App\Support\ProcurementSettings;
 use Illuminate\Support\Collection;
@@ -67,8 +68,14 @@ class DemandPlanningService
             $monthlyAvg = max(1, (int) round(((int) $row->usage_qty) / 3));
             $forecastQty = $monthlyAvg * $monthsAhead;
 
-            $product = Product::query()->find($row->product_id);
+            $product = Product::query()->with('category:id,is_raw_material')->find($row->product_id);
             if (! $product?->track_stock || ! $product->is_active) {
+                continue;
+            }
+            $purchasable = $product->is_procurement_item
+                || $product->is_fixed_asset_item
+                || (bool) $product->category?->is_raw_material;
+            if (! $purchasable) {
                 continue;
             }
 
@@ -147,10 +154,12 @@ class DemandPlanningService
             'qty' => (int) $row['forecast_qty'],
         ])->values()->all();
 
+        $warehouse = Warehouse::query()->whereKey($firstWarehouse)->firstOrFail();
+
         $pr = $this->purchases->createRequisition([
             'client_uuid' => (string) Str::uuid(),
             'warehouse_id' => $firstWarehouse,
-            'outlet_id' => CurrentCompany::outlet()?->id,
+            'outlet_id' => $warehouse->outlet_id ?? CurrentCompany::outlet()?->id,
             'note' => 'Demand planning '.now()->format('Y-m'),
             'items' => $items,
             'approvals' => [],

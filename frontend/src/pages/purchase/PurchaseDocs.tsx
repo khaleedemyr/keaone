@@ -14,6 +14,7 @@ import { AutocompleteSelect } from '../../components/AutocompleteSelect'
 import { ApprovedPrPoBoard } from './ApprovedPrPoBoard'
 import { PoDetailModal } from './PoDetailModal'
 import { PrDetailModal } from './PrDetailModal'
+import { GrDetailModal } from './GrDetailModal'
 import { runPrPdfExport, runPrWhatsAppShare, type PrDetailRecord } from './prDocumentActions'
 import { PoTotalsSummary } from './PoTotalsSummary'
 import { docKindToAttachmentType, ProcurementAttachmentsPanel } from './ProcurementAttachmentsPanel'
@@ -33,6 +34,8 @@ import {
   buildProductOptions,
   emptyPurchaseLine,
   ensureTrailingEmptyPurchaseLine,
+  lineDiscountAmount,
+  lineNetTotal,
   purchaseLineUuid,
   type PurchaseLineDraft,
 } from './purchaseLineUtils'
@@ -89,6 +92,7 @@ type DocRow = {
     unit?: string | null
     unit_level?: ProductUnitLevel | null
     unit_cost?: number
+    discount?: number
     qty_remaining?: number
     purchase_order_item_id?: number
   }>
@@ -106,6 +110,8 @@ function grLineFromPoItem(item: NonNullable<DocRow['items']>[number]): PurchaseL
     unit: item.unit ?? '',
     unit_level: (item.unit_level as ProductUnitLevel) || 'small',
     unit_cost: item.unit_cost ?? 0,
+    discount: 0,
+    discount_type: 'fixed',
     purchase_order_item_id: item.id,
   }
 }
@@ -215,6 +221,7 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
   const [approvers, setApprovers] = useState<ApprovalDraft[]>([])
   const [detailPoId, setDetailPoId] = useState<number | null>(null)
   const [detailPrId, setDetailPrId] = useState<number | null>(null)
+  const [detailGrId, setDetailGrId] = useState<number | null>(null)
   const [prActionId, setPrActionId] = useState<number | null>(null)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -233,7 +240,16 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
     () =>
       lines.reduce((sum, line) => {
         if (!line.product_id || line.qty <= 0) return sum
-        return sum + line.qty * (line.unit_cost ?? 0)
+        return sum + lineNetTotal(line)
+      }, 0),
+    [lines],
+  )
+
+  const linesDiscountTotal = useMemo(
+    () =>
+      lines.reduce((sum, line) => {
+        if (!line.product_id || line.qty <= 0) return sum
+        return sum + lineDiscountAmount(line)
       }, 0),
     [lines],
   )
@@ -376,15 +392,18 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
         })
         .then(({ data }) => setDepartments(data.data))
         .catch(() => {})
-      void api
-        .get<ApiOk<Outlet[]>>('/outlets', { params: { for_select: 1, status: 'active', per_page: 100 }, silent: true })
-        .then(({ data }) => {
-          const rows = (data.data ?? []).filter((o) => o.is_active !== false)
-          setOutlets(rows)
-          setMultiOutlet(rows.length > 1)
-        })
-        .catch(() => {})
     }
+    void api
+      .get<ApiOk<Outlet[]>>('/outlets', { params: { for_select: 1, status: 'active', per_page: 100 }, silent: true })
+      .then(({ data }) => {
+        const rows = (data.data ?? []).filter((o) => o.is_active !== false)
+        setOutlets(rows)
+        setMultiOutlet(rows.length > 1)
+      })
+      .catch(() => {
+        setOutlets([])
+        setMultiOutlet(false)
+      })
   }, [kind, needsSupplier, docNeedApproval, showCostCenter])
 
   function resetForm() {
@@ -449,6 +468,8 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
               unit: item.unit ?? '',
               unit_level: (item.unit_level as ProductUnitLevel) || 'small',
               unit_cost: item.unit_cost ?? 0,
+              discount: item.discount ?? 0,
+              discount_type: 'fixed' as const,
               purchase_order_item_id: item.purchase_order_item_id,
             }))
             if (kind === 'gr' && docPoId) {
@@ -488,6 +509,14 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
       setError(t('purchaseNeedItems'))
       return
     }
+    if (needsSupplier && !supplierId) {
+      setError(t('purchaseNeedSupplier'))
+      return
+    }
+    if (kind === 'gr' && purchaseFlow !== 'direct' && !poId) {
+      setError(t('purchaseNeedPo'))
+      return
+    }
     if (kind === 'gr') {
       const over = filled.find(
         (line) =>
@@ -512,6 +541,7 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
       unit: line.unit || undefined,
       unit_level: line.unit_level || undefined,
       unit_cost: needsCost ? line.unit_cost : undefined,
+      discount: kind === 'po' ? lineDiscountAmount(line) : undefined,
       purchase_order_item_id: line.purchase_order_item_id,
       purchase_requisition_item_id: line.purchase_requisition_item_id,
     }))
@@ -526,8 +556,9 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
           outlet_id: multiOutlet && outletId ? Number(outletId) : undefined,
         }
       : {}
+    let savedId = editing?.id
+    let grSavedWithoutLandedCost = false
     try {
-      let savedId = editing?.id
       if (editing) {
         await api.put(`${ENDPOINTS[kind]}/${editing.id}`, {
           warehouse_id: warehouseId ? Number(warehouseId) : undefined,
@@ -556,13 +587,23 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
         savedId = created.data.id
       }
       if (kind === 'gr' && landedCostEnabled && savedId && !landedCostAppliedAt && (hasLandedCostInput(landedCost) || editing)) {
-        await api.put(`/goods-receipts/${savedId}/landed-cost`, landedCostPayload(landedCost))
+        try {
+          await api.put(`/goods-receipts/${savedId}/landed-cost`, landedCostPayload(landedCost))
+        } catch (landedErr) {
+          grSavedWithoutLandedCost = true
+          setError(apiMessage(landedErr, t('saveFailed')))
+          feedback.error(t('procurementLandedCostSaveFailed'))
+          await load()
+          return
+        }
       }
       setOpen(false)
       await load()
       feedback.success(t('saved'))
     } catch (err) {
-      setError(apiMessage(err, t('saveFailed')))
+      if (!grSavedWithoutLandedCost) {
+        setError(apiMessage(err, t('saveFailed')))
+      }
     } finally {
       setSaving(false)
     }
@@ -646,6 +687,8 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
             unit: item.unit ?? '',
             unit_level: (item.unit_level as ProductUnitLevel) || 'small',
             unit_cost: 0,
+            discount: 0,
+            discount_type: 'fixed' as const,
             purchase_requisition_item_id: item.id,
           })),
         ),
@@ -845,9 +888,9 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
               <th className="px-3 py-2">{t('purchaseNumber')}</th>
               <th className="px-3 py-2">{t('status')}</th>
               {docNeedApproval ? <th className="px-3 py-2">{t('purchaseApprovers')}</th> : null}
-              {kind === 'pr' || kind === 'po' ? (
-                <th className="px-3 py-2">{t('purchaseCreatedBy')}</th>
-              ) : null}
+              <th className="px-3 py-2">{t('purchaseCreatedBy')}</th>
+              <th className="px-3 py-2">{t('purchaseCreatedAt')}</th>
+              {multiOutlet ? <th className="px-3 py-2">{t('outlet')}</th> : null}
               {needsSupplier ? <th className="px-3 py-2">{t('navSuppliers')}</th> : null}
               {showCostCenter ? <th className="px-3 py-2">{t('navDepartments')}</th> : null}
               <th className="px-3 py-2">{t('navWarehouses')}</th>
@@ -859,13 +902,14 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
             {rows.map((row) => (
               <tr key={row.id} className="border-t border-line">
                 <td className="px-3 py-2 font-medium">
-                  {kind === 'po' || kind === 'pr' ? (
+                  {kind === 'po' || kind === 'pr' || kind === 'gr' || kind === 'direct' ? (
                     <button
                       type="button"
                       className="text-left font-medium text-fg hover:text-mint"
                       onClick={() => {
                         if (kind === 'po') setDetailPoId(row.id)
-                        else setDetailPrId(row.id)
+                        else if (kind === 'pr') setDetailPrId(row.id)
+                        else setDetailGrId(row.id)
                       }}
                     >
                       {row.number}
@@ -890,9 +934,19 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
                           .join(' · ')}
                   </td>
                 ) : null}
-                {kind === 'pr' || kind === 'po' ? (
-                  <td className="px-3 py-2">{row.user?.name ?? '—'}</td>
-                ) : null}
+                <td className="px-3 py-2">{row.user?.name ?? '—'}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-xs text-muted">
+                  {row.created_at
+                    ? new Date(row.created_at).toLocaleString(locale === 'id' ? 'id-ID' : locale, {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : '—'}
+                </td>
+                {multiOutlet ? <td className="px-3 py-2">{row.outlet?.name ?? '—'}</td> : null}
                 {needsSupplier ? <td className="px-3 py-2">{row.supplier?.name ?? '—'}</td> : null}
                 {showCostCenter ? (
                   <td className="px-3 py-2">{row.department?.name ?? '—'}</td>
@@ -917,6 +971,15 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
                         type="button"
                         className="btn-ghost !px-2 !text-xs"
                         onClick={() => setDetailPrId(row.id)}
+                      >
+                        {t('purchaseViewDetail')}
+                      </button>
+                    ) : null}
+                    {kind === 'gr' || kind === 'direct' ? (
+                      <button
+                        type="button"
+                        className="btn-ghost !px-2 !text-xs"
+                        onClick={() => setDetailGrId(row.id)}
                       >
                         {t('purchaseViewDetail')}
                       </button>
@@ -980,7 +1043,7 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted">
+                <td colSpan={10} className="px-3 py-8 text-center text-muted">
                   {t('purchaseEmpty')}
                 </td>
               </tr>
@@ -1072,7 +1135,7 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
                 placeholder={t('purchaseSelectSupplier')}
                 allowEmpty
                 emptyLabel={t('purchaseSelectSupplier')}
-                required={kind === 'po' || kind === 'direct'}
+                required={kind === 'po' || kind === 'direct' || kind === 'gr'}
                 pinnedSectionLabel={t('purchaseTopSuppliers')}
               />
             </label>
@@ -1166,6 +1229,7 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
             productOptions={productOptions}
             needsCost={needsCost}
             grFromPo={kind === 'gr' && Boolean(poId)}
+            allowDiscount={kind === 'po'}
             autoFocusFirst={!editing}
             onProductSelected={(product) => {
               if (kind === 'po' && !supplierId && product.preferred_supplier_id) {
@@ -1175,7 +1239,13 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
           />
 
           {kind === 'po' ? (
-            <PoTotalsSummary subtotal={linesSubtotal} supplier={selectedSupplier} locale={locale} t={t} />
+            <PoTotalsSummary
+              subtotal={linesSubtotal}
+              discountTotal={linesDiscountTotal}
+              supplier={selectedSupplier}
+              locale={locale}
+              t={t}
+            />
           ) : null}
 
           {kind === 'gr' && landedCostEnabled && (!editing || editing.status === 'draft') ? (
@@ -1208,6 +1278,14 @@ export default function PurchaseDocs({ kind }: { kind: PurchaseDocKind }) {
           prId={detailPrId}
           open={detailPrId !== null}
           onClose={() => setDetailPrId(null)}
+        />
+      ) : null}
+      {kind === 'gr' || kind === 'direct' ? (
+        <GrDetailModal
+          grId={detailGrId}
+          open={detailGrId !== null}
+          onClose={() => setDetailGrId(null)}
+          statusLabel={statusLabel}
         />
       ) : null}
     </PageEnter>

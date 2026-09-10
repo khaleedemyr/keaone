@@ -3,18 +3,27 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\GoodsReceipt;
 use App\Models\Product;
+use App\Models\PurchaseReturn;
+use App\Models\Sale;
+use App\Models\StockAdjustment;
 use App\Models\StockBalance;
 use App\Models\StockMovement;
+use App\Models\StockOpname;
+use App\Models\StockProduction;
+use App\Models\StockTransfer;
 use App\Models\Warehouse;
 use App\Services\InventoryService;
 use App\Services\ProductUnitService;
 use App\Services\StockReportService;
 use App\Support\CurrentCompany;
+use App\Support\InventoryOps;
 use App\Support\InventorySettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class StockController extends Controller
@@ -159,28 +168,35 @@ class StockController extends Controller
         }
 
         $page = $query->paginate($this->perPage($request, 50));
+        $movements = $page->getCollection();
+        $actors = $this->resolveMovementActors($movements);
 
-        $rows = $page->getCollection()->map(fn (StockMovement $m) => [
-            'id' => $m->id,
-            'created_at' => $m->created_at?->toIso8601String(),
-            'type' => $m->type,
-            'qty_change' => $m->qty_change,
-            'qty_after' => $m->qty_after,
-            'qty_change_display' => $this->productUnits->formatQtyBreakdown((int) $m->qty_change, $units),
-            'qty_after_display' => $this->productUnits->formatQtyBreakdown((int) $m->qty_after, $units),
-            'qty_input' => $m->qty_input,
-            'unit_level' => $m->unit_level,
-            'unit' => $m->unit,
-            'factor_to_base' => $m->factor_to_base,
-            'ref_type' => $m->ref_type,
-            'ref_id' => $m->ref_id,
-            'note' => $m->note,
-            'warehouse_id' => $m->warehouse_id,
-            'warehouse_name' => $m->warehouse?->name ?? $warehouse->name,
-            'unit_cost' => (int) $m->unit_cost,
-            'cost_amount' => (int) $m->cost_amount,
-            'costing_method' => $m->costing_method,
-        ]);
+        $rows = $movements->map(function (StockMovement $m) use ($units, $warehouse, $actors) {
+            $actorKey = $m->ref_type && $m->ref_id ? "{$m->ref_type}:{$m->ref_id}" : null;
+
+            return [
+                'id' => $m->id,
+                'created_at' => $m->created_at?->toIso8601String(),
+                'type' => $m->type,
+                'qty_change' => $m->qty_change,
+                'qty_after' => $m->qty_after,
+                'qty_change_display' => $this->productUnits->formatQtyBreakdown((int) $m->qty_change, $units),
+                'qty_after_display' => $this->productUnits->formatQtyBreakdown((int) $m->qty_after, $units),
+                'qty_input' => $m->qty_input,
+                'unit_level' => $m->unit_level,
+                'unit' => $m->unit,
+                'factor_to_base' => $m->factor_to_base,
+                'ref_type' => $m->ref_type,
+                'ref_id' => $m->ref_id,
+                'note' => $m->note,
+                'warehouse_id' => $m->warehouse_id,
+                'warehouse_name' => $m->warehouse?->name ?? $warehouse->name,
+                'unit_cost' => (int) $m->unit_cost,
+                'cost_amount' => (int) $m->cost_amount,
+                'costing_method' => $m->costing_method,
+                'user' => $actorKey ? ($actors[$actorKey] ?? null) : null,
+            ];
+        });
 
         return $this->ok([
             'product' => [
@@ -247,7 +263,8 @@ class StockController extends Controller
             );
 
         if ($lowOnly) {
-            $query->whereRaw('COALESCE(stock_balances.qty, 0) <= products.min_stock');
+            $query->where('products.min_stock', '>', 0)
+                ->whereRaw('COALESCE(stock_balances.qty, 0) <= products.min_stock');
         }
         if ($overOnly) {
             $query->where('products.max_stock', '>', 0)
@@ -276,6 +293,12 @@ class StockController extends Controller
             ->value('qty');
         $units = $this->productUnits->serialize($product);
 
+        $unitCost = (int) ($product->stock_avg_cost ?? $product->cost_price ?? 0);
+        $costValue = (int) ($product->stock_cost_value ?? 0);
+        if ($costValue <= 0 && $unitCost > 0 && $qty > 0) {
+            $costValue = $unitCost * $qty;
+        }
+
         $row = [
             'product_id' => $product->id,
             'name' => $product->name,
@@ -289,8 +312,8 @@ class StockController extends Controller
             'units' => $units,
             'warehouse_id' => $warehouse->id,
             'warehouse_name' => $warehouse->name,
-            'unit_cost' => (int) ($product->stock_avg_cost ?? $product->cost_price ?? 0),
-            'cost_value' => (int) ($product->stock_cost_value ?? 0),
+            'unit_cost' => $unitCost,
+            'cost_value' => $costValue,
         ];
 
         if ($withBarcode) {
@@ -318,5 +341,57 @@ class StockController extends Controller
         abort_unless($outlet, 422, 'Outlet belum dipilih.');
 
         return (int) $this->inventory->resolveDefaultWarehouse((int) $company->id, (int) $outlet->id)->id;
+    }
+
+    /**
+     * @param  Collection<int, StockMovement>  $movements
+     * @return array<string, array{id: int, name: string}>
+     */
+    private function resolveMovementActors(Collection $movements): array
+    {
+        /** @var array<string, list<int>> $idsByType */
+        $idsByType = [];
+        foreach ($movements as $movement) {
+            if (! $movement->ref_type || ! $movement->ref_id) {
+                continue;
+            }
+            $idsByType[(string) $movement->ref_type][] = (int) $movement->ref_id;
+        }
+
+        /** @var array<string, class-string> $models */
+        $models = [
+            InventoryOps::TRANSFER_REF => StockTransfer::class,
+            InventoryOps::OPNAME_REF => StockOpname::class,
+            InventoryOps::ADJUSTMENT_REF => StockAdjustment::class,
+            InventoryOps::PRODUCTION_REF => StockProduction::class,
+            'goods_receipt' => GoodsReceipt::class,
+            'purchase_return' => PurchaseReturn::class,
+            'sale' => Sale::class,
+        ];
+
+        $actors = [];
+        foreach ($models as $refType => $model) {
+            $ids = array_values(array_unique($idsByType[$refType] ?? []));
+            if ($ids === []) {
+                continue;
+            }
+
+            $rows = $model::query()
+                ->with(['user:id,name'])
+                ->whereIn('id', $ids)
+                ->get(['id', 'user_id']);
+
+            foreach ($rows as $row) {
+                if (! $row->user) {
+                    continue;
+                }
+                $actors["{$refType}:{$row->id}"] = [
+                    'id' => (int) $row->user->id,
+                    'name' => (string) $row->user->name,
+                ];
+            }
+        }
+
+        return $actors;
     }
 }

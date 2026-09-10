@@ -36,7 +36,8 @@ export default function GlJournalDocs() {
   const { me } = useAuth()
   const feedback = useFeedback()
   const list = useListQuery(20, 'all')
-  const glEnabled = me?.settings?.procurement_gl_posting_enabled === true
+  const glEnabled =
+    me?.settings?.procurement_gl_posting_enabled === true || me?.settings?.sales_gl_posting_enabled === true
   const [rows, setRows] = useState<JournalRow[]>([])
   const [viewing, setViewing] = useState<JournalRow | null>(null)
   const [sourceFilter, setSourceFilter] = useState('all')
@@ -44,6 +45,9 @@ export default function GlJournalDocs() {
   const sourceOptions = useMemo(
     () => [
       { value: 'all', label: t('filterAll') },
+      { value: 'sale', label: t('glJournalSourceSale') },
+      { value: 'sale_void', label: t('glJournalSourceSaleVoid') },
+      { value: 'sale_payment', label: t('glJournalSourceSalePayment') },
       { value: 'goods_receipt', label: t('glJournalSourceGr') },
       { value: 'goods_receipt_void', label: t('glJournalSourceGrVoid') },
       { value: 'vendor_invoice', label: t('glJournalSourceInvoice') },
@@ -54,6 +58,9 @@ export default function GlJournalDocs() {
 
   function sourceLabel(type: string) {
     const map: Record<string, MsgKey> = {
+      sale: 'glJournalSourceSale',
+      sale_void: 'glJournalSourceSaleVoid',
+      sale_payment: 'glJournalSourceSalePayment',
       goods_receipt: 'glJournalSourceGr',
       goods_receipt_void: 'glJournalSourceGrVoid',
       vendor_invoice: 'glJournalSourceInvoice',
@@ -97,7 +104,7 @@ export default function GlJournalDocs() {
   if (!glEnabled) {
     return (
       <div>
-        <PageHeader eyebrow={t('appProcurement')} title={t('glJournalTitle')} subtitle={t('glJournalSubtitle')} />
+        <PageHeader eyebrow={t('appFinance')} title={t('glJournalTitle')} subtitle={t('glJournalSubtitle')} />
         <p className="text-sm text-muted">{t('glJournalDisabledHint')}</p>
       </div>
     )
@@ -105,7 +112,7 @@ export default function GlJournalDocs() {
 
   return (
     <div>
-      <PageHeader eyebrow={t('appProcurement')} title={t('glJournalTitle')} subtitle={t('glJournalSubtitle')} />
+      <PageHeader eyebrow={t('appFinance')} title={t('glJournalTitle')} subtitle={t('glJournalSubtitle')} />
 
       <MasterFilters
         {...list.filters}

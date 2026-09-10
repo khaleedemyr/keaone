@@ -22,7 +22,7 @@ class GoodsReceiptController extends Controller
         $this->ensureCan('goodsreceipts', 'view');
 
         $query = GoodsReceipt::query()
-            ->with(['supplier:id,name', 'warehouse:id,name', 'user:id,name', 'purchaseOrder:id,number'])
+            ->with(['supplier:id,name', 'warehouse:id,name', 'outlet:id,name', 'user:id,name', 'purchaseOrder:id,number'])
             ->orderByDesc('id');
 
         if ($status = $request->string('status')->toString()) {

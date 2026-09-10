@@ -98,15 +98,19 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
     void api
       .get<ApiOk<Warehouse[]>>('/warehouses', { params: { for_select: 1, status: 'active', per_page: 100 }, silent: true })
       .then(({ data }) => {
-        setWarehouses(data.data)
-        const def = data.data.find((w) => w.is_default)
-        if (def && !warehouseId) setWarehouseId(String(def.id))
+        const list = data.data ?? []
+        setWarehouses(list)
+        setWarehouseId((current) => {
+          if (current && list.some((w) => String(w.id) === current)) return current
+          const def = list.find((w) => w.is_default) ?? list[0]
+          return def ? String(def.id) : ''
+        })
       })
       .catch(() => {})
   }, [])
 
   useEffect(() => {
-    if (!warehouseId && warehouses.length === 0) return
+    if (!warehouseId) return
     void load()
     void loadSuggestions()
   }, [warehouseId, filter, page, query])
@@ -129,9 +133,17 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
   }
 
   function rowClass(row: StockRow) {
-    if (row.qty <= row.min_stock) return 'bg-rose-500/5'
+    // Only flag low stock when a minimum is configured; min=0 must not paint every row.
+    if (row.min_stock > 0 && row.qty <= row.min_stock) return 'bg-rose-500/5'
     if ((row.max_stock ?? 0) > 0 && row.qty > (row.max_stock ?? 0)) return 'bg-amber-500/5'
     return ''
+  }
+
+  function displayCostValue(row: StockRow) {
+    const stored = row.cost_value ?? 0
+    if (stored > 0) return stored
+    const unit = row.unit_cost ?? 0
+    return unit > 0 && row.qty > 0 ? unit * row.qty : 0
   }
 
   return (
@@ -140,18 +152,18 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
 
       {suggestions.length > 0 ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-400/30 bg-rose-500/5 px-4 py-3">
-          <div>
+          <div className="min-w-0">
             <div className="text-sm font-medium text-fg">{t('stockReorderAlertTitle')}</div>
             <div className="text-xs text-muted">
               {t('stockReorderAlertHint').replace('{count}', String(suggestions.length))}
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2">
             <button type="button" className="btn-ghost !text-xs" onClick={() => { setFilter('low'); setPage(1) }}>
               {t('stockLowOnly')}
             </button>
             {canCreatePr ? (
-              <button type="button" className="btn-primary !text-xs" disabled={creatingPr} onClick={() => void createReorderPr()}>
+              <button type="button" className="btn-primary !whitespace-nowrap !text-xs" disabled={creatingPr} onClick={() => void createReorderPr()}>
                 {creatingPr ? '…' : t('stockCreateReorderPr')}
               </button>
             ) : null}
@@ -162,7 +174,7 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <label className="text-sm text-muted">
           {t('navWarehouses')}
-          <select className="field !mt-1 min-w-[200px]" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
+          <select className="field !mt-1 w-full min-w-[180px] sm:w-auto" value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
             {warehouses.map((wh) => (
               <option key={wh.id} value={wh.id}>
                 {wh.name}
@@ -173,7 +185,7 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
         <label className="text-sm text-muted">
           {t('search')}
           <input
-            className="field !mt-1 min-w-[200px]"
+            className="field !mt-1 w-full min-w-[180px] sm:w-56"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
@@ -185,7 +197,7 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
         <label className="text-sm text-muted">
           {t('status')}
           <select
-            className="field !mt-1 min-w-[160px]"
+            className="field !mt-1 w-full min-w-[140px] sm:w-auto"
             value={filter}
             onChange={(e) => {
               setFilter(e.target.value as StockFilter)
@@ -199,27 +211,29 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
         </label>
       </div>
 
-      <div className="overflow-auto rounded-2xl border border-line">
-        <table className="min-w-full text-left text-sm">
+      <div className="overflow-x-auto rounded-2xl border border-line">
+        <table className="w-full min-w-[960px] border-collapse text-sm">
           <thead className="bg-fill text-xs uppercase tracking-wide text-muted">
             <tr>
-              <th className="px-3 py-2">{t('product')}</th>
-              <th className="px-3 py-2">SKU</th>
-              <th className="px-3 py-2">{t('stockQty')}</th>
-              <th className="px-3 py-2">{t('stockUnitCost')}</th>
-              <th className="px-3 py-2">{t('stockValue')}</th>
-              <th className="px-3 py-2">{t('minStock')}</th>
-              <th className="px-3 py-2">{t('maxStock')}</th>
-              <th className="px-3 py-2">{t('reorderQty')}</th>
-              <th className="px-3 py-2" />
+              <th className="px-3 py-2.5 text-left font-medium">{t('product')}</th>
+              <th className="px-3 py-2.5 text-left font-medium">SKU</th>
+              <th className="px-3 py-2.5 text-right font-medium whitespace-nowrap">{t('stockQty')}</th>
+              <th className="px-3 py-2.5 text-right font-medium whitespace-nowrap">{t('stockUnitCost')}</th>
+              <th className="px-3 py-2.5 text-right font-medium whitespace-nowrap">{t('stockValue')}</th>
+              <th className="px-3 py-2.5 text-right font-medium whitespace-nowrap">{t('minStock')}</th>
+              <th className="px-3 py-2.5 text-right font-medium whitespace-nowrap">{t('maxStock')}</th>
+              <th className="px-3 py-2.5 text-right font-medium whitespace-nowrap">{t('reorderQty')}</th>
+              <th className="px-3 py-2.5 text-right font-medium whitespace-nowrap">{t('stockCardOpen')}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.product_id} className={`border-t border-line ${rowClass(row)}`}>
-                <td className="px-3 py-2 font-medium">{row.name}</td>
-                <td className="px-3 py-2 text-muted">{row.sku ?? '—'}</td>
-                <td className="px-3 py-2">
+                <td className="max-w-[220px] px-3 py-2.5 font-medium">
+                  <div className="truncate" title={row.name}>{row.name}</div>
+                </td>
+                <td className="px-3 py-2.5 whitespace-nowrap text-muted">{row.sku ?? '—'}</td>
+                <td className="px-3 py-2.5 text-right whitespace-nowrap">
                   <div>{row.qty_display ?? `${row.qty} ${row.unit}`}</div>
                   {row.qty_display && row.qty_display !== `${row.qty} ${row.unit}` ? (
                     <div className="text-xs text-muted">
@@ -227,12 +241,18 @@ export default function StockPage({ onOpenCard }: { onOpenCard?: (productId: num
                     </div>
                   ) : null}
                 </td>
-                <td className="px-3 py-2 text-right">{formatRupiah(row.unit_cost ?? 0, locale)}</td>
-                <td className="px-3 py-2 text-right">{formatRupiah(row.cost_value ?? 0, locale)}</td>
-                <td className="px-3 py-2 text-muted">{row.min_stock}</td>
-                <td className="px-3 py-2 text-muted">{(row.max_stock ?? 0) > 0 ? row.max_stock : '—'}</td>
-                <td className="px-3 py-2 text-muted">{row.reorder_qty ?? 0}</td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums">
+                  {formatRupiah(row.unit_cost ?? 0, locale)}
+                </td>
+                <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums">
+                  {formatRupiah(displayCostValue(row), locale)}
+                </td>
+                <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums text-muted">{row.min_stock}</td>
+                <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums text-muted">
+                  {(row.max_stock ?? 0) > 0 ? row.max_stock : '—'}
+                </td>
+                <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums text-muted">{row.reorder_qty ?? 0}</td>
+                <td className="px-3 py-2.5 text-right whitespace-nowrap">
                   {onOpenCard ? (
                     <button
                       type="button"

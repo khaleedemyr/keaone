@@ -150,7 +150,7 @@ Sebelum transaksi pertama, lengkapi data berikut di modul **Master**:
 | **Satuan** | Master → Satuan | Unit beli (pcs, kg, box, dll.) |
 | **Departemen** | Master → Departemen | Untuk cost center (jika diaktifkan) |
 | **Outlet** | Master → Outlet | Cabang/lokasi (opsional) |
-| **COA / Akun GL** | Master → Chart of Accounts | Wajib jika GL posting diaktifkan |
+| **COA / Akun GL** | Accounting → Chart of Accounts | Wajib jika GL posting diaktifkan |
 | **User & Role** | Pengaturan → User / Role | Hak akses per menu |
 
 ### 2.3 Jenis produk — penting dipahami sejak awal
@@ -197,7 +197,7 @@ Before the first transaction, complete the following data in the **Master** modu
 | **Units** | Master → Units | Purchase units (pcs, kg, box, etc.) |
 | **Departments** | Master → Departments | For cost centers (if enabled) |
 | **Outlets** | Master → Outlets | Branches/locations (optional) |
-| **COA / GL Accounts** | Master → Chart of Accounts | Required if GL posting is enabled |
+| **COA / GL Accounts** | Accounting → Chart of Accounts | Required if GL posting is enabled |
 | **Users & Roles** | Settings → Users / Roles | Menu access permissions per user |
 
 ### 2.3 Product types — important to understand from the start
@@ -1559,7 +1559,7 @@ Same as GR but **without PO**:
 <div class="lang-block lang-id">
 <span class="lang-label">Bahasa Indonesia</span>
 
-**Menu:** Pengadaan → Vendor Invoice  
+**Menu:** Akuntansi → Vendor Invoice  
 **Aktifkan:** Settings → Vendor invoice enabled
 
 ### 17.1 Alur AP
@@ -1603,7 +1603,7 @@ PO + GR → Supplier kirim invoice → Input AP → Match → Approve → Paymen
 <div class="lang-block lang-en">
 <span class="lang-label">English</span>
 
-**Menu:** Procurement → Vendor Invoice  
+**Menu:** Accounting → Vendor Invoice  
 **Enable:** Settings → Vendor invoice enabled
 
 ### 17.1 AP flow
@@ -1684,7 +1684,7 @@ Untuk **jasa / non-stock** — bandingkan PO ↔ Invoice saja (tanpa GR).
 <div class="lang-block lang-en">
 <span class="lang-label">English</span>
 
-**Menu:** Procurement → Match Exceptions  
+**Menu:** Accounting → Match Exceptions  
 **Enable:** Settings → 3-way match (or 2-way)
 
 ### What is 3-way match?
@@ -1743,7 +1743,7 @@ For **services / non-stock** — compare PO ↔ Invoice only (without GR).
 <div class="lang-block lang-en">
 <span class="lang-label">English</span>
 
-**Menu:** Procurement → Payment Batch  
+**Menu:** Accounting → Payment Batch  
 **Enable:** Settings → Payment batch enabled
 
 ### Steps
@@ -1787,7 +1787,7 @@ For **services / non-stock** — compare PO ↔ Invoice only (without GR).
 <div class="lang-block lang-en">
 <span class="lang-label">English</span>
 
-**Menu:** Procurement → Prepayment  
+**Menu:** Accounting → Prepayment  
 **Enable:** Settings → Prepayment enabled
 
 ### When to use?
@@ -1829,7 +1829,7 @@ For **services / non-stock** — compare PO ↔ Invoice only (without GR).
 <div class="lang-block lang-en">
 <span class="lang-label">English</span>
 
-**Menu:** Procurement → Withholding Tax  
+**Menu:** Accounting → Withholding Tax  
 **Enable:** Settings → Withholding tax enabled
 
 ### Function
@@ -1852,7 +1852,7 @@ For **services / non-stock** — compare PO ↔ Invoice only (without GR).
 <div class="lang-block lang-id">
 <span class="lang-label">Bahasa Indonesia</span>
 
-**Menu:** Pengadaan → GL Journals  
+**Menu:** Akuntansi → GL Journals  
 **Aktifkan:** Settings → GL posting enabled + mapping COA diisi
 
 ### Jurnal otomatis dibuat saat:
@@ -1873,7 +1873,7 @@ User finance bisa review jurnal di menu **GL Journals** — biasanya read-only (
 <div class="lang-block lang-en">
 <span class="lang-label">English</span>
 
-**Menu:** Procurement → GL Journals  
+**Menu:** Accounting → GL Journals  
 **Enable:** Settings → GL posting enabled + COA mapping filled in
 
 ### Automatic journals created on:
@@ -1897,7 +1897,7 @@ Finance users can review journals in the **GL Journals** menu — usually read-o
 <div class="lang-block lang-id">
 <span class="lang-label">Bahasa Indonesia</span>
 
-**Menu:** Pengadaan → Budget  
+**Menu:** Akuntansi → Budget  
 **Aktifkan:** Settings → Budget check enabled
 
 ### 23.1 Setup budget
@@ -1927,7 +1927,7 @@ Saat **submit PR/PO**, jika total melebihi **available** budget dept → sistem 
 <div class="lang-block lang-en">
 <span class="lang-label">English</span>
 
-**Menu:** Procurement → Budget  
+**Menu:** Accounting → Budget  
 **Enable:** Settings → Budget check enabled
 
 ### 23.1 Budget setup
@@ -1960,7 +1960,7 @@ On **PR/PO submit**, if total exceeds department **available** budget → system
 <div class="lang-block lang-id">
 <span class="lang-label">Bahasa Indonesia</span>
 
-**Menu:** Pengadaan → Fixed Assets
+**Menu:** Akuntansi → Fixed Assets
 
 ### Alur
 
@@ -1980,7 +1980,7 @@ On **PR/PO submit**, if total exceeds department **available** budget → system
 <div class="lang-block lang-en">
 <span class="lang-label">English</span>
 
-**Menu:** Procurement → Fixed Assets
+**Menu:** Accounting → Fixed Assets
 
 ### Flow
 

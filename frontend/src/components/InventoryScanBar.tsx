@@ -1,10 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
+import { api } from '../api/client'
+import type { ApiOk, Product } from '../types'
 import { useFeedback } from './feedback'
-import type { Product } from '../types'
 import { useI18n } from '../i18n'
-import { findProductByScan, resolveProductFromScan, type ProductScanOption } from '../lib/productScan'
+import { resolveProductFromExactScan, type ProductScanOption } from '../lib/productScan'
 import { ProcurementBarcodeScanner } from '../pages/purchase/ProcurementBarcodeScanner'
 
 function CameraScanButton({ onClick }: { onClick: () => void }) {
@@ -110,24 +111,27 @@ export function InventoryScanBar({
     inputRef.current?.focus()
   }
 
-  function pickFromCode(code: string) {
+  async function pickFromCode(code: string) {
     const trimmed = code.trim()
     if (!trimmed) return false
-    const product = resolveProductFromScan(trimmed, products, productOptions)
-    if (product) {
-      pick(product)
+    const local = resolveProductFromExactScan(trimmed, products)
+    if (local) {
+      pick(local)
       return true
+    }
+    try {
+      const { data } = await api.get<ApiOk<Product>>(`/products/barcode/${encodeURIComponent(trimmed)}`, {
+        silent: true,
+      })
+      const remote = data.data
+      if (remote?.track_stock) {
+        pick(remote)
+        return true
+      }
+    } catch {
+      // fall through to not-found
     }
     feedback.error(t('stockScanNotFound', { code: trimmed }))
-    return false
-  }
-
-  function tryExactMatch() {
-    const exact = findProductByScan(query, products)
-    if (exact) {
-      pick(exact)
-      return true
-    }
     return false
   }
 
@@ -136,12 +140,7 @@ export function InventoryScanBar({
     if (!showMenu) {
       if (event.key === 'Enter') {
         event.preventDefault()
-        if (tryExactMatch()) return
-        const match = filtered[0]
-        if (match) {
-          const product = products.find((p) => String(p.id) === match.value)
-          if (product) pick(product)
-        }
+        void pickFromCode(query)
       }
       return
     }
@@ -163,13 +162,7 @@ export function InventoryScanBar({
     }
     if (event.key === 'Enter') {
       event.preventDefault()
-      const item = filtered[active]
-      if (item) {
-        const product = products.find((p) => String(p.id) === item.value)
-        if (product) pick(product)
-        return
-      }
-      tryExactMatch()
+      void pickFromCode(query)
     }
   }
 
@@ -248,7 +241,7 @@ export function InventoryScanBar({
         open={scannerOpen}
         onClose={() => setScannerOpen(false)}
         onScan={(code) => {
-          pickFromCode(code)
+          void pickFromCode(code)
         }}
       />
     </>

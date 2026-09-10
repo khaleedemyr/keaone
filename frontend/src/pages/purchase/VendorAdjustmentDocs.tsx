@@ -14,6 +14,7 @@ import { useI18n } from '../../i18n'
 import { ProcurementSimpleLineEditor } from './ProcurementSimpleLineEditor'
 import { purchaseLineUuid } from './purchaseLineUtils'
 import { formatRupiah } from '../../lib/money'
+import { AdjustmentDetailModal } from './AdjustmentDetailModal'
 
 type NoteType = 'debit' | 'credit'
 
@@ -53,6 +54,7 @@ export default function VendorAdjustmentDocs() {
 
   const [rows, setRows] = useState<NoteRow[]>([])
   const [open, setOpen] = useState(false)
+  const [detailId, setDetailId] = useState<number | null>(null)
   const [editing, setEditing] = useState<NoteRow | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -278,13 +280,28 @@ export default function VendorAdjustmentDocs() {
           <tbody>
             {rows.map((row) => (
               <tr key={row.id} className="border-b border-line/70 last:border-0">
-                <td className="px-4 py-3 font-medium">{row.number}</td>
+                <td className="px-4 py-3 font-medium">
+                  <button
+                    type="button"
+                    className="text-left font-medium text-fg hover:text-mint"
+                    onClick={() => setDetailId(row.id)}
+                  >
+                    {row.number}
+                  </button>
+                </td>
                 <td className="px-4 py-3">{typeLabel(row.type)}</td>
                 <td className="px-4 py-3">{row.supplier?.name ?? '—'}</td>
                 <td className="px-4 py-3">{formatRupiah(row.total, locale)}</td>
                 <td className="px-4 py-3">{statusLabel(row.status)}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      className="btn-ghost !px-2 !text-xs"
+                      onClick={() => setDetailId(row.id)}
+                    >
+                      {t('purchaseViewDetail')}
+                    </button>
                     {canEdit && row.status === 'draft' ? (
                       <button type="button" className="btn-ghost !px-2 !text-xs" onClick={() => void openEdit(row)}>
                         {t('edit')}
@@ -350,6 +367,14 @@ export default function VendorAdjustmentDocs() {
 
         <ProcurementSimpleLineEditor mode="adjustment" lines={lines} setLines={setLines} products={products} />
       </MasterModal>
+
+      <AdjustmentDetailModal
+        noteId={detailId}
+        open={detailId !== null}
+        onClose={() => setDetailId(null)}
+        statusLabel={statusLabel}
+        typeLabel={(type) => typeLabel(type as NoteType)}
+      />
     </div>
   )
 }

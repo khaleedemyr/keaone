@@ -21,12 +21,14 @@ class StockProductionService
         private InventoryService $inventory,
         private BomExplosionService $bom,
         private LotLedgerService $lots,
+        private ProductUnitService $productUnits,
+        private DocumentSequenceService $documentSequences,
     ) {}
 
     /**
      * @return array{product: array<string, mixed>, items: list<array<string, mixed>>, manufacturing: bool, multilevel: bool}
      */
-    public function preview(int $productId, int $qty): array
+    public function preview(int $productId, int $qty, ?string $unitLevel = null): array
     {
         $company = CurrentCompany::company();
         if (! $company) {
@@ -34,8 +36,10 @@ class StockProductionService
         }
 
         $product = $this->assertOutputProduct($company->id, $productId);
+        $resolved = $this->productUnits->resolveInventoryLine($product, $qty, $unitLevel);
+        $baseQty = $resolved['qty_base'];
         $manufacturing = $this->manufacturingEnabled();
-        $items = $this->buildBomLines($company->id, $product, $qty, $manufacturing);
+        $items = $this->buildBomLines($company->id, $product, $baseQty, $manufacturing);
 
         if ($items === []) {
             throw ValidationException::withMessages(['product_id' => ['Produk belum punya BOM dengan komponen yang dilacak stoknya.']]);
@@ -47,8 +51,13 @@ class StockProductionService
                 'name' => $product->name,
                 'sku' => $product->sku,
                 'unit' => $product->unit,
+                'units' => $this->productUnits->serialize($product),
             ],
-            'qty' => $qty,
+            'qty' => $baseQty,
+            'qty_input' => $resolved['qty_input'],
+            'unit' => $resolved['unit'],
+            'unit_level' => $resolved['level'],
+            'factor_to_base' => $resolved['factor_to_base'],
             'manufacturing' => $manufacturing,
             'multilevel' => $manufacturing,
             'items' => $items,
@@ -72,17 +81,27 @@ class StockProductionService
 
     public function update(StockProduction $production, array $payload): StockProduction
     {
-        $this->assertDraft($production);
-
         return DB::transaction(function () use ($production, $payload) {
+            $production = StockProduction::query()->withoutGlobalScopes()->whereKey($production->id)->lockForUpdate()->firstOrFail();
+            $this->assertDraft($production);
+
             $companyId = (int) $production->company_id;
             $warehouseId = (int) ($payload['warehouse_id'] ?? $production->warehouse_id);
             $warehouse = $this->assertWarehouse($companyId, $warehouseId);
             $productId = (int) ($payload['product_id'] ?? $production->product_id);
-            $qty = (int) ($payload['qty'] ?? $production->qty);
             $product = $this->assertOutputProduct($companyId, $productId);
+            $hasQty = array_key_exists('qty', $payload);
+            $hasUnit = array_key_exists('unit_level', $payload);
+            $resolved = $this->productUnits->resolveInventoryLine(
+                $product,
+                $hasQty ? (int) $payload['qty'] : (int) ($production->qty_input ?? $production->qty),
+                $hasUnit
+                    ? ($payload['unit_level'] !== null ? (string) $payload['unit_level'] : null)
+                    : ($production->unit_level ?: null),
+            );
+            $qty = $resolved['qty_base'];
             $manufacturing = $this->manufacturingEnabled();
-            $rebuildBom = isset($payload['product_id']) || isset($payload['qty']) || isset($payload['warehouse_id']);
+            $rebuildBom = isset($payload['product_id']) || $hasQty || $hasUnit || isset($payload['warehouse_id']);
 
             $scrapQty = $manufacturing ? (int) ($payload['scrap_qty'] ?? $production->scrap_qty ?? 0) : 0;
             $lotCode = $manufacturing
@@ -101,6 +120,10 @@ class StockProductionService
                 'outlet_id' => $warehouse->outlet_id,
                 'product_id' => $product->id,
                 'qty' => $qty,
+                'qty_input' => $resolved['qty_input'],
+                'unit' => $resolved['unit'],
+                'unit_level' => $resolved['level'],
+                'factor_to_base' => $resolved['factor_to_base'],
                 'scrap_qty' => $scrapQty,
                 'lot_code' => $lotCode ? (string) $lotCode : null,
                 'track_serial' => $trackSerial,
@@ -131,23 +154,28 @@ class StockProductionService
 
     public function completeStep(StockProduction $production, int $stepId, ?string $note = null): StockProduction
     {
-        $this->assertDraft($production);
         if (! $this->manufacturingEnabled()) {
             throw ValidationException::withMessages(['module' => ['Modul work order belum aktif.']]);
         }
 
-        $step = StockProductionStep::query()
-            ->where('stock_production_id', $production->id)
-            ->whereKey($stepId)
-            ->firstOrFail();
+        return DB::transaction(function () use ($production, $stepId, $note) {
+            $production = StockProduction::query()->withoutGlobalScopes()->whereKey($production->id)->lockForUpdate()->firstOrFail();
+            $this->assertDraft($production);
 
-        $step->update([
-            'status' => 'done',
-            'done_at' => now(),
-            'note' => $note ?? $step->note,
-        ]);
+            $step = StockProductionStep::query()
+                ->where('stock_production_id', $production->id)
+                ->whereKey($stepId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        return $this->load($production->fresh());
+            $step->update([
+                'status' => 'done',
+                'done_at' => now(),
+                'note' => $note ?? $step->note,
+            ]);
+
+            return $this->load($production->fresh());
+        });
     }
 
     public function confirm(StockProduction $production, array $payload = []): StockProduction
@@ -234,26 +262,68 @@ class StockProductionService
                 }
             }
 
-            $unitCost = (int) intdiv($totalIssueCost, $goodQty);
+            $unitCost = $goodQty > 0 ? (int) intdiv($totalIssueCost, $goodQty) : 0;
+            $remainder = $totalIssueCost - ($unitCost * $goodQty);
 
-            $this->inventory->adjust(
-                (int) $production->company_id,
-                (int) $production->warehouse_id,
-                (int) $production->product_id,
-                $goodQty,
-                InventoryOps::TYPE_PRODUCTION_RECEIPT,
-                InventoryOps::PRODUCTION_REF,
-                (int) $production->id,
-                $production->number.' / receipt'.$lotSuffix,
-                $production->outlet_id ? (int) $production->outlet_id : null,
-                [
-                    'qty_input' => $goodQty,
-                    'unit' => null,
-                    'unit_level' => 'small',
-                    'factor_to_base' => 1,
-                ],
-                $unitCost,
-            );
+            if ($remainder !== 0 && $goodQty > 1) {
+                $this->inventory->adjust(
+                    (int) $production->company_id,
+                    (int) $production->warehouse_id,
+                    (int) $production->product_id,
+                    $goodQty - 1,
+                    InventoryOps::TYPE_PRODUCTION_RECEIPT,
+                    InventoryOps::PRODUCTION_REF,
+                    (int) $production->id,
+                    $production->number.' / receipt'.$lotSuffix,
+                    $production->outlet_id ? (int) $production->outlet_id : null,
+                    [
+                        'qty_input' => $goodQty - 1,
+                        'unit' => null,
+                        'unit_level' => 'small',
+                        'factor_to_base' => 1,
+                    ],
+                    $unitCost,
+                );
+                $this->inventory->adjust(
+                    (int) $production->company_id,
+                    (int) $production->warehouse_id,
+                    (int) $production->product_id,
+                    1,
+                    InventoryOps::TYPE_PRODUCTION_RECEIPT,
+                    InventoryOps::PRODUCTION_REF,
+                    (int) $production->id,
+                    $production->number.' / receipt'.$lotSuffix,
+                    $production->outlet_id ? (int) $production->outlet_id : null,
+                    [
+                        'qty_input' => 1,
+                        'unit' => null,
+                        'unit_level' => 'small',
+                        'factor_to_base' => 1,
+                    ],
+                    $unitCost + $remainder,
+                );
+            } else {
+                $this->inventory->adjust(
+                    (int) $production->company_id,
+                    (int) $production->warehouse_id,
+                    (int) $production->product_id,
+                    $goodQty,
+                    InventoryOps::TYPE_PRODUCTION_RECEIPT,
+                    InventoryOps::PRODUCTION_REF,
+                    (int) $production->id,
+                    $production->number.' / receipt'.$lotSuffix,
+                    $production->outlet_id ? (int) $production->outlet_id : null,
+                    [
+                        'qty_input' => $goodQty,
+                        'unit' => null,
+                        'unit_level' => 'small',
+                        'factor_to_base' => 1,
+                    ],
+                    $unitCost + $remainder,
+                );
+            }
+
+            $receiptUnitCost = $goodQty > 0 ? (int) round($totalIssueCost / $goodQty) : 0;
 
             if ($manufacturing && $production->lot_code) {
                 $this->lots->receive(
@@ -262,7 +332,7 @@ class StockProductionService
                     (int) $production->product_id,
                     (string) $production->lot_code,
                     $goodQty,
-                    $unitCost,
+                    $receiptUnitCost,
                     InventoryOps::PRODUCTION_REF,
                     (int) $production->id,
                     $production->number.' / lot receipt',
@@ -283,10 +353,17 @@ class StockProductionService
                 }
             }
 
-            $production->update([
-                'status' => 'confirmed',
-                'confirmed_at' => now(),
-            ]);
+            $updated = StockProduction::query()
+                ->withoutGlobalScopes()
+                ->whereKey($production->id)
+                ->where('status', 'draft')
+                ->update([
+                    'status' => 'confirmed',
+                    'confirmed_at' => now(),
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Hanya draft yang bisa dikonfirmasi.']]);
+            }
 
             return $this->load($production->fresh());
         });
@@ -308,6 +385,24 @@ class StockProductionService
             $scrapQty = $manufacturing ? (int) ($production->scrap_qty ?? 0) : 0;
             $goodQty = (int) $production->qty - $scrapQty;
             $lotSuffix = $production->lot_code ? ' / lot '.$production->lot_code : '';
+
+            if ($production->track_serial) {
+                $serials = StockSerial::query()
+                    ->withoutGlobalScopes()
+                    ->where('stock_production_id', $production->id)
+                    ->lockForUpdate()
+                    ->get();
+                if ($serials->count() !== $goodQty) {
+                    throw ValidationException::withMessages([
+                        'serials' => ['Jumlah serial produksi tidak cocok dengan qty bersih; void dibatalkan.'],
+                    ]);
+                }
+                if ($serials->contains(fn (StockSerial $s) => $s->status !== 'available')) {
+                    throw ValidationException::withMessages([
+                        'serials' => ['Sebagian serial sudah dipakai/terjual, sehingga produksi tidak bisa di-void.'],
+                    ]);
+                }
+            }
 
             // Reverse FG receipt first (outbound with reverseCosting).
             $this->inventory->adjust(
@@ -343,11 +438,18 @@ class StockProductionService
                 );
             }
 
-            StockSerial::query()
-                ->withoutGlobalScopes()
-                ->where('stock_production_id', $production->id)
-                ->where('status', 'available')
-                ->update(['status' => 'voided']);
+            if ($production->track_serial) {
+                $voided = StockSerial::query()
+                    ->withoutGlobalScopes()
+                    ->where('stock_production_id', $production->id)
+                    ->where('status', 'available')
+                    ->update(['status' => 'voided']);
+                if ($voided !== $goodQty) {
+                    throw ValidationException::withMessages([
+                        'serials' => ['Serial berubah saat void; transaksi dibatalkan.'],
+                    ]);
+                }
+            }
 
             // Restore components.
             foreach ($production->items as $item) {
@@ -379,12 +481,19 @@ class StockProductionService
                 );
             }
 
-            $production->update([
-                'status' => 'voided',
-                'voided_at' => now(),
-                'voided_by' => $user->id,
-                'void_reason' => $reason,
-            ]);
+            $updated = StockProduction::query()
+                ->withoutGlobalScopes()
+                ->whereKey($production->id)
+                ->where('status', 'confirmed')
+                ->update([
+                    'status' => 'voided',
+                    'voided_at' => now(),
+                    'voided_by' => $user->id,
+                    'void_reason' => $reason,
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Hanya produksi confirmed yang bisa di-void.']]);
+            }
 
             return $this->load($production->fresh());
         });
@@ -392,10 +501,21 @@ class StockProductionService
 
     public function cancel(StockProduction $production): StockProduction
     {
-        $this->assertDraft($production);
-        $production->update(['status' => 'cancelled']);
+        return DB::transaction(function () use ($production) {
+            $production = StockProduction::query()->withoutGlobalScopes()->whereKey($production->id)->lockForUpdate()->firstOrFail();
+            $this->assertDraft($production);
 
-        return $this->load($production->fresh());
+            $updated = StockProduction::query()
+                ->withoutGlobalScopes()
+                ->whereKey($production->id)
+                ->where('status', 'draft')
+                ->update(['status' => 'cancelled']);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Dokumen hanya bisa diubah saat draft.']]);
+            }
+
+            return $this->load($production->fresh());
+        });
     }
 
     /**
@@ -412,6 +532,11 @@ class StockProductionService
             'client_uuid' => $production->client_uuid,
             'status' => $production->status,
             'qty' => (int) $production->qty,
+            'qty_input' => $production->qty_input !== null ? (int) $production->qty_input : (int) $production->qty,
+            'unit' => $production->unit,
+            'unit_level' => $production->unit_level ?: 'small',
+            'factor_to_base' => max(1, (int) $production->factor_to_base),
+            'base_unit' => $production->product?->unit,
             'scrap_qty' => (int) ($production->scrap_qty ?? 0),
             'lot_code' => $production->lot_code,
             'track_serial' => (bool) ($production->track_serial ?? false),
@@ -473,7 +598,12 @@ class StockProductionService
 
         $warehouse = $this->assertWarehouse($company->id, (int) $payload['warehouse_id']);
         $product = $this->assertOutputProduct($company->id, (int) $payload['product_id']);
-        $qty = (int) $payload['qty'];
+        $resolved = $this->productUnits->resolveInventoryLine(
+            $product,
+            (int) $payload['qty'],
+            isset($payload['unit_level']) ? (string) $payload['unit_level'] : null,
+        );
+        $qty = $resolved['qty_base'];
         $manufacturing = $this->manufacturingEnabled();
         $scrapQty = $manufacturing ? (int) ($payload['scrap_qty'] ?? 0) : 0;
         $lotCode = $manufacturing ? ($payload['lot_code'] ?? null) : null;
@@ -494,10 +624,14 @@ class StockProductionService
             'outlet_id' => $warehouse->outlet_id,
             'user_id' => $user->id,
             'product_id' => $product->id,
-            'number' => $this->nextNumber($company->id),
+            'number' => $this->documentSequences->next($company->id, 'stock_production', 'PRD', 4),
             'client_uuid' => $payload['client_uuid'],
             'status' => 'draft',
             'qty' => $qty,
+            'qty_input' => $resolved['qty_input'],
+            'unit' => $resolved['unit'],
+            'unit_level' => $resolved['level'],
+            'factor_to_base' => $resolved['factor_to_base'],
             'scrap_qty' => $scrapQty,
             'lot_code' => $lotCode ? (string) $lotCode : null,
             'track_serial' => $trackSerial,
@@ -570,13 +704,14 @@ class StockProductionService
             if ($name === '') {
                 continue;
             }
+            // Status transitions only via completeStep — payload cannot mark done.
             StockProductionStep::query()->create([
                 'company_id' => $production->company_id,
                 'stock_production_id' => $production->id,
                 'sort_order' => (int) ($row['sort_order'] ?? $i),
                 'name' => $name,
-                'status' => ($row['status'] ?? 'pending') === 'done' ? 'done' : 'pending',
-                'done_at' => ($row['status'] ?? '') === 'done' ? now() : null,
+                'status' => 'pending',
+                'done_at' => null,
                 'note' => $row['note'] ?? null,
             ]);
         }
@@ -643,21 +778,5 @@ class StockProductionService
             'user:id,name',
             'product:id,name,sku,unit',
         ]);
-    }
-
-    private function nextNumber(int $companyId): string
-    {
-        $full = 'PRD-'.now()->format('ymd').'-';
-        $last = StockProduction::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
     }
 }

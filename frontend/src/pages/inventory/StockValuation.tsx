@@ -5,6 +5,7 @@ import { useFeedback } from '../../components/feedback'
 import { PageHeader } from '../../components/ui'
 import { useI18n } from '../../i18n'
 import { formatRupiah } from '../../lib/money'
+import { stockMovementTypeLabel } from './inventoryDocUtils'
 
 type ValuationRow = {
   warehouse_id: number
@@ -13,6 +14,7 @@ type ValuationRow = {
   product_name: string
   sku: string | null
   unit: string
+  qty_display?: string
   category_id: number | null
   category_name: string | null
   qty: number
@@ -203,7 +205,7 @@ export default function StockValuation() {
                     </td>
                     <td className="px-4 py-3 text-muted">{row.category_name ?? '—'}</td>
                     <td className="px-4 py-3 text-right">
-                      {row.qty} {row.unit}
+                      {row.qty_display ?? `${row.qty} ${row.unit}`}
                     </td>
                     <td className="px-4 py-3 text-right">{formatRupiah(row.unit_cost, locale)}</td>
                     <td className="px-4 py-3 text-right">{formatRupiah(row.cost_value, locale)}</td>
@@ -246,7 +248,7 @@ export default function StockValuation() {
               <tbody>
                 {mutations.map((row) => (
                   <tr key={row.type} className="border-b border-line/70 last:border-0">
-                    <td className="px-4 py-3 font-medium">{row.type}</td>
+                    <td className="px-4 py-3 font-medium">{stockMovementTypeLabel(row.type, t)}</td>
                     <td className="px-4 py-3 text-right">{row.qty_in}</td>
                     <td className="px-4 py-3 text-right">{row.qty_out}</td>
                     <td className="px-4 py-3 text-right">{formatRupiah(row.cost_in, locale)}</td>

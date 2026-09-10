@@ -21,6 +21,9 @@ class VendorPrepaymentService
 {
     public function __construct(
         private NotificationService $notifications,
+        private WithholdingTaxService $withholdingTax,
+        private GlPostingService $glPosting,
+        private DocumentSequenceService $documentSequences,
     ) {}
 
     public function enabled(?\App\Models\Company $company = null): bool
@@ -282,6 +285,10 @@ class VendorPrepaymentService
 
         return DB::transaction(function () use ($prepayment, $user) {
             $prepayment = VendorPrepayment::query()->whereKey($prepayment->id)->lockForUpdate()->firstOrFail();
+            $allowedStatuses = $this->needApproval() ? ['approved'] : ['draft'];
+            if (! in_array($prepayment->status, $allowedStatuses, true)) {
+                throw ValidationException::withMessages(['status' => ['Uang muka tidak bisa dibayar (status berubah).']]);
+            }
             $paidAt = now();
 
             $prepayment->payments()->create([
@@ -296,12 +303,21 @@ class VendorPrepaymentService
                 'note' => $prepayment->note,
             ]);
 
-            $prepayment->update([
-                'status' => 'paid',
-                'paid_at' => $paidAt,
-            ]);
+            $updated = VendorPrepayment::query()
+                ->whereKey($prepayment->id)
+                ->whereIn('status', $allowedStatuses)
+                ->update([
+                    'status' => 'paid',
+                    'paid_at' => $paidAt,
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Uang muka tidak bisa dibayar (status berubah).']]);
+            }
 
-            return $this->loadPrepayment($prepayment->fresh());
+            $fresh = $prepayment->fresh();
+            $this->glPosting->postVendorPrepaymentPay($fresh, $user);
+
+            return $this->loadPrepayment($fresh);
         });
     }
 
@@ -319,9 +335,14 @@ class VendorPrepaymentService
 
         return DB::transaction(function () use ($prepayment, $items) {
             $prepayment = VendorPrepayment::query()->whereKey($prepayment->id)->lockForUpdate()->firstOrFail();
+            if ($prepayment->status !== 'paid') {
+                throw ValidationException::withMessages(['status' => ['Uang muka tidak bisa dialokasikan (status berubah).']]);
+            }
             $balance = $prepayment->amountBalance();
             $totalApply = 0;
             $appliedAt = now();
+            /** @var list<VendorPrepaymentApplication> $appliedRows */
+            $appliedRows = [];
 
             foreach ($items as $row) {
                 $invoiceId = (int) ($row['vendor_invoice_id'] ?? 0);
@@ -353,17 +374,27 @@ class VendorPrepaymentService
                         'amount' => $amount,
                         'applied_at' => $appliedAt,
                     ]);
+                    $appliedRows[] = $planned->fresh(['vendorInvoice']);
                 } else {
-                    $prepayment->applications()->create([
+                    $created = $prepayment->applications()->create([
                         'vendor_invoice_id' => $invoiceId,
                         'amount' => $amount,
                         'applied_at' => $appliedAt,
                     ]);
+                    $appliedRows[] = $created->fresh(['vendorInvoice']);
                 }
 
                 $invoice->update([
                     'amount_paid' => (int) $invoice->amount_paid + $amount,
                 ]);
+
+                $this->withholdingTax->recordFromPayment(
+                    $invoice,
+                    null,
+                    $amount,
+                    $appliedAt,
+                    (int) $prepayment->id,
+                );
             }
 
             if ($totalApply > $balance) {
@@ -377,6 +408,8 @@ class VendorPrepaymentService
                 'amount_applied' => $newApplied,
                 'status' => $newApplied >= (int) $prepayment->amount ? 'applied' : 'paid',
             ]);
+
+            $this->glPosting->postVendorPrepaymentApply($prepayment->fresh(), $appliedRows);
 
             return $this->loadPrepayment($prepayment->fresh());
         });
@@ -711,18 +744,7 @@ class VendorPrepaymentService
 
     private function nextNumber(int $companyId): string
     {
-        $full = 'VPP-'.now()->format('ymd').'-';
-        $last = VendorPrepayment::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+        return $this->documentSequences->next($companyId, 'vendor_prepayment', 'VPP');
     }
 
     /**

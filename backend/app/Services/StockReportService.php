@@ -18,7 +18,32 @@ class StockReportService
     public function __construct(
         private InventoryService $inventory,
         private PurchaseService $purchases,
+        private ProductUnitService $productUnits,
     ) {}
+
+    /**
+     * Unit conversions per product, keyed by product id.
+     *
+     * @param  list<int>  $productIds
+     * @return array<int, list<array<string, mixed>>>
+     */
+    private function unitsForProducts(int $companyId, array $productIds): array
+    {
+        if ($productIds === []) {
+            return [];
+        }
+
+        return Product::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->whereIn('id', $productIds)
+            ->with(['productUnits.unitMaster', 'unitMaster'])
+            ->get()
+            ->mapWithKeys(fn (Product $product) => [
+                (int) $product->id => $this->productUnits->serialize($product),
+            ])
+            ->all();
+    }
 
     /**
      * @return array{rows: list<array<string, mixed>>, totals: array{qty: int, cost_value: int}, method: string}
@@ -62,10 +87,17 @@ class StockReportService
             $query->where('products.category_id', $categoryId);
         }
 
-        $rows = $query->get()->map(function ($row) {
+        $balances = $query->get();
+        $unitsByProduct = $this->unitsForProducts(
+            (int) $company->id,
+            $balances->pluck('product_id')->map(fn ($id) => (int) $id)->unique()->values()->all(),
+        );
+
+        $rows = $balances->map(function ($row) use ($unitsByProduct) {
             $qty = (int) $row->qty;
             $unitCost = (int) ($row->avg_cost ?: $row->cost_price ?: 0);
             $costValue = (int) ($row->cost_value ?: ($qty * $unitCost));
+            $units = $unitsByProduct[(int) $row->product_id] ?? [];
 
             return [
                 'warehouse_id' => (int) $row->warehouse_id,
@@ -77,6 +109,10 @@ class StockReportService
                 'category_id' => $row->category_id ? (int) $row->category_id : null,
                 'category_name' => $row->category_name,
                 'qty' => $qty,
+                'qty_display' => $units === []
+                    ? $qty.' '.(string) $row->unit
+                    : $this->productUnits->formatQtyBreakdown($qty, $units),
+                'units' => $units,
                 'unit_cost' => $unitCost,
                 'cost_value' => $costValue,
             ];
@@ -167,13 +203,19 @@ class StockReportService
         }
         abort_unless($warehouseId, 422, 'Gudang belum tersedia.');
 
-        $warehouse = Warehouse::query()->withoutGlobalScopes()->whereKey($warehouseId)->firstOrFail();
+        $warehouse = Warehouse::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('is_active', true)
+            ->whereKey($warehouseId)
+            ->firstOrFail();
 
         return Product::query()
             ->withoutGlobalScopes()
             ->where('company_id', $company->id)
             ->where('track_stock', true)
             ->where('is_active', true)
+            ->where('min_stock', '>', 0)
             ->whereRaw(
                 'COALESCE((SELECT qty FROM stock_balances WHERE stock_balances.product_id = products.id AND stock_balances.warehouse_id = ? LIMIT 1), 0) <= products.min_stock',
                 [$warehouseId],
@@ -187,6 +229,9 @@ class StockReportService
                     ->where('product_id', $product->id)
                     ->value('qty');
                 $min = (int) $product->min_stock;
+                if ($min <= 0 || $stockQty > $min) {
+                    return null;
+                }
                 $reorder = (int) ($product->reorder_qty ?? 0);
                 $gap = max(0, $min - $stockQty);
                 $suggested = $reorder > 0 ? $reorder : max(1, $gap);
@@ -203,7 +248,9 @@ class StockReportService
                     'warehouse_id' => $warehouseId,
                     'warehouse_name' => $warehouse->name,
                 ];
-            });
+            })
+            ->filter()
+            ->values();
     }
 
     /**

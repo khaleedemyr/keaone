@@ -25,12 +25,19 @@ export function MetaField({ label, value }: { label: string; value: string }) {
 const STATUS_TONE: Record<string, string> = {
   draft: 'bg-slate-500/10 text-slate-600 ring-slate-500/20 dark:text-slate-300',
   submitted: 'bg-amber-500/10 text-amber-700 ring-amber-500/25 dark:text-amber-200',
+  open: 'bg-sky-500/10 text-sky-700 ring-sky-500/25 dark:text-sky-200',
   approved: 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/25 dark:text-emerald-200',
+  awarded: 'bg-teal-500/10 text-teal-700 ring-teal-500/25 dark:text-teal-200',
+  selected: 'bg-teal-500/10 text-teal-700 ring-teal-500/25 dark:text-teal-200',
   ordered: 'bg-teal-500/10 text-teal-700 ring-teal-500/25 dark:text-teal-200',
   partial: 'bg-sky-500/10 text-sky-700 ring-sky-500/25 dark:text-sky-200',
+  confirmed: 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/25 dark:text-emerald-200',
+  shipped: 'bg-sky-500/10 text-sky-700 ring-sky-500/25 dark:text-sky-200',
   received: 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/25 dark:text-emerald-200',
+  closed: 'bg-slate-500/10 text-slate-500 ring-slate-500/15 dark:text-slate-400',
   rejected: 'bg-rose-500/10 text-rose-700 ring-rose-500/25 dark:text-rose-200',
   cancelled: 'bg-slate-500/10 text-slate-500 ring-slate-500/15 dark:text-slate-400',
+  voided: 'bg-rose-500/10 text-rose-700 ring-rose-500/25 dark:text-rose-200',
 }
 
 export function DocStatusBadge({ status, label }: { status: string; label: string }) {

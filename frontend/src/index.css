@@ -3934,6 +3934,45 @@ html[dir='rtl'] .retail-ticket tbody tr.is-active {
 }
 
 /* Master list tables */
+.master-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.master-table thead {
+  border-bottom: 1px solid var(--line);
+}
+
+.master-table th {
+  padding: 0.75rem 1rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.master-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  vertical-align: top;
+}
+
+.master-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.master-table td.master-actions,
+.master-table th.master-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
 .master-table-wrap {
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;

@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ProductUnit;
 use App\Models\StockOpname;
 use App\Services\StockOpnameService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class StockOpnameController extends Controller
 {
@@ -51,9 +53,8 @@ class StockOpnameController extends Controller
             'counted_at' => ['nullable', 'date'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer'],
-            'items.*.book_qty' => ['nullable', 'integer'],
             'items.*.counted_qty' => ['required', 'integer', 'min:0'],
-            'items.*.unit' => ['nullable', 'string', 'max:50'],
+            'items.*.unit_level' => ['nullable', Rule::in(ProductUnit::LEVELS)],
         ]);
 
         $row = $this->opnames->create($data, $request->user());
@@ -80,9 +81,8 @@ class StockOpnameController extends Controller
             'counted_at' => ['nullable', 'date'],
             'items' => ['sometimes', 'array', 'min:1'],
             'items.*.product_id' => ['required_with:items', 'integer'],
-            'items.*.book_qty' => ['nullable', 'integer'],
             'items.*.counted_qty' => ['required_with:items', 'integer', 'min:0'],
-            'items.*.unit' => ['nullable', 'string', 'max:50'],
+            'items.*.unit_level' => ['nullable', Rule::in(ProductUnit::LEVELS)],
         ]);
 
         return $this->ok($this->opnames->serialize($this->opnames->update($stockOpname, $data)));

@@ -5,6 +5,8 @@ import { isSilentRequest, setLoadingProgress, startLoading, stopLoading } from '
 declare module 'axios' {
   interface AxiosRequestConfig {
     silent?: boolean
+    /** Skip ERP bearer / company headers (public storefront). */
+    skipAuth?: boolean
   }
 }
 
@@ -63,10 +65,16 @@ function silentConfig(config?: InternalAxiosRequestConfig) {
 
 api.interceptors.request.use((config) => {
   const url = String(config.url ?? '')
-  const isAuth = url.includes('/auth/login') || url.includes('/auth/register')
+  // Only top-level ERP auth — do not match /storefront/shop/auth/login|register.
+  const isAuth =
+    /(^|\/)auth\/login(\?|$)/.test(url) ||
+    /(^|\/)auth\/register(\?|$)/.test(url)
   const isCatalog = url.includes('/catalog')
   const token = sessionGet(TOKEN_KEY)
-  if (token && !isAuth) {
+  const hasAuthHeader = Boolean(config.headers?.Authorization)
+  const skipAuth = Boolean(config.skipAuth)
+  // Keep explicit Authorization (e.g. storefront customer token) when already set.
+  if (token && !isAuth && !hasAuthHeader && !skipAuth) {
     config.headers.Authorization = `Bearer ${token}`
   }
   if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
@@ -75,7 +83,7 @@ api.interceptors.request.use((config) => {
     else delete config.headers['Content-Type']
   }
   const companyId = sessionGet(COMPANY_KEY)
-  if (companyId && !isAuth && !isCatalog) {
+  if (companyId && !isAuth && !isCatalog && !skipAuth) {
     config.headers['X-Company-Id'] = companyId
   }
   if (!silentConfig(config)) {
@@ -99,7 +107,15 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     if (!silentConfig(error.config)) stopLoading()
     const url = String(error.config?.url ?? '')
-    if (error.response?.status === 401 && !url.includes('/auth/logout')) {
+    const isStorefrontCustomerAuth =
+      url.includes('/public/storefront/auth') ||
+      url.includes('/storefront/shop/auth') ||
+      url.includes('/public/storefront/orders')
+    if (
+      error.response?.status === 401 &&
+      !url.includes('/auth/logout') &&
+      !isStorefrontCustomerAuth
+    ) {
       clearAuthSession()
       if (!window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/register')) {
         window.location.assign('/login')

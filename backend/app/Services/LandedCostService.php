@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Models\GoodsReceipt;
 use App\Models\GoodsReceiptItem;
 use App\Models\GoodsReceiptLandedCost;
+use App\Support\ProcurementSettings;
 use Illuminate\Validation\ValidationException;
 
 class LandedCostService

@@ -15,6 +15,7 @@ class BudgetController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('procurementbudgets', 'view');
 
         $query = Budget::query()->orderByDesc('period_start')->orderByDesc('id');
@@ -43,6 +44,7 @@ class BudgetController extends Controller
 
     public function show(Budget $budget): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('procurementbudgets', 'view');
 
         return $this->ok($this->budgets->serialize($budget));
@@ -50,6 +52,7 @@ class BudgetController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('procurementbudgets', 'create');
 
         $data = $request->validate(array_merge(Budget::headerRules(), [
@@ -73,6 +76,7 @@ class BudgetController extends Controller
 
     public function update(Request $request, Budget $budget): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('procurementbudgets', 'edit');
 
         if ($budget->status !== 'draft') {
@@ -101,6 +105,7 @@ class BudgetController extends Controller
 
     public function destroy(Budget $budget): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('procurementbudgets', 'delete');
 
         if ($budget->status === 'active') {
@@ -119,6 +124,7 @@ class BudgetController extends Controller
 
     public function activate(Budget $budget): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('procurementbudgets', 'edit');
 
         return $this->ok($this->budgets->serialize($this->budgets->activate($budget)));
@@ -126,6 +132,7 @@ class BudgetController extends Controller
 
     public function close(Budget $budget): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('procurementbudgets', 'edit');
 
         return $this->ok($this->budgets->serialize($this->budgets->close($budget)));
@@ -133,6 +140,7 @@ class BudgetController extends Controller
 
     public function commitments(Request $request, Budget $budget): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('procurementbudgets', 'view');
 
         $query = $budget->commitments()->orderByDesc('committed_at');

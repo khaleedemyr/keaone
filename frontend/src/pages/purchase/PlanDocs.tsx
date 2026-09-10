@@ -187,7 +187,7 @@ export default function PlanDocs() {
         feedback.success(t('saved'))
       } else {
         await api.post('/procurement-plans', { ...payload, client_uuid: uuid() })
-        feedback.success(t('created'))
+        feedback.success(t('saved'))
       }
       setOpen(false)
       await loadRows()
@@ -238,27 +238,36 @@ export default function PlanDocs() {
         perPage={list.perPage}
         onPerPage={list.filters.onPerPage}
       />
-      <div className="card mt-4 overflow-x-auto">
-        <table className="master-table w-full">
-          <thead>
+      <div className="glass mt-4 overflow-x-auto rounded-3xl">
+        <table className="min-w-full text-left text-sm">
+          <thead className="border-b border-line text-[11px] uppercase tracking-wide text-muted">
             <tr>
-              <th>{t('name')}</th>
-              <th>{t('procurementPlanFiscalYear')}</th>
-              <th>{t('department')}</th>
-              <th>{t('status')}</th>
-              <th>{t('total')}</th>
+              <th className="px-4 py-3">{t('name')}</th>
+              <th className="px-4 py-3">{t('procurementPlanFiscalYear')}</th>
+              <th className="px-4 py-3">{t('department')}</th>
+              <th className="px-4 py-3">{t('status')}</th>
+              <th className="px-4 py-3 text-right">{t('total')}</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.id}>
-                <td><MasterNameButton onClick={() => setViewing(row)}>{row.name}</MasterNameButton></td>
-                <td>{row.fiscal_year}</td>
-                <td>{row.department?.name ?? '—'}</td>
-                <td>{statusLabel(t, row.status)}</td>
-                <td>{formatRupiah(row.planned_total)}</td>
+              <tr key={row.id} className="border-b border-line/70 last:border-0">
+                <td className="px-4 py-3 font-medium">
+                  <MasterNameButton onClick={() => setViewing(row)}>{row.name}</MasterNameButton>
+                </td>
+                <td className="px-4 py-3 tabular-nums text-muted">{row.fiscal_year}</td>
+                <td className="px-4 py-3 text-muted">{row.department?.name ?? '—'}</td>
+                <td className="px-4 py-3">{statusLabel(t, row.status)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{formatRupiah(row.planned_total)}</td>
               </tr>
             ))}
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
+                  {t('emptyMaster')}
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>

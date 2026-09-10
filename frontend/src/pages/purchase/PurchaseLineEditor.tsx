@@ -11,7 +11,10 @@ import {
   emptyPurchaseLine,
   ensureTrailingEmptyPurchaseLine,
   focusLineCell,
+  lineDiscountAmount,
+  lineNetTotal,
   parseCostInput,
+  parsePercentInput,
   parseQtyInput,
   productUnitOptions,
   productPurchaseCost,
@@ -66,6 +69,7 @@ function MobileLineSheet({
   needsCost,
   grFromPo,
   locale,
+  allowDiscount = false,
   onSave,
   onDelete,
   onClose,
@@ -76,6 +80,7 @@ function MobileLineSheet({
   needsCost: boolean
   grFromPo?: boolean
   locale: string
+  allowDiscount?: boolean
   onSave: (next: PurchaseLineDraft) => void
   onDelete?: () => void
   onClose: () => void
@@ -98,7 +103,7 @@ function MobileLineSheet({
     if (!picked) {
       setDraft((current) =>
         current
-          ? { ...current, product_id: 0, name: '', unit: '', unit_level: 'small', unit_cost: 0 }
+          ? { ...current, product_id: 0, name: '', unit: '', unit_level: 'small', unit_cost: 0, discount: 0, discount_type: 'fixed' }
           : current,
       )
       return
@@ -201,9 +206,56 @@ function MobileLineSheet({
               />
             </label>
           ) : null}
+          {allowDiscount && needsCost ? (
+            <label className="block text-sm text-muted">
+              {t('purchaseDiscount')}
+              <div className="mt-1 flex overflow-hidden rounded-xl border border-line bg-[var(--field-bg)]">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="min-w-0 flex-1 border-0 bg-transparent px-3 py-2.5 text-sm tabular-nums text-fg outline-none"
+                  value={draft.discount > 0 ? String(draft.discount) : ''}
+                  disabled={!draft.product_id}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) =>
+                    setDraft((c) =>
+                      c
+                        ? {
+                            ...c,
+                            discount:
+                              c.discount_type === 'percent'
+                                ? parsePercentInput(e.target.value)
+                                : parseCostInput(e.target.value),
+                          }
+                        : c,
+                    )
+                  }
+                />
+                <div className="flex shrink-0 border-l border-line" role="group" aria-label={t('discountValueType')}>
+                  <button
+                    type="button"
+                    className={`px-2.5 text-xs font-semibold ${draft.discount_type === 'fixed' ? 'bg-mint/25 text-fg' : 'text-muted'}`}
+                    onClick={() => setDraft((c) => (c ? { ...c, discount_type: 'fixed', discount: 0 } : c))}
+                  >
+                    Rp
+                  </button>
+                  <button
+                    type="button"
+                    className={`border-l border-line px-2.5 text-xs font-semibold ${draft.discount_type === 'percent' ? 'bg-mint/25 text-fg' : 'text-muted'}`}
+                    onClick={() => setDraft((c) => (c ? { ...c, discount_type: 'percent', discount: 0 } : c))}
+                  >
+                    %
+                  </button>
+                </div>
+              </div>
+            </label>
+          ) : null}
           {draft.product_id && needsCost && draft.unit_cost > 0 ? (
             <div className="text-sm text-muted">
-              {t('purchaseTotal')}: {formatRupiah(draft.qty * draft.unit_cost, locale)}
+              {t('purchaseTotal')}: {formatRupiah(lineNetTotal(draft), locale)}
+              {allowDiscount && lineDiscountAmount(draft) > 0 ? (
+                <span className="ml-2 text-rose-500">(-{formatRupiah(lineDiscountAmount(draft), locale)})</span>
+              ) : null}
             </div>
           ) : null}
           <button
@@ -237,6 +289,7 @@ export function PurchaseLineEditor({
   productOptions,
   needsCost,
   grFromPo = false,
+  allowDiscount = false,
   autoFocusFirst = false,
   onProductSelected,
 }: {
@@ -246,6 +299,7 @@ export function PurchaseLineEditor({
   productOptions: Array<{ value: string; label: string; keywords?: string }>
   needsCost: boolean
   grFromPo?: boolean
+  allowDiscount?: boolean
   autoFocusFirst?: boolean
   onProductSelected?: (product: Product) => void
 }) {
@@ -351,6 +405,10 @@ export function PurchaseLineEditor({
       setFocusHint({ key: rowKey, col: 'cost' })
       return
     }
+    if (col === 'cost' && allowDiscount) {
+      setFocusHint({ key: rowKey, col: 'discount' })
+      return
+    }
     let nextKey = ''
     setLines((current) => {
       const idx = current.findIndex((item) => item.key === rowKey)
@@ -447,7 +505,12 @@ export function PurchaseLineEditor({
                   </div>
                   {needsCost && line.unit_cost > 0 ? (
                     <div className="mt-1 text-sm font-medium tabular-nums text-fg">
-                      {formatRupiah(line.qty * line.unit_cost, locale)}
+                      {formatRupiah(lineNetTotal(line), locale)}
+                      {allowDiscount && lineDiscountAmount(line) > 0 ? (
+                        <span className="ml-2 text-xs font-normal text-rose-500">
+                          -{formatRupiah(lineDiscountAmount(line), locale)}
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -474,9 +537,11 @@ export function PurchaseLineEditor({
               ? needsCost
                 ? 'grid-cols-[minmax(0,1.6fr)_64px_72px_88px_110px_auto]'
                 : 'grid-cols-[minmax(0,1.6fr)_64px_72px_88px_auto]'
-              : needsCost
-                ? 'grid-cols-[minmax(0,1.6fr)_72px_88px_110px_auto]'
-                : 'grid-cols-[minmax(0,1.6fr)_72px_88px_auto]'
+              : allowDiscount && needsCost
+                ? 'grid-cols-[minmax(0,1.4fr)_72px_88px_100px_minmax(9rem,11rem)_auto]'
+                : needsCost
+                  ? 'grid-cols-[minmax(0,1.6fr)_72px_88px_110px_auto]'
+                  : 'grid-cols-[minmax(0,1.6fr)_72px_88px_auto]'
           }`}
         >
           <span>{t('product')}</span>
@@ -484,6 +549,7 @@ export function PurchaseLineEditor({
           <span>{grFromPo ? t('purchaseReceiveQty') : t('stockQty')}</span>
           <span>{t('unit')}</span>
           {needsCost ? <span>{t('purchaseUnitCost')}</span> : null}
+          {allowDiscount && needsCost ? <span>{t('purchaseDiscount')}</span> : null}
           <span />
         </div>
         <div className="space-y-1.5">
@@ -492,6 +558,7 @@ export function PurchaseLineEditor({
             const options = productUnitOptions(product)
             const known = options.some((o) => o.level === line.unit_level || o.label === line.unit)
             const showPoQty = grFromPo && line.po_qty != null
+            const discAmt = allowDiscount ? lineDiscountAmount(line) : 0
             return (
               <div
                 key={line.key}
@@ -500,9 +567,11 @@ export function PurchaseLineEditor({
                     ? needsCost
                       ? 'grid-cols-[minmax(0,1.6fr)_64px_72px_88px_110px_auto]'
                       : 'grid-cols-[minmax(0,1.6fr)_64px_72px_88px_auto]'
-                    : needsCost
-                      ? 'grid-cols-[minmax(0,1.6fr)_72px_88px_110px_auto]'
-                      : 'grid-cols-[minmax(0,1.6fr)_72px_88px_auto]'
+                    : allowDiscount && needsCost
+                      ? 'grid-cols-[minmax(0,1.4fr)_72px_88px_100px_minmax(9rem,11rem)_auto]'
+                      : needsCost
+                        ? 'grid-cols-[minmax(0,1.6fr)_72px_88px_110px_auto]'
+                        : 'grid-cols-[minmax(0,1.6fr)_72px_88px_auto]'
                 }`}
               >
                 <div data-line={line.key} data-col="product">
@@ -598,6 +667,84 @@ export function PurchaseLineEditor({
                     onKeyDown={(e) => onLineEnter(e, line.key, 'cost')}
                   />
                 ) : null}
+                {allowDiscount && needsCost ? (
+                  <div data-line={line.key} data-col="discount">
+                    <div className="inline-flex w-full items-stretch overflow-hidden rounded-lg border border-line bg-[var(--field-bg)]">
+                      <input
+                        className="min-w-0 flex-1 border-0 bg-transparent px-2.5 py-1.5 text-sm tabular-nums text-fg outline-none"
+                        inputMode="numeric"
+                        value={line.discount > 0 ? String(line.discount) : ''}
+                        disabled={!line.product_id}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onChange={(e) =>
+                          setLines((current) =>
+                            current.map((item) =>
+                              item.key === line.key
+                                ? {
+                                    ...item,
+                                    discount:
+                                      item.discount_type === 'percent'
+                                        ? parsePercentInput(e.target.value)
+                                        : parseCostInput(e.target.value),
+                                  }
+                                : item,
+                            ),
+                          )
+                        }
+                        onKeyDown={(e) => onLineEnter(e, line.key, 'discount')}
+                      />
+                      <div
+                        className="flex shrink-0 border-l border-line"
+                        role="group"
+                        aria-label={t('discountValueType')}
+                      >
+                        <button
+                          type="button"
+                          className={`px-2 text-[11px] font-semibold transition ${
+                            line.discount_type === 'fixed'
+                              ? 'bg-mint/25 text-fg'
+                              : 'text-muted hover:bg-fill hover:text-fg'
+                          }`}
+                          onClick={() =>
+                            setLines((current) =>
+                              current.map((item) =>
+                                item.key === line.key
+                                  ? { ...item, discount_type: 'fixed', discount: 0 }
+                                  : item,
+                              ),
+                            )
+                          }
+                        >
+                          Rp
+                        </button>
+                        <button
+                          type="button"
+                          className={`border-l border-line px-2.5 text-[11px] font-semibold transition ${
+                            line.discount_type === 'percent'
+                              ? 'bg-mint/25 text-fg'
+                              : 'text-muted hover:bg-fill hover:text-fg'
+                          }`}
+                          onClick={() =>
+                            setLines((current) =>
+                              current.map((item) =>
+                                item.key === line.key
+                                  ? { ...item, discount_type: 'percent', discount: 0 }
+                                  : item,
+                              ),
+                            )
+                          }
+                        >
+                          %
+                        </button>
+                      </div>
+                    </div>
+                    {line.discount_type === 'percent' && discAmt > 0 ? (
+                      <div className="mt-0.5 text-[10px] text-rose-500 tabular-nums">
+                        -{formatRupiah(discAmt, locale)}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   className="btn-ghost !px-2"
@@ -618,6 +765,7 @@ export function PurchaseLineEditor({
         products={products}
         needsCost={needsCost}
         grFromPo={grFromPo}
+        allowDiscount={allowDiscount}
         locale={locale}
         onSave={saveSheetLine}
         onDelete={

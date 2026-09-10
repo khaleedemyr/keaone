@@ -38,6 +38,7 @@ class PurchaseService
         private LandedCostService $landedCosts,
         private ApprovalGovernanceService $governance,
         private ProcurementFieldAuditService $fieldAudits,
+        private DocumentSequenceService $documentSequences,
     ) {}
 
     public function purchaseFlow(?Company $company = null): string
@@ -206,9 +207,9 @@ class PurchaseService
             } else {
                 $pr->approvals()->delete();
                 $pr->update([
-                    'status' => 'submitted',
-                    'approved_by' => null,
-                    'approved_at' => null,
+                    'status' => 'approved',
+                    'approved_by' => auth()->id(),
+                    'approved_at' => now(),
                     'current_approval_level' => null,
                 ]);
             }
@@ -218,7 +219,9 @@ class PurchaseService
             return $this->loadPr($pr->fresh());
         });
 
-        $this->notifyCurrentPrApprover($result);
+        if ($result->status === 'submitted') {
+            $this->notifyCurrentPrApprover($result);
+        }
 
         return $result;
     }
@@ -231,19 +234,14 @@ class PurchaseService
 
         $result = DB::transaction(function () use ($pr, $user, $payload) {
             $pr = PurchaseRequisition::query()->whereKey($pr->id)->lockForUpdate()->firstOrFail();
+            if ($pr->status !== 'submitted') {
+                throw ValidationException::withMessages(['status' => ['Hanya PR yang diajukan yang bisa disetujui.']]);
+            }
 
             if (! $this->prNeedApproval() || $pr->approvals()->count() === 0) {
-                if (array_key_exists('items', $payload)) {
-                    $this->revisePrItemsDuringApproval($pr, $payload['items'] ?? []);
-                }
-                $pr->update([
-                    'status' => 'approved',
-                    'approved_by' => $user->id,
-                    'approved_at' => now(),
-                    'current_approval_level' => null,
+                throw ValidationException::withMessages([
+                    'approvals' => ['PR ini tidak membutuhkan approval manual (sudah auto-approve saat submit).'],
                 ]);
-
-                return $this->loadPr($pr->fresh());
             }
 
             $level = (int) ($pr->current_approval_level ?: 1);
@@ -361,32 +359,34 @@ class PurchaseService
         if ($pr->status !== 'submitted' || ! $pr->current_approval_level) {
             return;
         }
-        $step = $pr->approvals->firstWhere('level', (int) $pr->current_approval_level)
-            ?? PurchaseRequisitionApproval::query()
+        $steps = $pr->approvals->where('level', (int) $pr->current_approval_level)->where('status', 'pending');
+        if ($steps->isEmpty()) {
+            $steps = PurchaseRequisitionApproval::query()
                 ->where('purchase_requisition_id', $pr->id)
                 ->where('level', (int) $pr->current_approval_level)
-                ->first();
-        if (! $step || $step->status !== 'pending') {
-            return;
+                ->where('status', 'pending')
+                ->get();
         }
 
-        $this->notifications->notify(
-            (int) $step->user_id,
-            'notifPrApprovalNeededTitle',
-            'notifPrApprovalNeededBody',
-            [
-                'number' => $pr->number,
-                'requester' => $pr->user?->name ?? '-',
-                'level' => (string) $step->level,
-            ],
-            [
-                'type' => 'purchase_requisition',
-                'id' => $pr->id,
-                'app' => 'approvals',
-            ],
-            'info',
-            (int) $pr->company_id,
-        );
+        foreach ($steps as $step) {
+            $this->notifications->notify(
+                (int) $step->user_id,
+                'notifPrApprovalNeededTitle',
+                'notifPrApprovalNeededBody',
+                [
+                    'number' => $pr->number,
+                    'requester' => $pr->user?->name ?? '-',
+                    'level' => (string) $step->level,
+                ],
+                [
+                    'type' => 'purchase_requisition',
+                    'id' => $pr->id,
+                    'app' => 'approvals',
+                ],
+                'info',
+                (int) $pr->company_id,
+            );
+        }
     }
 
     private function notifyPrCreator(PurchaseRequisition $pr, string $titleKey, string $bodyKey, string $tone): void
@@ -417,10 +417,17 @@ class PurchaseService
         if (in_array($pr->status, ['cancelled', 'approved'], true)) {
             throw ValidationException::withMessages(['status' => ['PR tidak bisa dibatalkan.']]);
         }
-        $pr->update(['status' => 'cancelled']);
-        $this->budgets->releaseForPr($pr);
 
-        return $this->loadPr($pr->fresh());
+        return DB::transaction(function () use ($pr) {
+            $pr = PurchaseRequisition::query()->whereKey($pr->id)->lockForUpdate()->firstOrFail();
+            if (in_array($pr->status, ['cancelled', 'approved'], true)) {
+                throw ValidationException::withMessages(['status' => ['PR tidak bisa dibatalkan.']]);
+            }
+            $pr->update(['status' => 'cancelled']);
+            $this->budgets->releaseForPr($pr);
+
+            return $this->loadPr($pr->fresh());
+        });
     }
 
     // ─── PO ───────────────────────────────────────────────
@@ -446,6 +453,45 @@ class PurchaseService
 
             return $this->loadPo($row);
         }
+    }
+
+    /**
+     * Create multiple POs atomically (e.g. multi-supplier split from one PR).
+     *
+     * @param  list<array<string, mixed>>  $orders
+     * @return list<PurchaseOrder>
+     */
+    public function createOrdersBatch(array $orders, User $user): array
+    {
+        if ($orders === []) {
+            throw ValidationException::withMessages(['orders' => ['Minimal 1 PO.']]);
+        }
+
+        $flow = $this->purchaseFlow();
+        if ($flow === 'direct') {
+            throw ValidationException::withMessages([
+                'purchase_flow' => ['Mode pembelian langsung tidak memakai PO. Gunakan penerimaan barang.'],
+            ]);
+        }
+
+        return DB::transaction(function () use ($orders, $user, $flow) {
+            $created = [];
+            foreach ($orders as $index => $payload) {
+                if (empty($payload['client_uuid'])) {
+                    throw ValidationException::withMessages([
+                        "orders.$index.client_uuid" => ['client_uuid wajib.'],
+                    ]);
+                }
+                $existing = PurchaseOrder::query()->where('client_uuid', $payload['client_uuid'])->first();
+                if ($existing) {
+                    $created[] = $this->loadPo($existing);
+                    continue;
+                }
+                $created[] = $this->writeOrder($payload, $user, $flow);
+            }
+
+            return $created;
+        });
     }
 
     public function updateOrder(PurchaseOrder $po, array $payload): PurchaseOrder
@@ -534,9 +580,9 @@ class PurchaseService
             } else {
                 $po->approvals()->delete();
                 $po->update([
-                    'status' => 'submitted',
-                    'approved_by' => null,
-                    'approved_at' => null,
+                    'status' => 'approved',
+                    'approved_by' => auth()->id(),
+                    'approved_at' => now(),
                     'current_approval_level' => null,
                 ]);
             }
@@ -546,7 +592,9 @@ class PurchaseService
             return $this->loadPo($po->fresh());
         });
 
-        $this->notifyCurrentPoApprover($result);
+        if ($result->status === 'submitted') {
+            $this->notifyCurrentPoApprover($result);
+        }
 
         return $result;
     }
@@ -559,19 +607,14 @@ class PurchaseService
 
         $result = DB::transaction(function () use ($po, $user, $payload) {
             $po = PurchaseOrder::query()->whereKey($po->id)->lockForUpdate()->firstOrFail();
+            if ($po->status !== 'submitted') {
+                throw ValidationException::withMessages(['status' => ['Hanya PO yang diajukan yang bisa disetujui.']]);
+            }
 
             if (! $this->poNeedApproval() || $po->approvals()->count() === 0) {
-                if (array_key_exists('items', $payload)) {
-                    $this->revisePoItemsDuringApproval($po, $payload['items'] ?? []);
-                }
-                $po->update([
-                    'status' => 'approved',
-                    'approved_by' => $user->id,
-                    'approved_at' => now(),
-                    'current_approval_level' => null,
+                throw ValidationException::withMessages([
+                    'approvals' => ['PO ini tidak membutuhkan approval manual (sudah auto-approve saat submit).'],
                 ]);
-
-                return $this->loadPo($po->fresh());
             }
 
             $level = (int) ($po->current_approval_level ?: 1);
@@ -689,32 +732,34 @@ class PurchaseService
         if ($po->status !== 'submitted' || ! $po->current_approval_level) {
             return;
         }
-        $step = $po->approvals->firstWhere('level', (int) $po->current_approval_level)
-            ?? PurchaseOrderApproval::query()
+        $steps = $po->approvals->where('level', (int) $po->current_approval_level)->where('status', 'pending');
+        if ($steps->isEmpty()) {
+            $steps = PurchaseOrderApproval::query()
                 ->where('purchase_order_id', $po->id)
                 ->where('level', (int) $po->current_approval_level)
-                ->first();
-        if (! $step || $step->status !== 'pending') {
-            return;
+                ->where('status', 'pending')
+                ->get();
         }
 
-        $this->notifications->notify(
-            (int) $step->user_id,
-            'notifPoApprovalNeededTitle',
-            'notifPoApprovalNeededBody',
-            [
-                'number' => $po->number,
-                'requester' => $po->user?->name ?? '-',
-                'level' => (string) $step->level,
-            ],
-            [
-                'type' => 'purchase_order',
-                'id' => $po->id,
-                'app' => 'approvals',
-            ],
-            'info',
-            (int) $po->company_id,
-        );
+        foreach ($steps as $step) {
+            $this->notifications->notify(
+                (int) $step->user_id,
+                'notifPoApprovalNeededTitle',
+                'notifPoApprovalNeededBody',
+                [
+                    'number' => $po->number,
+                    'requester' => $po->user?->name ?? '-',
+                    'level' => (string) $step->level,
+                ],
+                [
+                    'type' => 'purchase_order',
+                    'id' => $po->id,
+                    'app' => 'approvals',
+                ],
+                'info',
+                (int) $po->company_id,
+            );
+        }
     }
 
     private function notifyPoCreator(PurchaseOrder $po, string $titleKey, string $bodyKey, string $tone): void
@@ -743,7 +788,7 @@ class PurchaseService
     public function orderPurchaseOrder(PurchaseOrder $po): PurchaseOrder
     {
         $needApproval = $this->poNeedApproval();
-        $allowed = $needApproval ? ['approved'] : ['draft', 'approved'];
+        $allowed = $needApproval ? ['approved'] : ['draft', 'approved', 'submitted'];
         if (! in_array($po->status, $allowed, true)) {
             throw ValidationException::withMessages([
                 'status' => $needApproval
@@ -754,12 +799,26 @@ class PurchaseService
         if ($po->items()->count() === 0) {
             throw ValidationException::withMessages(['items' => ['PO belum punya item.']]);
         }
-        $po->update([
-            'status' => 'ordered',
-            'ordered_at' => now()->toDateString(),
-        ]);
 
-        return $this->loadPo($po->fresh());
+        return DB::transaction(function () use ($po, $needApproval) {
+            $po = PurchaseOrder::query()->whereKey($po->id)->lockForUpdate()->firstOrFail();
+            $allowed = $needApproval ? ['approved'] : ['draft', 'approved', 'submitted'];
+            if (! in_array($po->status, $allowed, true)) {
+                throw ValidationException::withMessages(['status' => ['PO tidak bisa dipesan.']]);
+            }
+
+            // Budget commit on the path that skips submit when approval is off.
+            if (! $needApproval && in_array($po->status, ['draft', 'submitted'], true)) {
+                $this->budgets->commitForPoSubmit($po);
+            }
+
+            $po->update([
+                'status' => 'ordered',
+                'ordered_at' => now()->toDateString(),
+            ]);
+
+            return $this->loadPo($po->fresh());
+        });
     }
 
     public function cancelOrder(PurchaseOrder $po): PurchaseOrder
@@ -770,10 +829,21 @@ class PurchaseService
         if ((int) $po->items()->sum('qty_received') > 0) {
             throw ValidationException::withMessages(['status' => ['PO sudah ada penerimaan.']]);
         }
-        $po->update(['status' => 'cancelled']);
-        $this->budgets->releaseForPo($po);
 
-        return $this->loadPo($po->fresh());
+        return DB::transaction(function () use ($po) {
+            $po = PurchaseOrder::query()->whereKey($po->id)->lockForUpdate()->firstOrFail();
+            if (! in_array($po->status, ['draft', 'submitted', 'rejected', 'approved', 'ordered'], true)) {
+                throw ValidationException::withMessages(['status' => ['PO tidak bisa dibatalkan.']]);
+            }
+            if ((int) $po->items()->sum('qty_received') > 0) {
+                throw ValidationException::withMessages(['status' => ['PO sudah ada penerimaan.']]);
+            }
+            $this->assertNoDraftReceiptsForPo((int) $po->id);
+            $po->update(['status' => 'cancelled']);
+            $this->budgets->releaseForPo($po);
+
+            return $this->loadPo($po->fresh());
+        });
     }
 
     public function closeOrder(PurchaseOrder $po, User $user, ?string $reason = null): PurchaseOrder
@@ -786,22 +856,37 @@ class PurchaseService
             ]);
         }
 
-        $allReceived = $po->items->every(fn ($item) => (int) $item->qty_received >= (int) $item->qty);
+        $allReceived = $po->items->every(function ($item) {
+            $factor = max(1, (int) ($item->factor_to_base ?: 1));
+
+            return $this->productUnits->toBaseQty((int) $item->qty_received, $factor)
+                >= $this->productUnits->toBaseQty((int) $item->qty, $factor);
+        });
         if ($allReceived) {
             throw ValidationException::withMessages([
                 'status' => ['PO sudah terpenuhi penuh — gunakan status selesai diterima, bukan tutup manual.'],
             ]);
         }
 
-        $po->update([
-            'status' => 'closed',
-            'closed_by' => $user->id,
-            'closed_at' => now(),
-            'close_reason' => $reason,
-        ]);
-        $this->budgets->releaseForPo($po);
+        return DB::transaction(function () use ($po, $user, $reason) {
+            $po = PurchaseOrder::query()->whereKey($po->id)->lockForUpdate()->firstOrFail();
+            if (! in_array($po->status, ['ordered', 'partial'], true)) {
+                throw ValidationException::withMessages([
+                    'status' => ['Hanya PO berstatus dipesan atau sebagian diterima yang bisa ditutup.'],
+                ]);
+            }
+            $this->assertNoDraftReceiptsForPo((int) $po->id);
 
-        return $this->loadPo($po->fresh());
+            $po->update([
+                'status' => 'closed',
+                'closed_by' => $user->id,
+                'closed_at' => now(),
+                'close_reason' => $reason,
+            ]);
+            $this->budgets->releaseForPo($po);
+
+            return $this->loadPo($po->fresh());
+        });
     }
 
     // ─── GR ───────────────────────────────────────────────
@@ -831,8 +916,21 @@ class PurchaseService
         }
 
         return DB::transaction(function () use ($gr, $payload) {
+            $gr = GoodsReceipt::query()->whereKey($gr->id)->lockForUpdate()->firstOrFail();
+            if ($gr->status !== 'draft') {
+                throw ValidationException::withMessages(['status' => ['Penerimaan hanya bisa diubah saat draft.']]);
+            }
+
+            $supplierId = $payload['supplier_id'] ?? $gr->supplier_id;
+            if ($gr->purchase_order_id) {
+                $po = PurchaseOrder::query()->find($gr->purchase_order_id);
+                if ($po) {
+                    $supplierId = (int) $po->supplier_id;
+                }
+            }
+
             $gr->update([
-                'supplier_id' => $payload['supplier_id'] ?? $gr->supplier_id,
+                'supplier_id' => $supplierId,
                 'warehouse_id' => $payload['warehouse_id'] ?? $gr->warehouse_id,
                 'note' => $payload['note'] ?? $gr->note,
             ]);
@@ -858,6 +956,9 @@ class PurchaseService
 
         return DB::transaction(function () use ($gr) {
             $gr = GoodsReceipt::query()->whereKey($gr->id)->lockForUpdate()->firstOrFail();
+            if ($gr->status !== 'draft') {
+                throw ValidationException::withMessages(['status' => ['Penerimaan tidak bisa dikonfirmasi.']]);
+            }
             $gr->load(['items', 'purchaseOrder.items', 'purchaseOrder']);
 
             if ($gr->purchaseOrder && auth()->id()) {
@@ -870,8 +971,14 @@ class PurchaseService
                     'purchase_order_id' => ['Mode saat ini mewajibkan PO pada penerimaan.'],
                 ]);
             }
-            if ($flow === 'direct' && $gr->purchase_order_id) {
-                // allow linking but not required
+
+            if ($gr->purchase_order_id) {
+                $po = PurchaseOrder::query()->whereKey($gr->purchase_order_id)->lockForUpdate()->first();
+                if (! $po || ! in_array($po->status, ['ordered', 'partial'], true)) {
+                    throw ValidationException::withMessages([
+                        'purchase_order_id' => ['PO harus berstatus ordered/partial (belum ditutup/dibatalkan) saat konfirmasi GR.'],
+                    ]);
+                }
             }
 
             $company = Company::query()->findOrFail($gr->company_id);
@@ -906,6 +1013,8 @@ class PurchaseService
                             'factor_to_base' => $factor,
                         ],
                         $costPerBase > 0 ? $costPerBase : null,
+                        false,
+                        $updateCost,
                     );
                 } elseif ($product?->is_fixed_asset_item) {
                     $this->assets->registerFromGrItem($gr, $item, $product);
@@ -920,20 +1029,7 @@ class PurchaseService
                 if ($item->purchase_order_item_id) {
                     $poItem = PurchaseOrderItem::query()->whereKey($item->purchase_order_item_id)->lockForUpdate()->first();
                     if ($poItem) {
-                        $poFactor = max(1, (int) ($poItem->factor_to_base ?: 1));
-                        $addInPoUnit = (int) round($baseQty / $poFactor);
-                        if ($addInPoUnit < 1) {
-                            throw ValidationException::withMessages([
-                                'items' => ["Qty terima tidak cocok dengan satuan PO untuk {$item->name_snapshot}."],
-                            ]);
-                        }
-                        $poItem->qty_received = (int) $poItem->qty_received + $addInPoUnit;
-                        if ($poItem->qty_received > $poItem->qty) {
-                            throw ValidationException::withMessages([
-                                'items' => ["Qty terima melebihi PO untuk {$item->name_snapshot}."],
-                            ]);
-                        }
-                        $poItem->save();
+                        $this->applyPoReceiveDelta($poItem, $baseQty, $item->name_snapshot);
                     }
                 }
             }
@@ -942,10 +1038,16 @@ class PurchaseService
                 $this->refreshPoStatus($gr->purchase_order_id);
             }
 
-            $gr->update([
-                'status' => 'confirmed',
-                'received_at' => now(),
-            ]);
+            $updated = GoodsReceipt::query()
+                ->whereKey($gr->id)
+                ->where('status', 'draft')
+                ->update([
+                    'status' => 'confirmed',
+                    'received_at' => now(),
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Penerimaan tidak bisa dikonfirmasi.']]);
+            }
 
             $this->glPosting->postGoodsReceipt($gr->fresh(), auth()->user());
 
@@ -988,6 +1090,9 @@ class PurchaseService
 
         return DB::transaction(function () use ($gr, $user, $reason) {
             $gr = GoodsReceipt::query()->whereKey($gr->id)->lockForUpdate()->firstOrFail();
+            if ($gr->status !== 'confirmed') {
+                throw ValidationException::withMessages(['status' => ['Hanya penerimaan yang sudah dikonfirmasi yang bisa dibatalkan (void).']]);
+            }
             $gr->load(['items', 'purchaseOrder.items']);
 
             foreach ($gr->items as $item) {
@@ -1020,12 +1125,7 @@ class PurchaseService
                 if ($item->purchase_order_item_id) {
                     $poItem = PurchaseOrderItem::query()->whereKey($item->purchase_order_item_id)->lockForUpdate()->first();
                     if ($poItem) {
-                        $poFactor = max(1, (int) ($poItem->factor_to_base ?: 1));
-                        $removeInPoUnit = (int) round($baseQty / $poFactor);
-                        if ($removeInPoUnit > 0) {
-                            $poItem->qty_received = max(0, (int) $poItem->qty_received - $removeInPoUnit);
-                            $poItem->save();
-                        }
+                        $this->applyPoReceiveDelta($poItem, -$baseQty, $item->name_snapshot);
                     }
                 }
             }
@@ -1036,12 +1136,18 @@ class PurchaseService
                 $this->refreshPoStatus($gr->purchase_order_id);
             }
 
-            $gr->update([
-                'status' => 'voided',
-                'voided_by' => $user->id,
-                'voided_at' => now(),
-                'void_reason' => $reason,
-            ]);
+            $updated = GoodsReceipt::query()
+                ->whereKey($gr->id)
+                ->where('status', 'confirmed')
+                ->update([
+                    'status' => 'voided',
+                    'voided_by' => $user->id,
+                    'voided_at' => now(),
+                    'void_reason' => $reason,
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Hanya penerimaan yang sudah dikonfirmasi yang bisa dibatalkan (void).']]);
+            }
 
             $this->glPosting->reverseGoodsReceipt($gr->fresh(), $user);
 
@@ -1194,6 +1300,7 @@ class PurchaseService
                 'id', 'name', 'phone', 'is_taxable', 'tax_percent', 'payment_term', 'payment_days',
             ]),
             'purchase_requisition_id' => $po->purchase_requisition_id,
+            'procurement_contract_id' => $po->procurement_contract_id,
             'requisition' => $po->requisition?->only(['id', 'number', 'status']),
             'user' => $po->user?->only(['id', 'name']),
             'approver' => $po->approver?->only(['id', 'name']),
@@ -1354,6 +1461,7 @@ class PurchaseService
             'total' => $gr->total,
             'note' => $gr->note,
             'outlet_id' => $gr->outlet_id,
+            'outlet' => $gr->outlet?->only(['id', 'name']),
             'warehouse_id' => $gr->warehouse_id,
             'warehouse' => $gr->warehouse?->only(['id', 'name']),
             'supplier_id' => $gr->supplier_id,
@@ -1391,7 +1499,7 @@ class PurchaseService
         $departmentId = $this->resolveDepartmentId($payload, $user);
 
         $warehouseId = $payload['warehouse_id'] ?? $this->inventory->resolveDefaultWarehouse($company->id, $outlet->id)->id;
-        $this->assertWarehouse($company->id, (int) $warehouseId);
+        $this->assertWarehouse($company->id, (int) $warehouseId, (int) $outlet->id);
 
         $pr = PurchaseRequisition::query()->create([
             'company_id' => $company->id,
@@ -1579,13 +1687,13 @@ class PurchaseService
             }
         }
 
-        $warehouseId = $payload['warehouse_id']
-            ?? ($pr?->warehouse_id)
-            ?? $this->inventory->resolveDefaultWarehouse($company->id, $this->resolveOutletForWrite($payload, $pr)->id)->id;
-        $this->assertWarehouse($company->id, (int) $warehouseId);
-
         $outlet = $this->resolveOutletForWrite($payload, $pr);
         $departmentId = $this->resolveDepartmentId($payload, $user, $pr);
+
+        $warehouseId = $payload['warehouse_id']
+            ?? ($pr?->warehouse_id)
+            ?? $this->inventory->resolveDefaultWarehouse($company->id, $outlet->id)->id;
+        $this->assertWarehouse($company->id, (int) $warehouseId, (int) $outlet->id);
 
         $po = PurchaseOrder::query()->create([
             'company_id' => $company->id,
@@ -1636,8 +1744,7 @@ class PurchaseService
     private function writeReceipt(array $payload, User $user, string $flow): GoodsReceipt
     {
         $company = CurrentCompany::company();
-        $outlet = CurrentCompany::outlet();
-        abort_unless($company && $outlet, 422, 'Pilih perusahaan/outlet dulu.');
+        abort_unless($company, 422, 'Pilih perusahaan dulu.');
 
         $poId = $payload['purchase_order_id'] ?? null;
         $po = null;
@@ -1666,10 +1773,22 @@ class PurchaseService
             }
         }
 
-        $supplierId = $payload['supplier_id'] ?? $po?->supplier_id;
+        $outlet = $this->resolveOutletForReceipt($payload, $po);
+        abort_unless($outlet, 422, 'Pilih perusahaan/outlet dulu.');
+
+        $supplierId = $po ? (int) $po->supplier_id : ($payload['supplier_id'] ?? null);
+        if ($po && isset($payload['supplier_id']) && (int) $payload['supplier_id'] !== (int) $po->supplier_id) {
+            throw ValidationException::withMessages([
+                'supplier_id' => ['Supplier GR harus sama dengan supplier PO.'],
+            ]);
+        }
         if ($supplierId) {
             $this->assertSupplier($company->id, (int) $supplierId);
         } elseif ($flow === 'direct') {
+            throw ValidationException::withMessages([
+                'supplier_id' => ['Supplier wajib diisi.'],
+            ]);
+        } else {
             throw ValidationException::withMessages([
                 'supplier_id' => ['Supplier wajib diisi.'],
             ]);
@@ -1678,7 +1797,7 @@ class PurchaseService
         $warehouseId = $payload['warehouse_id']
             ?? $po?->warehouse_id
             ?? $this->inventory->resolveDefaultWarehouse($company->id, $outlet->id)->id;
-        $this->assertWarehouse($company->id, (int) $warehouseId);
+        $this->assertWarehouse($company->id, (int) $warehouseId, (int) $outlet->id);
 
         $gr = GoodsReceipt::query()->create([
             'company_id' => $company->id,
@@ -1728,6 +1847,7 @@ class PurchaseService
 
         foreach ($items as $row) {
             $product = Product::query()->findOrFail($row['product_id']);
+            $this->assertProductPurchasable($product);
             $resolved = $this->productUnits->resolveLine(
                 $product,
                 isset($row['unit_level']) ? (string) $row['unit_level'] : null,
@@ -1937,8 +2057,10 @@ class PurchaseService
         }
 
         $subtotal = 0;
-        foreach ($items as $row) {
+        $prBaseUsedInPayload = [];
+        foreach ($items as $index => $row) {
             $product = Product::query()->findOrFail($row['product_id']);
+            $this->assertProductPurchasable($product);
             $resolved = $this->productUnits->resolveLine(
                 $product,
                 isset($row['unit_level']) ? (string) $row['unit_level'] : null,
@@ -1954,11 +2076,37 @@ class PurchaseService
             $discount = max(0, (int) ($row['discount'] ?? 0));
             $lineTotal = max(0, ($qty * $unitCost) - $discount);
             $subtotal += $lineTotal;
+            $lineBase = $this->productUnits->toBaseQty($qty, $resolved['factor_to_base']);
+
+            $prItemId = isset($row['purchase_requisition_item_id']) ? (int) $row['purchase_requisition_item_id'] : null;
+            if ($prItemId) {
+                $prItem = \App\Models\PurchaseRequisitionItem::query()->find($prItemId);
+                if (! $prItem || (int) $prItem->purchase_requisition_id !== (int) ($po->purchase_requisition_id ?? 0)) {
+                    throw ValidationException::withMessages([
+                        "items.$index.purchase_requisition_item_id" => ['Baris PR tidak valid untuk PO ini.'],
+                    ]);
+                }
+                if ((int) $prItem->product_id !== (int) $product->id) {
+                    throw ValidationException::withMessages([
+                        "items.$index.product_id" => ['Produk PO harus sama dengan baris PR.'],
+                    ]);
+                }
+                $prFactor = max(1, (int) ($prItem->factor_to_base ?: 1));
+                $prBase = $this->productUnits->toBaseQty((int) $prItem->qty, $prFactor);
+                $alreadyOrderedBase = $this->orderedBaseQtyForPrItem($prItemId, (int) $po->id);
+                $pending = $prBaseUsedInPayload[$prItemId] ?? 0;
+                if ($alreadyOrderedBase + $pending + $lineBase > $prBase) {
+                    throw ValidationException::withMessages([
+                        "items.$index.qty" => ["Qty PO melebihi sisa PR (satuan dasar) untuk {$product->name}."],
+                    ]);
+                }
+                $prBaseUsedInPayload[$prItemId] = $pending + $lineBase;
+            }
 
             $po->items()->create([
                 'company_id' => $po->company_id,
                 'product_id' => $product->id,
-                'purchase_requisition_item_id' => $row['purchase_requisition_item_id'] ?? null,
+                'purchase_requisition_item_id' => $prItemId,
                 'procurement_contract_item_id' => $row['procurement_contract_item_id'] ?? null,
                 'qty' => $qty,
                 'qty_received' => 0,
@@ -1976,6 +2124,20 @@ class PurchaseService
         return $this->resolvePoTotals($po, $subtotal);
     }
 
+    private function orderedBaseQtyForPrItem(int $prItemId, ?int $excludePoId = null): int
+    {
+        $query = PurchaseOrderItem::query()
+            ->where('purchase_requisition_item_id', $prItemId)
+            ->whereHas('order', fn ($q) => $q->whereNotIn('status', ['cancelled']));
+
+        if ($excludePoId) {
+            $query->where('purchase_order_id', '!=', $excludePoId);
+        }
+
+        return (int) $query->get(['qty', 'factor_to_base'])
+            ->sum(fn ($row) => $this->productUnits->toBaseQty((int) $row->qty, max(1, (int) ($row->factor_to_base ?: 1))));
+    }
+
     /**
      * @param  list<array<string, mixed>>  $items
      * @return array{subtotal: int, tax: int, total: int}
@@ -1986,23 +2148,76 @@ class PurchaseService
             throw ValidationException::withMessages(['items' => ['Minimal 1 item.']]);
         }
 
+        $poItems = null;
+        if ($gr->purchase_order_id) {
+            $poItems = PurchaseOrderItem::query()
+                ->where('purchase_order_id', $gr->purchase_order_id)
+                ->get()
+                ->keyBy('id');
+        }
+
+        $pendingBaseByPoItem = [];
         $subtotal = 0;
-        foreach ($items as $row) {
+        foreach ($items as $index => $row) {
             $product = Product::query()->findOrFail($row['product_id']);
+            $this->assertProductPurchasable($product);
             $resolved = $this->productUnits->resolveLine(
                 $product,
                 isset($row['unit_level']) ? (string) $row['unit_level'] : null,
                 isset($row['unit']) ? (string) $row['unit'] : null,
             );
             $qty = (int) $row['qty'];
+            if ($qty < 1) {
+                throw ValidationException::withMessages([
+                    "items.$index.qty" => ['Qty minimal 1.'],
+                ]);
+            }
             $unitCost = (int) ($row['unit_cost'] ?? $product->cost_price ?? 0);
             $lineTotal = $qty * $unitCost;
             $subtotal += $lineTotal;
+            $baseQty = $this->productUnits->toBaseQty($qty, $resolved['factor_to_base']);
+
+            $poItemId = isset($row['purchase_order_item_id']) ? (int) $row['purchase_order_item_id'] : null;
+            if ($gr->purchase_order_id) {
+                if (! $poItemId) {
+                    throw ValidationException::withMessages([
+                        "items.$index.purchase_order_item_id" => ['Setiap baris GR harus terhubung ke baris PO.'],
+                    ]);
+                }
+                $poItem = $poItems?->get($poItemId);
+                if (! $poItem) {
+                    throw ValidationException::withMessages([
+                        "items.$index.purchase_order_item_id" => ['Baris PO tidak valid untuk GR ini.'],
+                    ]);
+                }
+                if ((int) $poItem->product_id !== (int) $product->id) {
+                    throw ValidationException::withMessages([
+                        "items.$index.product_id" => ['Produk GR harus sama dengan baris PO.'],
+                    ]);
+                }
+
+                $poFactor = max(1, (int) ($poItem->factor_to_base ?: 1));
+                $orderedBase = $this->productUnits->toBaseQty((int) $poItem->qty, $poFactor);
+                $receivedBase = $this->productUnits->toBaseQty((int) $poItem->qty_received, $poFactor);
+                $otherDraftBase = $this->draftGrBaseQtyForPoItem($poItemId, (int) $gr->id);
+                $pending = $pendingBaseByPoItem[$poItemId] ?? 0;
+                $remainingBase = $orderedBase - $receivedBase - $otherDraftBase - $pending;
+                if ($baseQty > $remainingBase) {
+                    throw ValidationException::withMessages([
+                        "items.$index.qty" => ["Qty terima melebihi sisa PO (dalam satuan dasar) untuk {$product->name}."],
+                    ]);
+                }
+                $pendingBaseByPoItem[$poItemId] = $pending + $baseQty;
+            } elseif ($poItemId) {
+                throw ValidationException::withMessages([
+                    "items.$index.purchase_order_item_id" => ['Baris PO tidak boleh diisi tanpa header PO.'],
+                ]);
+            }
 
             $gr->items()->create([
                 'company_id' => $gr->company_id,
                 'product_id' => $product->id,
-                'purchase_order_item_id' => $row['purchase_order_item_id'] ?? null,
+                'purchase_order_item_id' => $poItemId,
                 'qty' => $qty,
                 'unit_cost' => $unitCost,
                 'total' => $lineTotal,
@@ -2017,6 +2232,87 @@ class PurchaseService
         return ['subtotal' => $subtotal, 'tax' => 0, 'total' => $subtotal];
     }
 
+    /**
+     * Update qty_received PO in line units from a base-qty delta (supports cross-unit GR).
+     * Comparison & remaining always use base units to avoid round() loss.
+     */
+    private function applyPoReceiveDelta(PurchaseOrderItem $poItem, int $baseQtyDelta, ?string $nameSnapshot = null): void
+    {
+        $poFactor = max(1, (int) ($poItem->factor_to_base ?: 1));
+        $orderedBase = $this->productUnits->toBaseQty((int) $poItem->qty, $poFactor);
+        $receivedBase = $this->productUnits->toBaseQty((int) $poItem->qty_received, $poFactor);
+        $newReceivedBase = $receivedBase + $baseQtyDelta;
+        $label = $nameSnapshot ?: 'item';
+
+        if ($baseQtyDelta > 0 && $newReceivedBase > $orderedBase) {
+            throw ValidationException::withMessages([
+                'items' => ["Qty terima melebihi PO untuk {$label}."],
+            ]);
+        }
+
+        $newReceivedBase = max(0, min($orderedBase, $newReceivedBase));
+
+        if ($newReceivedBase >= $orderedBase) {
+            $poItem->qty_received = (int) $poItem->qty;
+        } elseif ($newReceivedBase === 0) {
+            $poItem->qty_received = 0;
+        } else {
+            // Floor ke satuan PO; sisa base < 1 unit PO tetap tercatat di stok, PO tetap open.
+            $poItem->qty_received = $this->productUnits->fromBaseQtyFloor($newReceivedBase, $poFactor);
+        }
+        $poItem->save();
+    }
+
+    private function draftGrBaseQtyForPoItem(int $poItemId, ?int $excludeGrId = null): int
+    {
+        $query = GoodsReceipt::query()
+            ->where('status', 'draft')
+            ->whereHas('items', fn ($q) => $q->where('purchase_order_item_id', $poItemId));
+
+        if ($excludeGrId) {
+            $query->whereKeyNot($excludeGrId);
+        }
+
+        $grIds = $query->pluck('id');
+        if ($grIds->isEmpty()) {
+            return 0;
+        }
+
+        return (int) \App\Models\GoodsReceiptItem::query()
+            ->whereIn('goods_receipt_id', $grIds)
+            ->where('purchase_order_item_id', $poItemId)
+            ->get(['qty', 'factor_to_base'])
+            ->sum(fn ($row) => $this->productUnits->toBaseQty((int) $row->qty, max(1, (int) ($row->factor_to_base ?: 1))));
+    }
+
+    private function assertProductPurchasable(Product $product): void
+    {
+        if ($product->is_procurement_item || $product->is_fixed_asset_item) {
+            return;
+        }
+        $product->loadMissing('category');
+        if ($product->category?->is_raw_material) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'items' => ["Produk {$product->name} tidak termasuk item pengadaan (bahan baku / procurement / aset)."],
+        ]);
+    }
+
+    private function assertNoDraftReceiptsForPo(int $poId): void
+    {
+        $exists = GoodsReceipt::query()
+            ->where('purchase_order_id', $poId)
+            ->where('status', 'draft')
+            ->exists();
+        if ($exists) {
+            throw ValidationException::withMessages([
+                'status' => ['Masih ada GR draft untuk PO ini. Konfirmasi atau batalkan dulu.'],
+            ]);
+        }
+    }
+
     private function refreshPoStatus(int $poId): void
     {
         $po = PurchaseOrder::query()->with('items')->whereKey($poId)->lockForUpdate()->first();
@@ -2024,8 +2320,17 @@ class PurchaseService
             return;
         }
 
-        $allReceived = $po->items->every(fn ($item) => (int) $item->qty_received >= (int) $item->qty);
-        $anyReceived = $po->items->contains(fn ($item) => (int) $item->qty_received > 0);
+        $allReceived = $po->items->every(function ($item) {
+            $factor = max(1, (int) ($item->factor_to_base ?: 1));
+
+            return $this->productUnits->toBaseQty((int) $item->qty_received, $factor)
+                >= $this->productUnits->toBaseQty((int) $item->qty, $factor);
+        });
+        $anyReceived = $po->items->contains(function ($item) {
+            $factor = max(1, (int) ($item->factor_to_base ?: 1));
+
+            return $this->productUnits->toBaseQty((int) $item->qty_received, $factor) > 0;
+        });
 
         if ($allReceived) {
             $company = Company::query()->find($po->company_id);
@@ -2046,37 +2351,32 @@ class PurchaseService
 
     private function nextNumber(string $prefix, int $companyId): string
     {
-        $full = $prefix.'-'.now()->format('ymd').'-';
-        $model = match ($prefix) {
-            'PR' => PurchaseRequisition::class,
-            'PO' => PurchaseOrder::class,
-            default => GoodsReceipt::class,
+        $docType = match ($prefix) {
+            'PR' => 'purchase_requisition',
+            'PO' => 'purchase_order',
+            default => 'goods_receipt',
         };
 
-        $last = $model::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+        return $this->documentSequences->next($companyId, $docType, $prefix);
     }
 
-    private function assertWarehouse(int $companyId, int $warehouseId): void
+    private function assertWarehouse(int $companyId, int $warehouseId, ?int $outletId = null): void
     {
-        $ok = Warehouse::query()
+        $warehouse = Warehouse::query()
             ->withoutGlobalScopes()
             ->where('company_id', $companyId)
             ->whereKey($warehouseId)
             ->where('is_active', true)
-            ->exists();
+            ->first();
 
-        if (! $ok) {
+        if (! $warehouse) {
             throw ValidationException::withMessages(['warehouse_id' => ['Gudang tidak valid.']]);
+        }
+
+        if ($outletId && $warehouse->outlet_id && (int) $warehouse->outlet_id !== $outletId) {
+            throw ValidationException::withMessages([
+                'warehouse_id' => ['Gudang harus milik outlet/cabang dokumen yang sama.'],
+            ]);
         }
     }
 
@@ -2094,6 +2394,43 @@ class PurchaseService
         }
 
         app(\App\Services\VendorManagementService::class)->assertCanPurchase($supplier);
+    }
+
+    private function resolveOutletForReceipt(array $payload, ?PurchaseOrder $po = null): Outlet
+    {
+        $company = CurrentCompany::company();
+        abort_unless($company, 422, 'Pilih perusahaan dulu.');
+
+        if ($this->costCenterEnabled($company) && ! empty($payload['outlet_id'])) {
+            $outlet = Outlet::query()
+                ->withoutGlobalScopes()
+                ->where('company_id', $company->id)
+                ->whereKey((int) $payload['outlet_id'])
+                ->where('is_active', true)
+                ->first();
+            if ($outlet) {
+                return $outlet;
+            }
+
+            throw ValidationException::withMessages(['outlet_id' => ['Outlet tidak valid.']]);
+        }
+
+        if ($po?->outlet_id) {
+            $outlet = Outlet::query()
+                ->withoutGlobalScopes()
+                ->where('company_id', $company->id)
+                ->whereKey((int) $po->outlet_id)
+                ->where('is_active', true)
+                ->first();
+            if ($outlet) {
+                return $outlet;
+            }
+        }
+
+        $outlet = CurrentCompany::outlet();
+        abort_unless($outlet, 422, 'Pilih perusahaan/outlet dulu.');
+
+        return $outlet;
     }
 
     private function resolveOutletForWrite(array $payload, ?PurchaseRequisition $pr = null): Outlet
@@ -2255,6 +2592,7 @@ class PurchaseService
     {
         return $gr->load([
             'items.product:id,name,sku,unit,cost_price',
+            'outlet:id,name',
             'warehouse:id,name',
             'supplier:id,name,phone',
             'purchaseOrder:id,number,status',

@@ -140,6 +140,51 @@ class ProductUnitService
     }
 
     /**
+     * Convert base qty back to a higher unit using floor division (no rounding inflation).
+     */
+    public function fromBaseQtyFloor(int $baseQty, int $factorToBase): int
+    {
+        return intdiv(max(0, $baseQty), max(1, $factorToBase));
+    }
+
+    /**
+     * Net unit cost in the line's own unit, after line discount (integer money).
+     */
+    public function netUnitCost(int $qty, int $unitCost, int $discount = 0): int
+    {
+        if ($qty < 1) {
+            return 0;
+        }
+
+        return (int) max(0, (int) round(((($qty * $unitCost) - max(0, $discount)) / $qty)));
+    }
+
+    /**
+     * Resolve an inventory document line: the entered qty is expressed in the chosen
+     * unit level, and the conversion factor always comes from the product master —
+     * never from the request payload.
+     *
+     * Without a unit level the line stays in base unit (factor 1), so older clients
+     * that post base qty keep working unchanged.
+     *
+     * @return array{level: string, unit: string, factor_to_base: int, qty_input: int, qty_base: int}
+     */
+    public function resolveInventoryLine(Product $product, int $qtyEntered, ?string $level = null, ?string $unitLabel = null): array
+    {
+        $wanted = ($level === null || $level === '') ? ProductUnit::LEVEL_SMALL : $level;
+        $resolved = $this->resolveLine($product, $wanted, $unitLabel);
+        $factor = ($level === null || $level === '') ? 1 : max(1, (int) $resolved['factor_to_base']);
+
+        return [
+            'level' => $resolved['level'],
+            'unit' => $resolved['unit'],
+            'factor_to_base' => $factor,
+            'qty_input' => $qtyEntered,
+            'qty_base' => $qtyEntered * $factor,
+        ];
+    }
+
+    /**
      * Format base qty using available product units (largest first).
      *
      * @param  list<array{level: string, label: string, factor_to_base: int}>  $units

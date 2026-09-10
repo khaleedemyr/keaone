@@ -59,6 +59,7 @@ const MENU_LABEL: Record<string, MsgKey> = {
   vendorwithholding: 'menuVendorWithholding',
   glaccounts: 'menuGlAccounts',
   gljournals: 'menuGlJournals',
+  financesettings: 'menuFinanceSettings',
   procurementbudgets: 'menuProcurementBudgets',
   procurementcontracts: 'menuProcurementContracts',
   procurementplans: 'menuProcurementPlans',
@@ -90,6 +91,11 @@ const MENU_LABEL: Record<string, MsgKey> = {
   catalog: 'menuCatalog',
   blog: 'menuBlog',
   operators: 'menuOperators',
+  storefrontsetup: 'menuStorefrontSetup',
+  storefrontdomain: 'menuStorefrontDomain',
+  storefrontproducts: 'menuStorefrontProducts',
+  storefrontorders: 'menuStorefrontOrders',
+  storefrontpages: 'menuStorefrontPages',
 }
 
 const ACTIONS: { id: AclAction; label: MsgKey }[] = [
@@ -104,10 +110,16 @@ const ROLE_GROUPS: { id: string; label: MsgKey; menus: string[] }[] = [
   { id: 'chat', label: 'appChat', menus: ['chat'] },
   { id: 'overview', label: 'appOverview', menus: ['overview'] },
   { id: 'pos', label: 'appPos', menus: ['pos'] },
-  { id: 'master', label: 'appMaster', menus: ['products', 'categories', 'subcategories', 'units', 'itemtypes', 'pricechannels', 'discounts', 'promotions', 'customfields', 'choicetypes', 'choices', 'glaccounts', 'suppliers', 'customers'] },
+  { id: 'master', label: 'appMaster', menus: ['products', 'categories', 'subcategories', 'units', 'itemtypes', 'pricechannels', 'discounts', 'promotions', 'customfields', 'choicetypes', 'choices', 'suppliers', 'customers'] },
   { id: 'stock', label: 'appInventory', menus: ['stock', 'stockcard', 'stocktransfers', 'stockopnames', 'stockadjustments', 'stockwaste', 'stockproduction', 'stockvaluation', 'warehouses', 'stocksettings'] },
   { id: 'sales', label: 'appSales', menus: ['sales', 'salesreportsummary', 'salesreportproducts', 'salesreportcashiers', 'salesreportmethods', 'salesreportchannels', 'salesreportdaily'] },
-  { id: 'purchase', label: 'appProcurement', menus: ['procurementdashboard', 'procurementreports', 'rfqs', 'supplierpricelists', 'procurementcontracts', 'procurementplans', 'purchaserequisitions', 'purchaseorders', 'goodsreceipts', 'purchasereturns', 'vendoradjustmentnotes', 'deliveryschedules', 'vendorinvoices', 'matchexceptions', 'vendorpaymentbatches', 'vendorprepayments', 'vendorwithholding', 'glaccounts', 'gljournals', 'procurementbudgets', 'fixedassets', 'approvalmatrix', 'approvaldelegations', 'purchasesettings'] },
+  { id: 'purchase', label: 'appProcurement', menus: ['procurementdashboard', 'procurementreports', 'rfqs', 'supplierpricelists', 'procurementcontracts', 'procurementplans', 'purchaserequisitions', 'purchaseorders', 'goodsreceipts', 'purchasereturns', 'vendoradjustmentnotes', 'deliveryschedules', 'approvalmatrix', 'approvaldelegations', 'purchasesettings'] },
+  { id: 'finance', label: 'appFinance', menus: ['glaccounts', 'gljournals', 'vendorinvoices', 'matchexceptions', 'vendorpaymentbatches', 'vendorprepayments', 'vendorwithholding', 'procurementbudgets', 'fixedassets', 'financesettings'] },
+  {
+    id: 'storefront',
+    label: 'appStorefront',
+    menus: ['storefrontsetup', 'storefrontpages', 'storefrontdomain', 'storefrontproducts', 'storefrontorders'],
+  },
   { id: 'approvals', label: 'appApprovals', menus: ['approvals'] },
   { id: 'hr', label: 'appHr', menus: ['users', 'departments', 'positions', 'joblevels'] },
   { id: 'contacts', label: 'menuContacts', menus: ['contacts'] },

@@ -32,7 +32,6 @@ export function useTenantApps() {
           'customfields',
           'choicetypes',
           'choices',
-          'glaccounts',
           'suppliers',
           'customers',
         ],
@@ -49,12 +48,34 @@ export function useTenantApps() {
       canAny(['procurementdashboard', 'procurementreports', 'purchaserequisitions', 'purchaseorders', 'goodsreceipts', 'purchasereturns', 'vendoradjustmentnotes', 'deliveryschedules', 'vendorinvoices', 'matchexceptions', 'vendorpaymentbatches', 'vendorprepayments', 'purchasesettings'], 'view')
         ? (['purchase'] as TenantAppId[])
         : []),
+      ...(me?.modules?.finance &&
+      canAny(
+        [
+          'glaccounts',
+          'gljournals',
+          'vendorinvoices',
+          'matchexceptions',
+          'vendorpaymentbatches',
+          'vendorprepayments',
+          'vendorwithholding',
+          'procurementbudgets',
+          'fixedassets',
+          'financesettings',
+        ],
+        'view',
+      )
+        ? (['finance'] as TenantAppId[])
+        : []),
+      ...(me?.modules?.storefront &&
+      canAny(['storefrontsetup', 'storefrontdomain', 'storefrontproducts', 'storefrontorders', 'storefrontpages'], 'view')
+        ? (['storefront'] as TenantAppId[])
+        : []),
       ...(canAny(['departments', 'positions', 'joblevels', 'users'], 'view') ? (['hr'] as TenantAppId[]) : []),
       ...(can('approvals', 'view') ? (['approvals'] as TenantAppId[]) : []),
       ...(canAdmin ? (['admin'] as TenantAppId[]) : []),
       ...(canAny(['settings', 'possettings', 'cafetables']) ? (['settings'] as TenantAppId[]) : []),
     ],
-    [can, canAny, canAdmin, me?.modules?.pos, me?.modules?.purchase, me?.modules?.stock],
+    [can, canAny, canAdmin, me?.modules?.pos, me?.modules?.purchase, me?.modules?.stock, me?.modules?.finance, me?.modules?.storefront],
   )
 
   const titles = useMemo<Partial<Record<AppId, string>>>(
@@ -66,6 +87,8 @@ export function useTenantApps() {
       inventory: t('appInventory'),
       sales: t('appSales'),
       purchase: t('appProcurement'),
+      finance: t('appFinance'),
+      storefront: t('appStorefront'),
       hr: t('appHr'),
       approvals: t('appApprovals'),
       admin: t('appAdmin'),

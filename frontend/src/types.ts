@@ -175,7 +175,9 @@ export type Modules = {
   stock: boolean
   invoice: boolean
   purchase: boolean
+  finance: boolean
   work_order: boolean
+  storefront: boolean
   promotions: boolean
   choices: boolean
 }
@@ -222,6 +224,7 @@ export type Settings = {
   procurement_demand_planning_enabled?: boolean
   procurement_annual_plan_enabled?: boolean
   procurement_landed_cost_enabled?: boolean
+  procurement_fixed_asset_auto_serial_enabled?: boolean
   procurement_approval_mode?: 'manual' | 'matrix'
   procurement_approval_parallel_enabled?: boolean
   procurement_approval_delegation_enabled?: boolean
@@ -238,6 +241,14 @@ export type Settings = {
   gl_procurement_bank_account_id?: number | null
   gl_procurement_wht_payable_account_id?: number | null
   gl_procurement_expense_account_id?: number | null
+  sales_gl_posting_enabled?: boolean
+  gl_sales_cash_account_id?: number | null
+  gl_sales_bank_account_id?: number | null
+  gl_sales_ar_account_id?: number | null
+  gl_sales_revenue_account_id?: number | null
+  gl_sales_vat_output_account_id?: number | null
+  gl_sales_cogs_account_id?: number | null
+  gl_sales_inventory_account_id?: number | null
   procurement_match_qty_tolerance?: number
   procurement_match_price_tolerance?: number
   receipt_layout?: import('./lib/receiptLayout').ReceiptLayout

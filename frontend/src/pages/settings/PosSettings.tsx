@@ -27,7 +27,9 @@ export default function PosSettings() {
   useEffect(() => {
     void api
       .get<ApiOk<{ settings: Settings }>>('/company/settings')
-      .then(({ data }) => setMode(data.data.settings.pos_mode ?? 'retail'))
+      .then(({ data }) => {
+        setMode(data.data.settings.pos_mode ?? 'retail')
+      })
       .catch((err) => feedback.error(apiMessage(err, t('loadFailed'))))
   }, [feedback, t])
 
@@ -37,7 +39,11 @@ export default function PosSettings() {
     setSaving(true)
     setError('')
     try {
-      await api.put('/company/settings', { settings: { pos_mode: mode } })
+      await api.put('/company/settings', {
+        settings: {
+          pos_mode: mode,
+        },
+      })
       await refresh()
       feedback.success(t('saved'))
     } catch (err) {
@@ -50,28 +56,33 @@ export default function PosSettings() {
   return (
     <div>
       <PageHeader eyebrow={t('appSettings')} title={t('navPosSettings')} subtitle={t('posSettingsSubtitle')} />
-      <form onSubmit={(e) => void onSubmit(e)} className="glass max-w-xl space-y-4 rounded-3xl p-5">
+      <form onSubmit={(e) => void onSubmit(e)} className="glass max-w-xl space-y-6 rounded-3xl p-5">
         {error ? <FormAlert>{error}</FormAlert> : null}
-        <div className="text-sm text-muted">{t('posMode')}</div>
-        <div className="grid gap-3">
-          {MODES.map((item) => {
-            const active = mode === item.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                disabled={!canEdit}
-                onClick={() => setMode(item.id)}
-                className={`rounded-2xl border px-4 py-3 text-left transition ${
-                  active ? 'border-mint bg-mint/10' : 'border-line hover:border-mint/40'
-                } ${canEdit ? '' : 'cursor-default opacity-80'}`}
-              >
-                <div className="font-medium text-fg">{t(item.title)}</div>
-                <div className="mt-1 text-xs text-muted">{t(item.hint)}</div>
-              </button>
-            )
-          })}
+        <div className="space-y-3">
+          <div className="text-sm text-muted">{t('posMode')}</div>
+          <div className="grid gap-3">
+            {MODES.map((item) => {
+              const active = mode === item.id
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => setMode(item.id)}
+                  className={`rounded-2xl border px-4 py-3 text-left transition ${
+                    active ? 'border-mint bg-mint/10' : 'border-line hover:border-mint/40'
+                  } ${canEdit ? '' : 'cursor-default opacity-80'}`}
+                >
+                  <div className="font-medium text-fg">{t(item.title)}</div>
+                  <div className="mt-1 text-xs text-muted">{t(item.hint)}</div>
+                </button>
+              )
+            })}
+          </div>
         </div>
+
+        <p className="text-xs text-muted">{t('posSalesGlMovedHint')}</p>
+
         {canEdit ? (
           <button type="submit" disabled={saving} className="btn-primary">
             {t('save')}

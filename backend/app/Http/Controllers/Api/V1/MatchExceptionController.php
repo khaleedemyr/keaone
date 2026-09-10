@@ -14,7 +14,7 @@ class MatchExceptionController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('matchexceptions', 'view');
 
         $query = MatchException::query()
@@ -29,6 +29,14 @@ class MatchExceptionController extends Controller
         if ($invoiceId = $request->integer('vendor_invoice_id')) {
             $query->where('vendor_invoice_id', $invoiceId);
         }
+        if ($search = $request->string('search')->toString()) {
+            $query->where(function ($q) use ($search) {
+                $q->where('message', 'like', "%{$search}%")
+                    ->orWhere('exception_type', 'like', "%{$search}%")
+                    ->orWhereHas('vendorInvoice', fn ($inv) => $inv->where('number', 'like', "%{$search}%"))
+                    ->orWhereHas('vendorInvoiceItem', fn ($item) => $item->where('name_snapshot', 'like', "%{$search}%"));
+            });
+        }
 
         $page = $query->paginate($this->perPage($request, 20));
 
@@ -40,12 +48,14 @@ class MatchExceptionController extends Controller
 
     public function waive(Request $request, MatchException $matchException): JsonResponse
     {
-        $this->ensureModule('purchase');
+        $this->ensureModule('finance');
         $this->ensureCan('matchexceptions', 'edit');
 
-        $data = $request->validate(['note' => ['nullable', 'string']]);
+        $data = $request->validate([
+            'note' => ['required', 'string', 'min:5'],
+        ]);
 
-        $row = $this->matchService->waive($matchException, $request->user(), $data['note'] ?? null);
+        $row = $this->matchService->waive($matchException, $request->user(), $data['note']);
 
         return $this->ok($this->matchService->serializeException($row));
     }

@@ -111,9 +111,9 @@ Gunakan dokumen ini saat merencanakan fitur baru, migration DB, menu RBAC, dan u
 |-------|---------|---------|
 | **Basic** | PO + GR / direct receipt | ✅ |
 | **Standard** | PR → PO → GR + approval | ✅ |
-| **Professional** | + Vendor invoice, 3-way match, return | ❌ |
-| **Enterprise** | + RFQ, budget, vendor portal, approval matrix | ❌ |
-| **Strategic** | + Contract, demand planning, analytics | ❌ |
+| **Professional** | + Vendor invoice, 3-way match, return | ✅ |
+| **Enterprise** | + RFQ, budget, vendor portal, approval matrix | ✅ |
+| **Strategic** | + Contract, demand planning, analytics | ✅ |
 
 ---
 
@@ -433,23 +433,25 @@ Ikuti pola yang sudah dipakai PR/PO/GR:
 
 ## Gap vs enterprise (referensi cepat)
 
+Status di bawah mencerminkan **fitur yang sudah diimplementasi di codebase** (boleh default off di `config/procurement.php` sampai diaktifkan per company).
+
 | Capability | Status |
 |------------|--------|
-| RFQ / RFP | ❌ |
-| Vendor evaluation | ❌ |
-| Blanket PO / contract | ❌ |
-| Budget / commitment | ❌ |
-| 3-way match | ❌ (hanya 2-way PO↔GR qty) |
-| Vendor invoice / AP | ❌ |
-| Purchase return | ❌ |
-| GR reversal | ❌ |
-| Landed cost | ❌ |
+| RFQ / RFP | ✅ |
+| Vendor evaluation | ✅ |
+| Blanket PO / contract | ✅ |
+| Budget / commitment | ✅ |
+| 3-way match | ✅ |
+| Vendor invoice / AP | ✅ |
+| Purchase return | ✅ |
+| GR reversal | ✅ |
+| Landed cost | ✅ |
 | Multi-currency | ❌ |
-| Vendor portal (interactive) | ❌ (hanya public read-only link) |
-| Approval by amount matrix | ❌ |
-| Delegation approver | ❌ |
-| Procurement analytics | ❌ |
-| GL integration | ❌ |
+| Vendor portal (interactive) | ✅ |
+| Approval by amount matrix | ✅ |
+| Delegation approver | ✅ |
+| Procurement analytics | ✅ |
+| GL integration | ✅ |
 
 ---
 

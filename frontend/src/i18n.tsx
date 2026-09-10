@@ -37,7 +37,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       locale: langMeta(lang).locale,
       setLang: setLangState,
       t: (key, vars) => {
-        let text = messages[lang][key] || messages.id[key]
+        let text = messages[lang][key] || messages.id[key] || String(key)
         if (vars) {
           for (const [name, value] of Object.entries(vars)) {
             text = text.replaceAll(`{${name}}`, value)

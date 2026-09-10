@@ -73,14 +73,20 @@ class WithholdingTaxService
     public function withholdingForPayment(VendorInvoice $invoice, int $paymentAmount): int
     {
         $withholding = (int) $invoice->withholding_tax;
-        $payable = (int) ($invoice->amount_payable ?: $invoice->total);
+        $payable = $invoice->payableTotal();
 
         if ($withholding <= 0 || $paymentAmount <= 0 || $payable <= 0) {
             return 0;
         }
 
         if ($paymentAmount >= $payable) {
-            return $withholding;
+            // Remaining WHT not yet recorded (partial prior payments).
+            $already = (int) VendorWithholdingRecord::query()
+                ->where('vendor_invoice_id', $invoice->id)
+                ->where('status', 'withheld')
+                ->sum('withholding_amount');
+
+            return max(0, $withholding - $already);
         }
 
         return (int) round($withholding * $paymentAmount / $payable);
@@ -88,9 +94,10 @@ class WithholdingTaxService
 
     public function recordFromPayment(
         VendorInvoice $invoice,
-        VendorPaymentBatch $batch,
+        ?VendorPaymentBatch $batch,
         int $paymentAmount,
         \DateTimeInterface $withheldAt,
+        ?int $vendorPrepaymentId = null,
     ): ?VendorWithholdingRecord {
         if ((int) $invoice->withholding_tax <= 0) {
             return null;
@@ -109,7 +116,7 @@ class WithholdingTaxService
             'company_id' => $invoice->company_id,
             'supplier_id' => $invoice->supplier_id,
             'vendor_invoice_id' => $invoice->id,
-            'vendor_payment_batch_id' => $batch->id,
+            'vendor_payment_batch_id' => $batch?->id,
             'invoice_number' => $invoice->number,
             'withholding_tax_type' => (string) $invoice->withholding_tax_type,
             'withholding_tax_rate' => (float) $invoice->withholding_tax_rate,
@@ -119,6 +126,7 @@ class WithholdingTaxService
             'payment_amount' => $paymentAmount,
             'status' => 'withheld',
             'withheld_at' => $withheldAt,
+            'note' => $vendorPrepaymentId ? 'prepayment:'.$vendorPrepaymentId : null,
         ]);
     }
 

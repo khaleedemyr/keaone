@@ -15,7 +15,11 @@ use Illuminate\Validation\ValidationException;
 
 class StockTransferService
 {
-    public function __construct(private InventoryService $inventory) {}
+    public function __construct(
+        private InventoryService $inventory,
+        private ProductUnitService $productUnits,
+        private DocumentSequenceService $documentSequences,
+    ) {}
 
     public function create(array $payload, User $user): StockTransfer
     {
@@ -33,9 +37,10 @@ class StockTransferService
 
     public function update(StockTransfer $transfer, array $payload): StockTransfer
     {
-        $this->assertDraft($transfer);
-
         return DB::transaction(function () use ($transfer, $payload) {
+            $transfer = StockTransfer::query()->withoutGlobalScopes()->whereKey($transfer->id)->lockForUpdate()->firstOrFail();
+            $this->assertDraft($transfer);
+
             $fromId = (int) ($payload['from_warehouse_id'] ?? $transfer->from_warehouse_id);
             $toId = (int) ($payload['to_warehouse_id'] ?? $transfer->to_warehouse_id);
             $this->assertWarehouses($transfer->company_id, $fromId, $toId);
@@ -92,13 +97,23 @@ class StockTransferService
                         'factor_to_base' => $item->factor_to_base,
                     ],
                 );
-                $item->update(['unit_cost' => $result->unitCost]);
+                $item->update([
+                    'unit_cost' => $result->unitCost,
+                    'cost_amount' => $result->costAmount,
+                ]);
             }
 
-            $transfer->update([
-                'status' => 'shipped',
-                'shipped_at' => now(),
-            ]);
+            $updated = StockTransfer::query()
+                ->withoutGlobalScopes()
+                ->whereKey($transfer->id)
+                ->where('status', 'draft')
+                ->update([
+                    'status' => 'shipped',
+                    'shipped_at' => now(),
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Hanya draft yang bisa dikirim.']]);
+            }
 
             return $this->load($transfer->fresh());
         });
@@ -119,30 +134,104 @@ class StockTransferService
             $to = Warehouse::query()->withoutGlobalScopes()->findOrFail($transfer->to_warehouse_id);
 
             foreach ($transfer->items as $item) {
+                $this->receiveItemCostPreserving($transfer, $item, $to);
+            }
+
+            $updated = StockTransfer::query()
+                ->withoutGlobalScopes()
+                ->whereKey($transfer->id)
+                ->where('status', 'shipped')
+                ->update([
+                    'status' => 'received',
+                    'received_at' => now(),
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Hanya transfer terkirim yang bisa diterima.']]);
+            }
+
+            return $this->load($transfer->fresh());
+        });
+    }
+
+    /**
+     * Void a shipped (in-transit) or received transfer, reversing stock movements.
+     */
+    public function void(StockTransfer $transfer, User $user, ?string $reason = null): StockTransfer
+    {
+        if (! in_array($transfer->status, ['shipped', 'received'], true)) {
+            throw ValidationException::withMessages(['status' => ['Hanya transfer shipped/received yang bisa di-void.']]);
+        }
+
+        return DB::transaction(function () use ($transfer, $user, $reason) {
+            $transfer = StockTransfer::query()->withoutGlobalScopes()->whereKey($transfer->id)->lockForUpdate()->firstOrFail();
+            if (! in_array($transfer->status, ['shipped', 'received'], true)) {
+                throw ValidationException::withMessages(['status' => ['Hanya transfer shipped/received yang bisa di-void.']]);
+            }
+
+            $from = Warehouse::query()->withoutGlobalScopes()->findOrFail($transfer->from_warehouse_id);
+            $to = Warehouse::query()->withoutGlobalScopes()->findOrFail($transfer->to_warehouse_id);
+            $wasReceived = $transfer->status === 'received';
+
+            if ($wasReceived) {
+                foreach ($transfer->items as $item) {
+                    $this->inventory->adjust(
+                        (int) $transfer->company_id,
+                        (int) $transfer->to_warehouse_id,
+                        (int) $item->product_id,
+                        -1 * (int) $item->qty,
+                        InventoryOps::TYPE_TRANSFER_VOID_IN,
+                        InventoryOps::TRANSFER_REF,
+                        (int) $transfer->id,
+                        $transfer->number.' / void receive',
+                        $to->outlet_id ? (int) $to->outlet_id : null,
+                        [
+                            'qty_input' => $item->qty_input,
+                            'unit' => $item->unit,
+                            'unit_level' => $item->unit_level,
+                            'factor_to_base' => $item->factor_to_base,
+                        ],
+                        null,
+                        true,
+                    );
+                }
+            }
+
+            foreach ($transfer->items as $item) {
                 $this->inventory->adjust(
                     (int) $transfer->company_id,
-                    (int) $transfer->to_warehouse_id,
+                    (int) $transfer->from_warehouse_id,
                     (int) $item->product_id,
                     (int) $item->qty,
-                    InventoryOps::TYPE_TRANSFER_IN,
+                    InventoryOps::TYPE_TRANSFER_VOID_OUT,
                     InventoryOps::TRANSFER_REF,
                     (int) $transfer->id,
-                    $transfer->number,
-                    $to->outlet_id ? (int) $to->outlet_id : null,
+                    $transfer->number.' / void ship',
+                    $from->outlet_id ? (int) $from->outlet_id : null,
                     [
                         'qty_input' => $item->qty_input,
                         'unit' => $item->unit,
                         'unit_level' => $item->unit_level,
                         'factor_to_base' => $item->factor_to_base,
                     ],
-                    (int) $item->unit_cost,
+                    null,
+                    true,
                 );
             }
 
-            $transfer->update([
-                'status' => 'received',
-                'received_at' => now(),
-            ]);
+            $status = $wasReceived ? 'received' : 'shipped';
+            $updated = StockTransfer::query()
+                ->withoutGlobalScopes()
+                ->whereKey($transfer->id)
+                ->where('status', $status)
+                ->update([
+                    'status' => 'voided',
+                    'voided_at' => now(),
+                    'voided_by' => $user->id,
+                    'void_reason' => $reason,
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Hanya transfer shipped/received yang bisa di-void.']]);
+            }
 
             return $this->load($transfer->fresh());
         });
@@ -150,10 +239,21 @@ class StockTransferService
 
     public function cancel(StockTransfer $transfer): StockTransfer
     {
-        $this->assertDraft($transfer);
-        $transfer->update(['status' => 'cancelled']);
+        return DB::transaction(function () use ($transfer) {
+            $transfer = StockTransfer::query()->withoutGlobalScopes()->whereKey($transfer->id)->lockForUpdate()->firstOrFail();
+            $this->assertDraft($transfer);
 
-        return $this->load($transfer->fresh());
+            $updated = StockTransfer::query()
+                ->withoutGlobalScopes()
+                ->whereKey($transfer->id)
+                ->where('status', 'draft')
+                ->update(['status' => 'cancelled']);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Dokumen hanya bisa diubah saat draft.']]);
+            }
+
+            return $this->load($transfer->fresh());
+        });
     }
 
     /**
@@ -176,6 +276,8 @@ class StockTransferService
             'outlet_id' => $transfer->outlet_id,
             'shipped_at' => $transfer->shipped_at?->toIso8601String(),
             'received_at' => $transfer->received_at?->toIso8601String(),
+            'voided_at' => $transfer->voided_at?->toIso8601String(),
+            'void_reason' => $transfer->void_reason,
             'created_at' => $transfer->created_at?->toIso8601String(),
             'user' => $transfer->user?->only(['id', 'name']),
             'items' => $transfer->items->map(fn (StockTransferItem $item) => [
@@ -183,11 +285,13 @@ class StockTransferService
                 'product_id' => $item->product_id,
                 'name_snapshot' => $item->name_snapshot,
                 'qty' => (int) $item->qty,
-                'qty_input' => $item->qty_input,
+                'qty_input' => $item->qty_input !== null ? (int) $item->qty_input : (int) $item->qty,
                 'unit' => $item->unit,
-                'unit_level' => $item->unit_level,
-                'factor_to_base' => (int) $item->factor_to_base,
+                'unit_level' => $item->unit_level ?: 'small',
+                'factor_to_base' => max(1, (int) $item->factor_to_base),
+                'base_unit' => $item->product?->unit,
                 'unit_cost' => (int) $item->unit_cost,
+                'cost_amount' => (int) ($item->cost_amount ?? ((int) $item->unit_cost * (int) $item->qty)),
             ])->values()->all(),
         ];
     }
@@ -209,7 +313,7 @@ class StockTransferService
             'to_warehouse_id' => $toId,
             'outlet_id' => $from->outlet_id,
             'user_id' => $user->id,
-            'number' => $this->nextNumber($company->id),
+            'number' => $this->documentSequences->next($company->id, 'stock_transfer', 'TRF', 4),
             'client_uuid' => $payload['client_uuid'],
             'status' => 'draft',
             'note' => $payload['note'] ?? null,
@@ -221,30 +325,86 @@ class StockTransferService
     }
 
     /**
+     * Post inbound at destination preserving total cost_amount from ship (integer remainder on last unit).
+     */
+    private function receiveItemCostPreserving(StockTransfer $transfer, StockTransferItem $item, Warehouse $to): void
+    {
+        $qty = (int) $item->qty;
+        if ($qty < 1) {
+            return;
+        }
+
+        $amount = (int) ($item->cost_amount ?? ((int) $item->unit_cost * $qty));
+        $baseUnit = (int) intdiv($amount, $qty);
+        $remainder = $amount - ($baseUnit * $qty);
+        $meta = [
+            'qty_input' => $item->qty_input,
+            'unit' => $item->unit,
+            'unit_level' => $item->unit_level,
+            'factor_to_base' => $item->factor_to_base,
+        ];
+
+        $chunks = $remainder !== 0 && $qty > 1
+            ? [[$qty - 1, $baseUnit], [1, $baseUnit + $remainder]]
+            : [[$qty, $baseUnit + $remainder]];
+
+        foreach ($chunks as [$chunkQty, $unitCost]) {
+            if ($chunkQty < 1) {
+                continue;
+            }
+            $this->inventory->adjust(
+                (int) $transfer->company_id,
+                (int) $transfer->to_warehouse_id,
+                (int) $item->product_id,
+                $chunkQty,
+                InventoryOps::TYPE_TRANSFER_IN,
+                InventoryOps::TRANSFER_REF,
+                (int) $transfer->id,
+                $transfer->number,
+                $to->outlet_id ? (int) $to->outlet_id : null,
+                $meta,
+                $unitCost,
+            );
+        }
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $items
      */
     private function attachItems(StockTransfer $transfer, array $items): void
     {
+        $seen = [];
         foreach ($items as $row) {
-            $product = $this->assertTrackableProduct((int) $transfer->company_id, (int) $row['product_id']);
-            $qty = (int) $row['qty'];
-            if ($qty < 1) {
+            $productId = (int) $row['product_id'];
+            if (isset($seen[$productId])) {
+                throw ValidationException::withMessages(['items' => ['Produk tidak boleh dobel dalam satu transfer.']]);
+            }
+            $seen[$productId] = true;
+
+            $product = $this->assertTrackableProduct((int) $transfer->company_id, $productId);
+            $entered = (int) $row['qty'];
+            if ($entered < 1) {
                 throw ValidationException::withMessages(['items' => ['Qty transfer minimal 1.']]);
             }
-            $factor = max(1, (int) ($row['factor_to_base'] ?? 1));
-            $qtyInput = isset($row['qty_input']) ? (int) $row['qty_input'] : $qty;
+            $resolved = $this->productUnits->resolveInventoryLine(
+                $product,
+                $entered,
+                isset($row['unit_level']) ? (string) $row['unit_level'] : null,
+                isset($row['unit']) ? (string) $row['unit'] : null,
+            );
 
             StockTransferItem::query()->create([
                 'company_id' => $transfer->company_id,
                 'stock_transfer_id' => $transfer->id,
                 'product_id' => $product->id,
-                'qty' => $qty,
-                'qty_input' => $qtyInput,
-                'unit' => $row['unit'] ?? $product->unit,
-                'unit_level' => $row['unit_level'] ?? 'small',
-                'factor_to_base' => $factor,
+                'qty' => $resolved['qty_base'],
+                'qty_input' => $resolved['qty_input'],
+                'unit' => $resolved['unit'],
+                'unit_level' => $resolved['level'],
+                'factor_to_base' => $resolved['factor_to_base'],
                 'name_snapshot' => $product->name,
                 'unit_cost' => 0,
+                'cost_amount' => 0,
             ]);
         }
     }
@@ -293,26 +453,10 @@ class StockTransferService
     private function load(StockTransfer $transfer): StockTransfer
     {
         return $transfer->load([
-            'items',
+            'items.product:id,unit',
             'fromWarehouse:id,name',
             'toWarehouse:id,name',
             'user:id,name',
         ]);
-    }
-
-    private function nextNumber(int $companyId): string
-    {
-        $full = 'TRF-'.now()->format('ymd').'-';
-        $last = StockTransfer::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
     }
 }

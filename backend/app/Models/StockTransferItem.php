@@ -21,6 +21,7 @@ class StockTransferItem extends Model
         'factor_to_base',
         'name_snapshot',
         'unit_cost',
+        'cost_amount',
     ];
 
     protected function casts(): array
@@ -30,6 +31,7 @@ class StockTransferItem extends Model
             'qty_input' => 'integer',
             'factor_to_base' => 'integer',
             'unit_cost' => 'integer',
+            'cost_amount' => 'integer',
         ];
     }
 

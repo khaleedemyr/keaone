@@ -95,7 +95,7 @@ class ProcurementDashboardService
             $counts['payment_batch_submitted'] = VendorPaymentBatch::query()->where('status', 'submitted')->count();
             $counts['invoice_payable'] = VendorInvoice::query()
                 ->where('status', 'confirmed')
-                ->whereRaw('amount_paid < (CASE WHEN amount_payable > 0 THEN amount_payable ELSE total END)')
+                ->whereRaw('amount_paid < (CASE WHEN amount_payable > 0 OR withholding_tax > 0 THEN amount_payable ELSE total END)')
                 ->count();
         }
 

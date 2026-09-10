@@ -61,6 +61,7 @@ export default function MatchExceptionDocs() {
           page: list.page,
           per_page: list.perPage,
           status: list.status !== 'all' ? list.status : undefined,
+          search: list.search || undefined,
         },
       })
       setRows(data.data ?? [])
@@ -73,7 +74,7 @@ export default function MatchExceptionDocs() {
   useEffect(() => {
     if (!matchEnabled) return
     void loadRows()
-  }, [list.page, list.perPage, list.status, matchEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [list.page, list.perPage, list.search, list.status, matchEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function typeLabel(type: string) {
     const map: Record<string, MsgKey> = {
@@ -87,10 +88,14 @@ export default function MatchExceptionDocs() {
 
   async function confirmWaive() {
     if (!waiveTarget) return
+    if (waiveNote.trim().length < 5) {
+      setError(t('procurementMatchWaiveNoteRequired'))
+      return
+    }
     setSaving(true)
     setError('')
     try {
-      await api.post(`/match-exceptions/${waiveTarget.id}/waive`, { note: waiveNote || undefined })
+      await api.post(`/match-exceptions/${waiveTarget.id}/waive`, { note: waiveNote.trim() })
       setWaiveTarget(null)
       setWaiveNote('')
       feedback.success(t('saved'))

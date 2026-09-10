@@ -1,5 +1,7 @@
 import type { Product, ProductUnitLevel } from '../../types'
 
+export type PurchaseDiscountType = 'fixed' | 'percent'
+
 export type PurchaseLineDraft = {
   key: string
   product_id: number
@@ -13,11 +15,14 @@ export type PurchaseLineDraft = {
   unit: string
   unit_level: ProductUnitLevel
   unit_cost: number
+  /** UI input: Rp amount or percent depending on discount_type. */
+  discount: number
+  discount_type: PurchaseDiscountType
   purchase_order_item_id?: number
   purchase_requisition_item_id?: number
 }
 
-export type LineCol = 'product' | 'qty' | 'unit' | 'cost'
+export type LineCol = 'product' | 'qty' | 'unit' | 'cost' | 'discount'
 
 export function purchaseLineUuid() {
   return crypto.randomUUID()
@@ -32,6 +37,8 @@ export function emptyPurchaseLine(): PurchaseLineDraft {
     unit: '',
     unit_level: 'small',
     unit_cost: 0,
+    discount: 0,
+    discount_type: 'fixed',
   }
 }
 
@@ -65,6 +72,34 @@ export function parseCostInput(raw: string) {
   if (cleaned === '' || cleaned === '.') return 0
   const n = Number(cleaned)
   return Number.isFinite(n) ? n : 0
+}
+
+export function parsePercentInput(raw: string) {
+  const digits = raw.replace(/\D/g, '')
+  if (digits === '') return 0
+  return Math.min(100, Number(digits))
+}
+
+export function lineGross(line: Pick<PurchaseLineDraft, 'qty' | 'unit_cost'>) {
+  return Math.max(0, line.qty * line.unit_cost)
+}
+
+/** Convert UI discount (Rp or %) to fixed Rp amount for API. */
+export function lineDiscountAmount(
+  line: Pick<PurchaseLineDraft, 'qty' | 'unit_cost' | 'discount' | 'discount_type'>,
+) {
+  const gross = lineGross(line)
+  if (gross <= 0 || line.discount <= 0) return 0
+  if (line.discount_type === 'percent') {
+    return Math.min(gross, Math.round((gross * line.discount) / 100))
+  }
+  return Math.min(gross, line.discount)
+}
+
+export function lineNetTotal(
+  line: Pick<PurchaseLineDraft, 'qty' | 'unit_cost' | 'discount' | 'discount_type'>,
+) {
+  return Math.max(0, lineGross(line) - lineDiscountAmount(line))
 }
 
 export function defaultUnitPick(product: Product) {

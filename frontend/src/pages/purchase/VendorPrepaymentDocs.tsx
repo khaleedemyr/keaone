@@ -16,6 +16,7 @@ import { useAuth } from '../../auth'
 import { useI18n } from '../../i18n'
 import { purchaseLineUuid } from './purchaseLineUtils'
 import { formatRupiah } from '../../lib/money'
+import { PrepaymentDetailModal } from './PrepaymentDetailModal'
 
 type PayableInvoice = {
   id: number
@@ -97,6 +98,7 @@ export default function VendorPrepaymentDocs() {
   const [suppliers, setSuppliers] = useState<Party[]>([])
   const [open, setOpen] = useState(false)
   const [applyOpen, setApplyOpen] = useState(false)
+  const [detailId, setDetailId] = useState<number | null>(null)
   const [editing, setEditing] = useState<PrepaymentRow | null>(null)
   const [applyTarget, setApplyTarget] = useState<PrepaymentRow | null>(null)
   const [error, setError] = useState('')
@@ -575,12 +577,23 @@ export default function VendorPrepaymentDocs() {
             ) : (
               rows.map((row) => (
                 <tr key={row.id} className="border-b border-line/60 last:border-0">
-                  <td className="px-4 py-3 font-medium">{row.number}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <button
+                      type="button"
+                      className="text-left font-medium text-fg hover:text-mint"
+                      onClick={() => setDetailId(row.id)}
+                    >
+                      {row.number}
+                    </button>
+                  </td>
                   <td className="px-4 py-3">{row.supplier?.name ?? '—'}</td>
                   <td className="px-4 py-3">{statusLabel[row.status] ?? row.status}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatRupiah(row.amount, locale)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatRupiah(row.amount_balance ?? 0, locale)}</td>
                   <td className="px-4 py-3 text-right">
+                    <button type="button" className="btn-ghost !px-2 !text-xs" onClick={() => setDetailId(row.id)}>
+                      {t('purchaseViewDetail')}
+                    </button>
                     {canEdit && ['draft', 'rejected'].includes(row.status) ? (
                       <>
                         <button type="button" className="btn-ghost !px-2 !text-xs" onClick={() => void openEdit(row)}>
@@ -838,6 +851,14 @@ export default function VendorPrepaymentDocs() {
           </div>
         ) : null}
       </MasterModal>
+
+      <PrepaymentDetailModal
+        prepaymentId={detailId}
+        open={detailId !== null}
+        onClose={() => setDetailId(null)}
+        statusLabel={(status) => statusLabel[status] ?? status}
+        methodLabel={(method) => methodOptions.find((m) => m.value === method)?.label ?? method ?? '—'}
+      />
     </div>
   )
 }

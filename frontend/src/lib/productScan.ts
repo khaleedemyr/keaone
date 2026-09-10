@@ -13,6 +13,10 @@ export function findProductByScan(query: string, products: Product[]) {
   )
 }
 
+export function resolveProductFromExactScan(code: string, products: Product[]) {
+  return findProductByScan(code, products)
+}
+
 export function resolveProductFromScan(code: string, products: Product[], productOptions: ProductScanOption[]) {
   const exact = findProductByScan(code, products)
   if (exact) return exact

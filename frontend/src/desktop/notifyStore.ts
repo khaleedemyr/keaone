@@ -85,7 +85,7 @@ export function subscribeNotifications(listener: () => void) {
 }
 
 export function pushNotification(tone: NotifyTone, message: string) {
-  const text = message.trim()
+  const text = String(message ?? '').trim()
   if (!text) return
   localItems = [
     {

@@ -121,6 +121,7 @@ class ApprovalDemoSeeder extends Seeder
 
         $company->modules = array_merge($company->defaultModules(), $company->modules ?? [], [
             'purchase' => true,
+            'finance' => true,
         ]);
         $company->settings = array_merge($company->defaultSettings(), $company->settings ?? [], [
             'purchase_flow' => 'strict_pr_po_gr',

@@ -20,8 +20,18 @@ class GlAccountController extends Controller
                 ['glaccounts', 'view'],
                 ['purchasesettings', 'view'],
                 ['purchasesettings', 'edit'],
+                ['possettings', 'view'],
+                ['possettings', 'edit'],
+                ['financesettings', 'view'],
+                ['financesettings', 'edit'],
             ]);
+
+            $company = \App\Support\CurrentCompany::company();
+            if ($company) {
+                $this->accounts->ensureDefaults($company);
+            }
         } else {
+            $this->ensureModule('finance');
             $this->ensureCan('glaccounts', 'view');
         }
 
@@ -58,6 +68,7 @@ class GlAccountController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('glaccounts', 'create');
 
         $data = $request->validate(GlAccount::rules());
@@ -68,6 +79,7 @@ class GlAccountController extends Controller
 
     public function update(Request $request, GlAccount $glAccount): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCan('glaccounts', 'edit');
 
         $data = $request->validate(GlAccount::rules(true));
@@ -82,6 +94,7 @@ class GlAccountController extends Controller
 
     public function destroy(GlAccount $glAccount): JsonResponse
     {
+        $this->ensureModule('finance');
         $this->ensureCanAny([['glaccounts', 'delete'], ['glaccounts', 'edit']]);
 
         if ($glAccount->is_system) {

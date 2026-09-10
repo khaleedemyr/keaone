@@ -27,7 +27,8 @@ class PurchaseRequisitionController extends Controller
             ->orderByDesc('id');
 
         if ($request->boolean('for_po')) {
-            $query->where('status', 'approved')->whereDoesntHave('orders');
+            $query->where('status', 'approved')
+                ->whereDoesntHave('orders', fn ($q) => $q->whereNotIn('status', ['cancelled']));
         } elseif ($status = $request->string('status')->toString()) {
             $query->where('status', $status);
         }

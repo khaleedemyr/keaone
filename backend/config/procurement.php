@@ -48,6 +48,7 @@ return [
         'procurement_demand_planning_enabled' => false,
         'procurement_annual_plan_enabled' => false,
         'procurement_landed_cost_enabled' => false,
+        'procurement_fixed_asset_auto_serial_enabled' => false,
 
         // Approval governance (Phase 6)
         'procurement_approval_mode' => 'manual',
@@ -73,6 +74,7 @@ return [
         'gl_procurement_wht_payable_account_id' => null,
         'gl_procurement_expense_account_id' => null,
         'gl_procurement_fixed_asset_account_id' => null,
+        'gl_procurement_prepayment_account_id' => null,
     ],
 
     /*
@@ -109,6 +111,7 @@ return [
         'procurement_demand_planning_enabled',
         'procurement_annual_plan_enabled',
         'procurement_landed_cost_enabled',
+        'procurement_fixed_asset_auto_serial_enabled',
         'procurement_approval_mode',
         'procurement_approval_parallel_enabled',
         'procurement_approval_delegation_enabled',
@@ -128,6 +131,7 @@ return [
         'gl_procurement_wht_payable_account_id',
         'gl_procurement_expense_account_id',
         'gl_procurement_fixed_asset_account_id',
+        'gl_procurement_prepayment_account_id',
     ],
 
 ];

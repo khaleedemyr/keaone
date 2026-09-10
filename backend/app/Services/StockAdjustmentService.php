@@ -16,7 +16,11 @@ use Illuminate\Validation\ValidationException;
 
 class StockAdjustmentService
 {
-    public function __construct(private InventoryService $inventory) {}
+    public function __construct(
+        private InventoryService $inventory,
+        private ProductUnitService $productUnits,
+        private DocumentSequenceService $documentSequences,
+    ) {}
 
     public function create(array $payload, User $user): StockAdjustment
     {
@@ -34,9 +38,10 @@ class StockAdjustmentService
 
     public function update(StockAdjustment $adjustment, array $payload): StockAdjustment
     {
-        $this->assertDraft($adjustment);
-
         return DB::transaction(function () use ($adjustment, $payload) {
+            $adjustment = StockAdjustment::query()->withoutGlobalScopes()->whereKey($adjustment->id)->lockForUpdate()->firstOrFail();
+            $this->assertDraft($adjustment);
+
             $warehouseId = (int) ($payload['warehouse_id'] ?? $adjustment->warehouse_id);
             $warehouse = $this->assertWarehouse((int) $adjustment->company_id, $warehouseId);
             $reason = (string) ($payload['reason'] ?? $adjustment->reason);
@@ -51,7 +56,9 @@ class StockAdjustmentService
 
             if (isset($payload['items'])) {
                 $adjustment->items()->delete();
-                $this->attachItems($adjustment, $payload['items']);
+                $this->attachItems($adjustment, $payload['items'], $reason);
+            } elseif (InventoryOps::isWasteReason($reason)) {
+                $this->assertWasteItemsNegative($adjustment);
             }
 
             return $this->load($adjustment->fresh());
@@ -71,6 +78,10 @@ class StockAdjustmentService
             $adjustment = StockAdjustment::query()->withoutGlobalScopes()->whereKey($adjustment->id)->lockForUpdate()->firstOrFail();
             if ($adjustment->status !== 'draft') {
                 throw ValidationException::withMessages(['status' => ['Hanya draft yang bisa dikonfirmasi.']]);
+            }
+
+            if (InventoryOps::isWasteReason((string) $adjustment->reason)) {
+                $this->assertWasteItemsNegative($adjustment);
             }
 
             foreach ($adjustment->items as $item) {
@@ -111,10 +122,17 @@ class StockAdjustmentService
                 );
             }
 
-            $adjustment->update([
-                'status' => 'confirmed',
-                'confirmed_at' => now(),
-            ]);
+            $updated = StockAdjustment::query()
+                ->withoutGlobalScopes()
+                ->whereKey($adjustment->id)
+                ->where('status', 'draft')
+                ->update([
+                    'status' => 'confirmed',
+                    'confirmed_at' => now(),
+                ]);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Hanya draft yang bisa dikonfirmasi.']]);
+            }
 
             return $this->load($adjustment->fresh());
         });
@@ -122,10 +140,21 @@ class StockAdjustmentService
 
     public function cancel(StockAdjustment $adjustment): StockAdjustment
     {
-        $this->assertDraft($adjustment);
-        $adjustment->update(['status' => 'cancelled']);
+        return DB::transaction(function () use ($adjustment) {
+            $adjustment = StockAdjustment::query()->withoutGlobalScopes()->whereKey($adjustment->id)->lockForUpdate()->firstOrFail();
+            $this->assertDraft($adjustment);
 
-        return $this->load($adjustment->fresh());
+            $updated = StockAdjustment::query()
+                ->withoutGlobalScopes()
+                ->whereKey($adjustment->id)
+                ->where('status', 'draft')
+                ->update(['status' => 'cancelled']);
+            if ($updated !== 1) {
+                throw ValidationException::withMessages(['status' => ['Dokumen hanya bisa diubah saat draft.']]);
+            }
+
+            return $this->load($adjustment->fresh());
+        });
     }
 
     /**
@@ -153,10 +182,11 @@ class StockAdjustmentService
                 'product_id' => $item->product_id,
                 'name_snapshot' => $item->name_snapshot,
                 'qty_change' => (int) $item->qty_change,
-                'qty_input' => $item->qty_input,
+                'qty_input' => $item->qty_input !== null ? (int) $item->qty_input : abs((int) $item->qty_change),
                 'unit' => $item->unit,
-                'unit_level' => $item->unit_level,
-                'factor_to_base' => (int) $item->factor_to_base,
+                'unit_level' => $item->unit_level ?: 'small',
+                'factor_to_base' => max(1, (int) $item->factor_to_base),
+                'base_unit' => $item->product?->unit,
             ])->values()->all(),
         ];
     }
@@ -176,14 +206,14 @@ class StockAdjustmentService
             'warehouse_id' => $warehouse->id,
             'outlet_id' => $warehouse->outlet_id,
             'user_id' => $user->id,
-            'number' => $this->nextNumber($company->id),
+            'number' => $this->documentSequences->next($company->id, 'stock_adjustment', 'ADJ', 4),
             'client_uuid' => $payload['client_uuid'],
             'status' => 'draft',
             'reason' => $reason,
             'note' => $payload['note'] ?? null,
         ]);
 
-        $this->attachItems($adjustment, $payload['items']);
+        $this->attachItems($adjustment, $payload['items'], $reason);
 
         return $this->load($adjustment);
     }
@@ -191,27 +221,52 @@ class StockAdjustmentService
     /**
      * @param  list<array<string, mixed>>  $items
      */
-    private function attachItems(StockAdjustment $adjustment, array $items): void
+    private function attachItems(StockAdjustment $adjustment, array $items, string $reason): void
     {
+        $waste = InventoryOps::isWasteReason($reason);
+        $seen = [];
         foreach ($items as $row) {
-            $product = $this->assertTrackableProduct((int) $adjustment->company_id, (int) $row['product_id']);
-            $qtyChange = (int) $row['qty_change'];
-            if ($qtyChange === 0) {
+            $productId = (int) $row['product_id'];
+            if (isset($seen[$productId])) {
+                throw ValidationException::withMessages(['items' => ['Produk tidak boleh dobel dalam satu adjustment.']]);
+            }
+            $seen[$productId] = true;
+
+            $product = $this->assertTrackableProduct((int) $adjustment->company_id, $productId);
+            $entered = (int) $row['qty_change'];
+            if ($entered === 0) {
                 throw ValidationException::withMessages(['items' => ['Qty perubahan tidak boleh 0.']]);
             }
-            $factor = max(1, (int) ($row['factor_to_base'] ?? 1));
+            if ($waste && $entered > 0) {
+                throw ValidationException::withMessages(['items' => ['Waste/spoilage harus mengurangi stok (qty negatif).']]);
+            }
+            $resolved = $this->productUnits->resolveInventoryLine(
+                $product,
+                abs($entered),
+                isset($row['unit_level']) ? (string) $row['unit_level'] : null,
+                isset($row['unit']) ? (string) $row['unit'] : null,
+            );
 
             StockAdjustmentItem::query()->create([
                 'company_id' => $adjustment->company_id,
                 'stock_adjustment_id' => $adjustment->id,
                 'product_id' => $product->id,
-                'qty_change' => $qtyChange,
-                'qty_input' => isset($row['qty_input']) ? (int) $row['qty_input'] : abs($qtyChange),
-                'unit' => $row['unit'] ?? $product->unit,
-                'unit_level' => $row['unit_level'] ?? 'small',
-                'factor_to_base' => $factor,
+                'qty_change' => $entered < 0 ? -$resolved['qty_base'] : $resolved['qty_base'],
+                'qty_input' => $resolved['qty_input'],
+                'unit' => $resolved['unit'],
+                'unit_level' => $resolved['level'],
+                'factor_to_base' => $resolved['factor_to_base'],
                 'name_snapshot' => $product->name,
             ]);
+        }
+    }
+
+    private function assertWasteItemsNegative(StockAdjustment $adjustment): void
+    {
+        foreach ($adjustment->items as $item) {
+            if ((int) $item->qty_change >= 0) {
+                throw ValidationException::withMessages(['items' => ['Waste/spoilage harus mengurangi stok (qty negatif).']]);
+            }
         }
     }
 
@@ -262,22 +317,6 @@ class StockAdjustmentService
 
     private function load(StockAdjustment $adjustment): StockAdjustment
     {
-        return $adjustment->load(['items', 'warehouse:id,name', 'user:id,name']);
-    }
-
-    private function nextNumber(int $companyId): string
-    {
-        $full = 'ADJ-'.now()->format('ymd').'-';
-        $last = StockAdjustment::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('number', 'like', $full.'%')
-            ->orderByDesc('number')
-            ->lockForUpdate()
-            ->value('number');
-
-        $seq = $last ? ((int) substr((string) $last, -3)) + 1 : 1;
-
-        return $full.str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+        return $adjustment->load(['items.product:id,unit', 'warehouse:id,name', 'user:id,name']);
     }
 }

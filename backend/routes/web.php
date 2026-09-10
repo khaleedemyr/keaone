@@ -63,6 +63,26 @@ Route::get('/media/logos/{file}', function (string $file) {
     ]);
 });
 
+Route::get('/media/storefront/{file}', function (string $file) {
+    abort_unless(preg_match('/^[A-Za-z0-9._-]+$/', $file) === 1, 404);
+    $path = storage_path('app/public/storefront/'.$file);
+    abort_unless(is_file($path), 404);
+
+    $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+    $mime = match ($ext) {
+        'jpg', 'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'webp' => 'image/webp',
+        default => abort(404),
+    };
+
+    return response()->file($path, [
+        'Content-Type' => $mime,
+        'X-Content-Type-Options' => 'nosniff',
+        'Cache-Control' => 'public, max-age=31536000, immutable',
+    ]);
+});
+
 Route::get('/media/products/{file}', function (string $file) {
     abort_unless(preg_match('/^[A-Za-z0-9._-]+$/', $file) === 1, 404);
     $path = storage_path('app/public/products/'.$file);

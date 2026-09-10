@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, apiMessage } from '../../api/client'
-import type { ApiOk } from '../../types'
+import type { ApiOk, Warehouse } from '../../types'
 import { useFeedback } from '../../components/feedback'
 import { PageHeader } from '../../components/ui'
 import { MasterFilters, MasterPager, useListQuery } from '../../components/MasterListBar'
 import { MasterModal, MasterViewModal, MasterNameButton, ViewField } from '../../components/MasterModal'
+import { SearchSelect } from '../../components/SearchSelect'
 import { useAccess } from '../../access'
+import { useAuth } from '../../auth'
 import { useI18n, type MsgKey } from '../../i18n'
 import { formatRupiah } from '../../lib/money'
 
@@ -16,6 +18,7 @@ type AssetRow = {
   product_id: number
   product?: { id: number; name: string; sku?: string | null }
   goods_receipt_id?: number | null
+  outlet_id?: number | null
   outlet?: { id: number; name: string } | null
   name_snapshot: string
   acquisition_cost: number
@@ -36,11 +39,13 @@ function statusLabel(t: (k: MsgKey) => string, status: string) {
 
 export default function AssetDocs() {
   const { t, locale } = useI18n()
+  const { me } = useAuth()
   const { can } = useAccess()
   const feedback = useFeedback()
   const list = useListQuery(20, 'all')
 
   const [rows, setRows] = useState<AssetRow[]>([])
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([])
   const [viewing, setViewing] = useState<AssetRow | null>(null)
   const [editing, setEditing] = useState<AssetRow | null>(null)
   const [serialNumber, setSerialNumber] = useState('')
@@ -48,8 +53,10 @@ export default function AssetDocs() {
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [generatingSerial, setGeneratingSerial] = useState(false)
 
   const canEdit = can('fixedassets', 'edit')
+  const autoSerialEnabled = me?.settings?.procurement_fixed_asset_auto_serial_enabled === true
 
   const statusOptions = useMemo(
     () => [
@@ -59,6 +66,36 @@ export default function AssetDocs() {
     ],
     [t],
   )
+
+  const locationOptions = useMemo(() => {
+    const outletId = editing?.outlet_id ?? editing?.outlet?.id ?? null
+    const scoped = outletId
+      ? warehouses.filter((w) => !w.outlet_id || w.outlet_id === outletId)
+      : warehouses
+    const source = scoped.length > 0 ? scoped : warehouses
+    const options = source.map((w) => ({
+      value: w.name,
+      label: w.outlet?.name ? `${w.name} · ${w.outlet.name}` : w.name,
+      keywords: `${w.name} ${w.outlet?.name ?? ''} ${w.address ?? ''}`,
+    }))
+    // Keep legacy free-text location selectable so existing data is not lost
+    if (location && !options.some((opt) => opt.value === location)) {
+      options.unshift({ value: location, label: location, keywords: location })
+    }
+    return options
+  }, [editing, location, warehouses])
+
+  async function loadWarehouses() {
+    try {
+      const { data } = await api.get<ApiOk<Warehouse[]>>('/warehouses', {
+        params: { status: 'active', per_page: 200 },
+        silent: true,
+      })
+      setWarehouses(data.data ?? [])
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function loadRows() {
     try {
@@ -78,6 +115,10 @@ export default function AssetDocs() {
   }
 
   useEffect(() => {
+    void loadWarehouses()
+  }, [])
+
+  useEffect(() => {
     const handle = window.setTimeout(() => void loadRows(), 200)
     return () => window.clearTimeout(handle)
   }, [list.page, list.perPage, list.status, list.search]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -88,6 +129,18 @@ export default function AssetDocs() {
     setLocation(row.location ?? '')
     setNote(row.note ?? '')
     setError('')
+  }
+
+  async function generateSerial() {
+    setGeneratingSerial(true)
+    try {
+      const { data } = await api.get<ApiOk<{ serial_number: string }>>('/assets/next-serial')
+      setSerialNumber(data.data.serial_number)
+    } catch (err) {
+      feedback.error(apiMessage(err, t('loadFailed')))
+    } finally {
+      setGeneratingSerial(false)
+    }
   }
 
   async function onSubmit(event: FormEvent) {
@@ -127,10 +180,10 @@ export default function AssetDocs() {
         onPerPage={list.filters.onPerPage}
       />
 
-      <div className="card overflow-x-auto">
+      <div className="glass mt-4 overflow-x-auto rounded-3xl">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-muted">
+            <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-muted">
               <th className="px-4 py-3">{t('procurementFixedAssetNumber')}</th>
               <th className="px-4 py-3">{t('product')}</th>
               <th className="px-4 py-3 text-right">{t('procurementFixedAssetAcquisitionCost')}</th>
@@ -187,7 +240,10 @@ export default function AssetDocs() {
             <ViewField label={t('procurementFixedAssetSerial')} value={viewing.serial_number ?? '—'} />
             <ViewField label={t('procurementFixedAssetLocation')} value={viewing.location ?? '—'} />
             <ViewField label={t('navOutlets')} value={viewing.outlet?.name ?? '—'} />
-            <ViewField label={t('procurementFixedAssetGrLink')} value={viewing.goods_receipt_id ? `#${viewing.goods_receipt_id}` : '—'} />
+            <ViewField
+              label={t('procurementFixedAssetGrLink')}
+              value={viewing.goods_receipt_id ? `#${viewing.goods_receipt_id}` : '—'}
+            />
             {viewing.note ? <ViewField label={t('purchaseNote')} value={viewing.note} /> : null}
           </div>
         ) : null}
@@ -204,11 +260,36 @@ export default function AssetDocs() {
         <div className="space-y-4">
           <label className="field-block">
             <span>{t('procurementFixedAssetSerial')}</span>
-            <input className="field !mt-0" value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} />
+            <div className="flex gap-2">
+              <input
+                className="field !mt-0 min-w-0 flex-1"
+                value={serialNumber}
+                onChange={(e) => setSerialNumber(e.target.value)}
+                placeholder={autoSerialEnabled ? 'SN-YYMMDD-xxxx' : undefined}
+              />
+              {autoSerialEnabled ? (
+                <button
+                  type="button"
+                  className="btn-secondary shrink-0 !px-3"
+                  disabled={generatingSerial}
+                  onClick={() => void generateSerial()}
+                >
+                  {t('procurementFixedAssetGenerateSerial')}
+                </button>
+              ) : null}
+            </div>
           </label>
           <label className="field-block">
             <span>{t('procurementFixedAssetLocation')}</span>
-            <input className="field !mt-0" value={location} onChange={(e) => setLocation(e.target.value)} />
+            <SearchSelect
+              className="!mt-0"
+              value={location}
+              onChange={setLocation}
+              options={locationOptions}
+              placeholder={t('select')}
+              allowEmpty
+              emptyLabel="—"
+            />
           </label>
           <label className="field-block">
             <span>{t('purchaseNote')}</span>

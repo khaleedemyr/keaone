@@ -16,9 +16,12 @@ class StockOpnameItem extends Model
         'product_id',
         'book_qty',
         'counted_qty',
+        'counted_qty_input',
         'variance',
         'name_snapshot',
         'unit',
+        'unit_level',
+        'factor_to_base',
     ];
 
     protected function casts(): array
@@ -26,7 +29,9 @@ class StockOpnameItem extends Model
         return [
             'book_qty' => 'integer',
             'counted_qty' => 'integer',
+            'counted_qty_input' => 'integer',
             'variance' => 'integer',
+            'factor_to_base' => 'integer',
         ];
     }
 

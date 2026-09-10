@@ -145,6 +145,11 @@ class ProcurementSettings
         return self::bool('procurement_budget_check_enabled', $company);
     }
 
+    public static function fixedAssetAutoSerialEnabled(?Company $company = null): bool
+    {
+        return self::bool('procurement_fixed_asset_auto_serial_enabled', $company);
+    }
+
     public static function rfqEnabled(?Company $company = null): bool
     {
         return self::bool('procurement_rfq_enabled', $company);

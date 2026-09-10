@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Support\InventorySettings;
 use App\Support\ModuleCatalog;
 use App\Support\ProcurementSettings;
+use App\Support\SalesSettings;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -79,7 +80,7 @@ class Company extends Model
             'receipt_width' => 80,
             'receipt_footer' => 'Terima kasih',
             'pos_mode' => 'retail',
-        ], ProcurementSettings::defaults(), InventorySettings::defaults());
+        ], ProcurementSettings::defaults(), InventorySettings::defaults(), SalesSettings::defaults());
     }
 
     /**

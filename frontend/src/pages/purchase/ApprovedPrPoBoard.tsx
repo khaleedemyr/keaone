@@ -308,26 +308,26 @@ export function ApprovedPrPoBoard({ onCreated }: { onCreated?: () => void }) {
         bySupplier.set(sid, bucket)
       }
 
-      for (const [supplierId, group] of bySupplier) {
-        await api.post('/purchase-orders', {
-          client_uuid: uuid(),
-          supplier_id: supplierId,
-          purchase_requisition_id: active.id,
-          warehouse_id: active.warehouse?.id,
-          expected_at: expectedAt || undefined,
-          note: note || undefined,
-          ...approvalPayload,
-          items: group.map((line) => ({
-            product_id: line.product_id,
-            qty: line.qty,
-            unit: line.unit || undefined,
-            unit_level: line.unit_level || undefined,
-            unit_cost: line.unit_cost,
-            discount: lineDiscountAmount(line),
-            purchase_requisition_item_id: line.id,
-          })),
-        })
-      }
+      const orders = [...bySupplier.entries()].map(([supplierId, group]) => ({
+        client_uuid: uuid(),
+        supplier_id: supplierId,
+        purchase_requisition_id: active.id,
+        warehouse_id: active.warehouse?.id,
+        expected_at: expectedAt || undefined,
+        note: note || undefined,
+        ...approvalPayload,
+        items: group.map((line) => ({
+          product_id: line.product_id,
+          qty: line.qty,
+          unit: line.unit || undefined,
+          unit_level: line.unit_level || undefined,
+          unit_cost: line.unit_cost,
+          discount: lineDiscountAmount(line),
+          purchase_requisition_item_id: line.id,
+        })),
+      }))
+
+      await api.post('/purchase-orders/batch', { orders })
 
       feedback.success(t('saved'))
       closeModal()
@@ -377,9 +377,13 @@ export function ApprovedPrPoBoard({ onCreated }: { onCreated?: () => void }) {
                   <td className="px-3 py-2 text-muted">{formatDate(pr.needed_at ?? null, locale)}</td>
                   <td className="px-3 py-2 text-right text-muted">{pr.items?.length ?? 0}</td>
                   <td className="px-3 py-2 text-right">
-                    <button type="button" className="btn-ghost !px-2 !text-xs" onClick={() => openPr(pr)}>
-                      {t('purchaseCreatePo')}
-                    </button>
+                    {canCreate ? (
+                      <button type="button" className="btn-ghost !px-2 !text-xs" onClick={() => openPr(pr)}>
+                        {t('purchaseCreatePo')}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

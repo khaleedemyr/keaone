@@ -63,6 +63,21 @@ export function AppGlyph({ id, className = 'h-7 w-7' }: { id: AppId; className?:
       </svg>
     )
   }
+  if (id === 'finance') {
+    return (
+      <svg {...common}>
+        <path d="M4 19V5h4v14H4Zm6 0V9h4v10h-4Zm6 0v-6h4v6h-4Z" />
+      </svg>
+    )
+  }
+  if (id === 'storefront') {
+    return (
+      <svg {...common}>
+        <path d="M4 10h16l-1.5 10H5.5L4 10Z" />
+        <path d="M9 10V7a3 3 0 0 1 6 0v3" />
+      </svg>
+    )
+  }
   if (id === 'approvals') {
     return (
       <svg {...common}>
@@ -136,6 +151,8 @@ export const APP_TILE: Record<AppId, string> = {
   inventory: 'from-amber-300 to-orange-400',
   sales: 'from-gold to-amber-400',
   purchase: 'from-emerald-300 to-teal-500',
+  finance: 'from-teal-300 to-cyan-500',
+  storefront: 'from-lime-300 to-emerald-500',
   approvals: 'from-sky-300 to-blue-500',
   hr: 'from-fuchsia-300 to-violet-500',
   admin: 'from-rose-400 to-orange-400',
