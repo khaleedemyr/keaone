@@ -594,15 +594,37 @@ class StorefrontController extends Controller
         return $this->ok($order);
     }
 
-    public function shipOrder(StorefrontOrder $storefrontOrder, StorefrontService $storefronts): JsonResponse
+    public function shipOrder(Request $request, StorefrontOrder $storefrontOrder, StorefrontService $storefronts): JsonResponse
     {
         $this->ensureModule('storefront');
         $this->ensureCan('storefrontorders', 'edit');
 
+        $data = $request->validate([
+            'tracking_number' => ['required', 'string', 'max:120'],
+        ]);
+
         try {
-            $order = $storefronts->markOrderShipped($storefrontOrder);
+            $order = $storefronts->markOrderShipped($storefrontOrder, $data['tracking_number']);
         } catch (ValidationException $e) {
             return response()->json(['message' => collect($e->errors())->flatten()->first() ?: 'Order tidak bisa dikirim.'], 422);
+        }
+
+        return $this->ok($order);
+    }
+
+    public function updateOrderTracking(Request $request, StorefrontOrder $storefrontOrder, StorefrontService $storefronts): JsonResponse
+    {
+        $this->ensureModule('storefront');
+        $this->ensureCan('storefrontorders', 'edit');
+
+        $data = $request->validate([
+            'tracking_number' => ['required', 'string', 'max:120'],
+        ]);
+
+        try {
+            $order = $storefronts->updateOrderTracking($storefrontOrder, $data['tracking_number']);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => collect($e->errors())->flatten()->first() ?: 'Resi tidak bisa diubah.'], 422);
         }
 
         return $this->ok($order);
@@ -809,6 +831,56 @@ class StorefrontController extends Controller
         }
 
         return $this->paged($query, $request, fn (StorefrontInquiry $row) => $storefronts->inquiryToArray($row));
+    }
+
+    /** Create inquiry from admin preview (Setup / Designer / /storefront/preview). */
+    public function storeInquiry(Request $request, StorefrontService $storefronts): JsonResponse
+    {
+        $this->ensureModule('storefront');
+        $this->ensureCanAny([['storefrontinquiries', 'edit'], ['storefrontinquiries', 'view'], ['storefrontsetup', 'edit']]);
+
+        $company = CurrentCompany::company();
+        abort_unless($company, 404);
+        $storefront = $storefronts->forCompany($company);
+
+        $data = $request->validate([
+            'kind' => ['nullable', 'string', 'in:contact,quote'],
+            'name' => ['required', 'string', 'max:120'],
+            'email' => ['required', 'email', 'max:120'],
+            'phone' => ['nullable', 'string', 'max:40'],
+            'subject' => ['nullable', 'string', 'max:200'],
+            'message' => ['required', 'string', 'max:5000'],
+            'website' => ['nullable', 'string', 'max:200'],
+        ]);
+
+        if (trim((string) ($data['website'] ?? '')) !== '') {
+            return $this->ok([
+                'id' => 0,
+                'kind' => ($data['kind'] ?? 'contact') === 'quote' ? 'quote' : 'contact',
+                'status' => 'new',
+            ], [], 201);
+        }
+
+        $inquiry = $storefronts->submitInquiry($storefront, [
+            'kind' => $data['kind'] ?? 'contact',
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'phone' => $data['phone'] ?? null,
+            'subject' => $data['subject'] ?? null,
+            'message' => $data['message'],
+            'meta' => [
+                'template_key' => $storefront->template_key,
+                'source' => 'admin_preview',
+            ],
+            'ip' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+        ]);
+
+        return $this->ok([
+            'id' => $inquiry->id,
+            'kind' => $inquiry->kind,
+            'status' => $inquiry->status,
+        ], [], 201);
     }
 
     public function showInquiry(StorefrontInquiry $storefrontInquiry, StorefrontService $storefronts): JsonResponse

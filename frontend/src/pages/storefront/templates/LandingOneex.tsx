@@ -318,7 +318,12 @@ export function LandingOneex({ model }: { model: StorefrontRenderModel }) {
     setSending(true)
     setFormError('')
     try {
-      await submitStorefrontInquiry({ kind: 'contact', ...inquiryFromForm(e.currentTarget), preview: model.preview })
+      await submitStorefrontInquiry({
+        kind: 'contact',
+        ...inquiryFromForm(e.currentTarget),
+        preview: model.preview,
+        host: model.host,
+      })
       setSent(true)
       e.currentTarget.reset()
     } catch (err) {
@@ -744,7 +749,7 @@ export function LandingOneex({ model }: { model: StorefrontRenderModel }) {
               </div>
             ) : (
               <form onSubmit={onContact} className="space-y-3">
-                <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
+                <input name="sf_hp" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
                 <input
                   required
                   name="name"

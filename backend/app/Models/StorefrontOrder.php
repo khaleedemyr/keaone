@@ -33,6 +33,7 @@ class StorefrontOrder extends Model
         'transfer_proof_path',
         'bank_snapshot',
         'shipping_snapshot',
+        'tracking_number',
         'note',
         'placed_at',
         'paid_at',

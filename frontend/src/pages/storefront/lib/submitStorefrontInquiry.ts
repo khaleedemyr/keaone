@@ -11,8 +11,12 @@ export type StorefrontInquiryPayload = {
   phone?: string
   subject?: string
   message: string
-  /** Honeypot — leave empty */
+  /** Honeypot — leave empty (do not name the field "website"; browsers autofill it) */
   website?: string
+  /**
+   * Admin Setup / Designer / /storefront/preview — posts to authenticated
+   * `/storefront/inquiries` so messages appear in Kotak masuk (same pattern as preview checkout).
+   */
   preview?: boolean
   host?: string | null
 }
@@ -23,7 +27,7 @@ export type StorefrontInquiryResult = {
   status: string
 }
 
-/** Submit contact/quote form to public storefront API (or fake success in preview). */
+/** Submit contact/quote form to public API, or admin API when previewing. */
 export async function submitStorefrontInquiry(
   payload: StorefrontInquiryPayload,
 ): Promise<StorefrontInquiryResult> {
@@ -34,10 +38,6 @@ export async function submitStorefrontInquiry(
     throw new Error('Name, email, and message are required.')
   }
 
-  if (payload.preview) {
-    return { id: 0, kind: payload.kind === 'quote' ? 'quote' : 'contact', status: 'new' }
-  }
-
   const body = {
     kind: payload.kind === 'quote' ? 'quote' : 'contact',
     name,
@@ -46,6 +46,14 @@ export async function submitStorefrontInquiry(
     subject: payload.subject?.trim() || null,
     message,
     website: payload.website ?? '',
+  }
+
+  // Preview (logged-in ERP): persist via admin API so inbox receives the message.
+  if (payload.preview) {
+    const { data } = await api.post<ApiOk<StorefrontInquiryResult>>('/storefront/inquiries', body, {
+      silent: true,
+    })
+    return data.data
   }
 
   const { data } = await api.post<ApiOk<StorefrontInquiryResult>>('/public/storefront/inquiries', body, {
@@ -73,7 +81,8 @@ export function inquiryFromForm(form: HTMLFormElement): {
     phone: get('phone') || undefined,
     subject: get('subject') || undefined,
     message: get('message'),
-    website: get('website') || undefined,
+    // Prefer obscure honeypot name; keep legacy "website" for older markup.
+    website: get('sf_hp') || get('website') || undefined,
   }
 }
 

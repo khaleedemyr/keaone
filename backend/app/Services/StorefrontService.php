@@ -1113,9 +1113,16 @@ class StorefrontService
         });
     }
 
-    public function markOrderShipped(StorefrontOrder $order): StorefrontOrder
+    public function markOrderShipped(StorefrontOrder $order, ?string $trackingNumber = null): StorefrontOrder
     {
-        return DB::transaction(function () use ($order) {
+        $tracking = trim((string) $trackingNumber);
+        if ($tracking === '') {
+            throw ValidationException::withMessages([
+                'tracking_number' => 'Nomor resi wajib diisi saat mengirim order.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($order, $tracking) {
             $locked = StorefrontOrder::query()
                 ->withoutGlobalScopes()
                 ->whereKey($order->id)
@@ -1131,6 +1138,37 @@ class StorefrontService
             $locked->update([
                 'status' => 'shipped',
                 'shipped_at' => now(),
+                'tracking_number' => $tracking,
+            ]);
+
+            return $locked->fresh(['items.product:id,name,sku', 'sale:id,number']);
+        });
+    }
+
+    public function updateOrderTracking(StorefrontOrder $order, ?string $trackingNumber = null): StorefrontOrder
+    {
+        $tracking = trim((string) $trackingNumber);
+        if ($tracking === '') {
+            throw ValidationException::withMessages([
+                'tracking_number' => 'Nomor resi wajib diisi.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($order, $tracking) {
+            $locked = StorefrontOrder::query()
+                ->withoutGlobalScopes()
+                ->whereKey($order->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! in_array($locked->status, ['shipped', 'delivered'], true)) {
+                throw ValidationException::withMessages([
+                    'status' => 'Nomor resi hanya bisa diubah untuk order yang sudah dikirim.',
+                ]);
+            }
+
+            $locked->update([
+                'tracking_number' => $tracking,
             ]);
 
             return $locked->fresh(['items.product:id,name,sku', 'sale:id,number']);

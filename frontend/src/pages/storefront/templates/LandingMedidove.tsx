@@ -1,5 +1,6 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { STOREFRONT_PREVIEW_BANNER } from '../previewDraft'
+import { inquiryErrorMessage, inquiryFromForm, submitStorefrontInquiry } from '../lib/submitStorefrontInquiry'
 import type { StorefrontRenderModel } from './renderTypes'
 import { FooterLinkList } from './FooterLinkList'
 import { readFooterColumn, readFooterLegal } from '../lib/footerLinks'
@@ -130,6 +131,9 @@ export function LandingMedidove({ model }: { model: StorefrontRenderModel }) {
   const content = theme(model)
   const brand = model.title || 'MediDove'
   const primary = colors(model).primary || MD.primary
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [formError, setFormError] = useState('')
 
   const topPhone = slotText(content, 'topbar_phone', model.contact_phone || '+1 800 833 9780')
   const topEmail = slotText(content, 'topbar_email', model.contact_email || 'info@example.com')
@@ -311,6 +315,15 @@ export function LandingMedidove({ model }: { model: StorefrontRenderModel }) {
   const emergencyLabel = slotText(content, 'emergency_label', 'Emergency number')
   const emergencyPhone = slotText(content, 'emergency_phone', topPhone || '202-555-0104')
 
+  const contactKicker = slotText(content, 'contact_kicker', 'Contact')
+  const contactTitle = slotText(content, 'contact_title', 'Book an Appointment')
+  const contactBody = slotText(
+    content,
+    'contact_body',
+    'Tell us how we can help. Our team will follow up to confirm your visit.',
+  )
+  const contactFormCta = slotText(content, 'contact_form_cta', 'Send message')
+
   const footerTagline = slotText(
     content,
     'footer_tagline',
@@ -328,6 +341,27 @@ export function LandingMedidove({ model }: { model: StorefrontRenderModel }) {
   })
   const footerLegal = readFooterLegal(content, 'Privacy Policy | #\nTerms of Use | #')
   const footerCopy = slotText(content, 'footer_copy', `© ${new Date().getFullYear()} ${brand}. All Rights Reserved.`)
+
+  async function onContact(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (sending) return
+    setSending(true)
+    setFormError('')
+    try {
+      await submitStorefrontInquiry({
+        kind: 'contact',
+        ...inquiryFromForm(e.currentTarget),
+        preview: model.preview,
+        host: model.host,
+      })
+      setSent(true)
+      e.currentTarget.reset()
+    } catch (err) {
+      setFormError(inquiryErrorMessage(err))
+    } finally {
+      setSending(false)
+    }
+  }
 
   if (newsNav.view === 'detail' && newsNav.selected) {
     return (
@@ -696,8 +730,69 @@ export function LandingMedidove({ model }: { model: StorefrontRenderModel }) {
         </Reveal>
       </section>
 
+      {/* Contact */}
+      <section id="kontak" className="bg-white py-16 sm:py-20">
+        <div className={`${MD.wide} grid gap-10 lg:grid-cols-2 lg:items-start`}>
+          <Reveal>
+            <p className="text-[14px] font-semibold uppercase tracking-wide text-[#e12454]">{contactKicker}</p>
+            <h2 className="mt-2 text-[28px] font-extrabold text-[#223645] sm:text-[36px]">{contactTitle}</h2>
+            <p className="mt-4 text-[15px] leading-relaxed text-[#64748b]">{contactBody}</p>
+            <ul className="mt-6 space-y-2 text-[14px] text-[#223645]">
+              {model.contact_email || topEmail ? <li>{model.contact_email || topEmail}</li> : null}
+              {model.contact_phone || topPhone ? <li>{model.contact_phone || topPhone}</li> : null}
+              {model.contact_address ? <li>{model.contact_address}</li> : null}
+            </ul>
+          </Reveal>
+          <Reveal delay={0.08}>
+            {sent ? (
+              <div className="rounded-sm border border-[#8fb569]/40 bg-[#f4f9ff] p-6 text-[15px] text-[#223645]">
+                Thanks — your message was sent.
+              </div>
+            ) : (
+              <form onSubmit={onContact} className="space-y-3 rounded-sm border border-[#e8eef5] bg-[#f4f9ff] p-6">
+                <input name="sf_hp" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
+                <input
+                  required
+                  name="name"
+                  placeholder="Name"
+                  className="w-full rounded-sm border border-[#e8eef5] bg-white px-4 py-3 text-[14px] outline-none focus:border-[#e12454]"
+                />
+                <input
+                  required
+                  name="email"
+                  type="email"
+                  placeholder="Email"
+                  className="w-full rounded-sm border border-[#e8eef5] bg-white px-4 py-3 text-[14px] outline-none focus:border-[#e12454]"
+                />
+                <input
+                  name="phone"
+                  placeholder="Phone (optional)"
+                  className="w-full rounded-sm border border-[#e8eef5] bg-white px-4 py-3 text-[14px] outline-none focus:border-[#e12454]"
+                />
+                <textarea
+                  required
+                  name="message"
+                  rows={4}
+                  placeholder="Message"
+                  className="w-full rounded-sm border border-[#e8eef5] bg-white px-4 py-3 text-[14px] outline-none focus:border-[#e12454]"
+                />
+                {formError ? <div className="text-[13px] text-[#e12454]">{formError}</div> : null}
+                <button
+                  type="submit"
+                  disabled={sending}
+                  className="inline-flex w-full items-center justify-center rounded-sm px-4 py-3 text-[14px] font-semibold text-white disabled:opacity-60"
+                  style={{ background: primary }}
+                >
+                  {sending ? 'Sending…' : contactFormCta}
+                </button>
+              </form>
+            )}
+          </Reveal>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer id="kontak" className="bg-[#223645] text-white">
+      <footer className="bg-[#223645] text-white">
         <Reveal className={`${MD.wide} grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4`}>
           <div className="lg:col-span-2">
             <div className="text-[20px] font-extrabold">

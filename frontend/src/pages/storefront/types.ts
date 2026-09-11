@@ -251,6 +251,7 @@ export type StorefrontOrderRow = {
   subtotal?: number
   shipping_cost?: number
   total: number
+  tracking_number?: string | null
   shipping_snapshot?: {
     destination_label?: string | null
     courier?: string
@@ -261,11 +262,24 @@ export type StorefrontOrderRow = {
   } | null
   placed_at?: string | null
   paid_at?: string | null
+  shipped_at?: string | null
+  delivered_at?: string | null
   items?: Array<{
     id: number
     qty: number
     unit_price: number
     line_total: number
     name_snapshot: string
+    variant_snapshot?:
+      | Array<{
+          attribute?: string
+          option?: string
+          attribute_id?: number
+          option_id?: number
+          extra_price?: number
+          image_url?: string | null
+        }>
+      | Record<string, string>
+      | null
   }>
 }

@@ -333,7 +333,12 @@ export function LandingPrompt({ model }: { model: StorefrontRenderModel }) {
     setSending(true)
     setFormError('')
     try {
-      await submitStorefrontInquiry({ kind: 'contact', ...inquiryFromForm(e.currentTarget), preview: model.preview })
+      await submitStorefrontInquiry({
+        kind: 'contact',
+        ...inquiryFromForm(e.currentTarget),
+        preview: model.preview,
+        host: model.host,
+      })
       setSent(true)
       e.currentTarget.reset()
     } catch (err) {
@@ -792,7 +797,7 @@ export function LandingPrompt({ model }: { model: StorefrontRenderModel }) {
             <div className="rounded-2xl border border-slate-200 bg-white p-6 text-[15px] text-slate-700 shadow-sm">Thanks — your message was sent.</div>
           ) : (
             <form onSubmit={onContact} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
+              <input name="sf_hp" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
               <input required name="name" placeholder="Name" className="w-full rounded-lg border border-slate-200 px-4 py-3 text-[14px] outline-none focus:border-slate-400" />
               <input required name="email" type="email" placeholder="Email" className="w-full rounded-lg border border-slate-200 px-4 py-3 text-[14px] outline-none focus:border-slate-400" />
               <textarea required name="message" rows={4} placeholder="Message" className="w-full rounded-lg border border-slate-200 px-4 py-3 text-[14px] outline-none focus:border-slate-400" />

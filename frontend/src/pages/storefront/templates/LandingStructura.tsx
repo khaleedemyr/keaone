@@ -505,7 +505,12 @@ export function LandingStructura({ model }: { model: StorefrontRenderModel }) {
     setSending(true)
     setFormError('')
     try {
-      await submitStorefrontInquiry({ kind: 'contact', ...inquiryFromForm(e.currentTarget), preview: model.preview })
+      await submitStorefrontInquiry({
+        kind: 'contact',
+        ...inquiryFromForm(e.currentTarget),
+        preview: model.preview,
+        host: model.host,
+      })
       setSent(true)
       e.currentTarget.reset()
     } catch (err) {
@@ -968,7 +973,7 @@ export function LandingStructura({ model }: { model: StorefrontRenderModel }) {
             <div className="hidden lg:col-span-2 lg:block" />
             <Reveal delay={0.12} className="lg:col-span-6 lg:px-[30px]">
               <form onSubmit={onSubmit} className="space-y-4">
-                <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
+                <input name="sf_hp" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
                 <div className="grid gap-4 sm:grid-cols-3">
                   {(['Your name', 'Email', 'Phone number'] as const).map((label) => (
                     <label key={label} className="block text-[14px]">

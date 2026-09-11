@@ -1,1 +1,0 @@
-import{Dt as e,Ot as t}from"./ui-DAmMsd8c.js";import{t as n}from"./RolesManager-CgvPdUmy.js";var r=t();function i(){let{t}=e();return(0,r.jsx)(n,{endpoint:`/platform/roles`,eyebrow:t(`appAdmin`),subtitle:t(`platformRolesDynamicLead`)})}export{i as default};

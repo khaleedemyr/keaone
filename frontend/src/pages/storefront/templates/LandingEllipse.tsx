@@ -1105,6 +1105,7 @@ export function LandingEllipse({ model }: { model: StorefrontRenderModel }) {
                         kind: 'contact',
                         ...inquiryFromForm(e.currentTarget),
                         preview: model.preview,
+                        host: model.host,
                       })
                       setSent(true)
                       e.currentTarget.reset()
@@ -1115,7 +1116,7 @@ export function LandingEllipse({ model }: { model: StorefrontRenderModel }) {
                     }
                   }}
                 >
-                  <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
+                  <input name="sf_hp" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
                   <div className="grid gap-4 sm:grid-cols-3">
                     {(['Your name', 'Email', 'Phone number'] as const).map((label) => (
                       <label key={label} className="block text-[14px]">

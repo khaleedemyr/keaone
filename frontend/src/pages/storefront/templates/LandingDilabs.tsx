@@ -308,7 +308,12 @@ export function LandingDilabs({ model }: { model: StorefrontRenderModel }) {
     setSending(true)
     setFormError('')
     try {
-      await submitStorefrontInquiry({ kind: 'contact', ...inquiryFromForm(e.currentTarget), preview: model.preview })
+      await submitStorefrontInquiry({
+        kind: 'contact',
+        ...inquiryFromForm(e.currentTarget),
+        preview: model.preview,
+        host: model.host,
+      })
       setSent(true)
       e.currentTarget.reset()
     } catch (err) {
@@ -739,7 +744,7 @@ export function LandingDilabs({ model }: { model: StorefrontRenderModel }) {
             </div>
           ) : (
             <form onSubmit={onContact} className="space-y-3 rounded-2xl p-6" style={{ background: DL.soft }}>
-              <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
+              <input name="sf_hp" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
               <input className="w-full rounded-xl border-0 bg-white px-4 py-3 text-[14px]" name="name" placeholder="Name" required />
               <input className="w-full rounded-xl border-0 bg-white px-4 py-3 text-[14px]" name="email" type="email" placeholder="Email" required />
               <textarea className="w-full rounded-xl border-0 bg-white px-4 py-3 text-[14px]" name="message" rows={4} placeholder="Message" required />

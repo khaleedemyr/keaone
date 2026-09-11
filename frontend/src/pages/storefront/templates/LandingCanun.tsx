@@ -307,6 +307,7 @@ export function LandingCanun({ model }: { model: StorefrontRenderModel }) {
         kind: 'quote',
         ...fields,
         preview: model.preview,
+        host: model.host,
       })
       setQuoteDone(true)
       e.currentTarget.reset()
@@ -328,6 +329,7 @@ export function LandingCanun({ model }: { model: StorefrontRenderModel }) {
         kind: 'contact',
         ...fields,
         preview: model.preview,
+        host: model.host,
       })
       setContactDone(true)
       e.currentTarget.reset()
@@ -668,7 +670,7 @@ export function LandingCanun({ model }: { model: StorefrontRenderModel }) {
               <div className="bg-white p-6 text-[15px] text-slate-800">Thanks — we received your request and will follow up soon.</div>
             ) : (
               <form onSubmit={onQuote} className="space-y-3 bg-white p-6 text-[14px] text-slate-800">
-                <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
+                <input name="sf_hp" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
                 <input required name="name" placeholder="Full name" className="w-full border border-slate-200 px-4 py-3 outline-none" />
                 <input required name="email" type="email" placeholder="Email" className="w-full border border-slate-200 px-4 py-3 outline-none" />
                 <select name="subject" className="w-full border border-slate-200 px-4 py-3 outline-none" defaultValue="">
@@ -780,7 +782,7 @@ export function LandingCanun({ model }: { model: StorefrontRenderModel }) {
             <div className="border border-black/5 bg-white p-6 text-[15px] text-slate-700">Thanks — your message was sent.</div>
           ) : (
             <form onSubmit={onContact} className="space-y-3 border border-black/5 bg-white p-6 shadow-sm">
-              <input name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
+              <input name="sf_hp" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
               <input required name="name" placeholder="Name" className="w-full border border-slate-200 px-4 py-3 text-[14px] outline-none" />
               <input required name="email" type="email" placeholder="Email" className="w-full border border-slate-200 px-4 py-3 text-[14px] outline-none" />
               <textarea required name="message" rows={4} placeholder="Message" className="w-full border border-slate-200 px-4 py-3 text-[14px] outline-none" />

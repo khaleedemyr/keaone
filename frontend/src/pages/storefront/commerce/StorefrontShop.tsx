@@ -26,6 +26,7 @@ import {
   type StorefrontCustomer,
 } from '../lib/customerSession'
 import { STOREFRONT_PREVIEW_BANNER } from '../previewDraft'
+import { formatVariantSnapshot, orderItemDisplayName } from '../variantLabel'
 import { ShopCatalogPage, ShopCategoriesPage } from '../templates/ShopCatalogPages'
 import { Reveal } from '../templates/storefrontMotion'
 
@@ -109,6 +110,7 @@ export type CustomerOrderRow = {
   total: number
   customer_address?: string | null
   note?: string | null
+  tracking_number?: string | null
   shipping_snapshot?: PlacedOrderSummary['shipping_snapshot']
   placed_at?: string | null
   can_review?: boolean
@@ -117,6 +119,7 @@ export type CustomerOrderRow = {
     name: string
     qty: number
     line_total: number
+    variant_snapshot?: unknown
     reviewed?: boolean
   }>
 }
@@ -2918,12 +2921,25 @@ function AccountPage({ model }: { model: StorefrontRenderModel }) {
                       <div className="mt-1 text-[12px] text-neutral-500">{statusLabel(row.status)}</div>
                     </div>
                   </div>
+                  {row.tracking_number ? (
+                    <div className="mt-2 text-[12px] text-neutral-500">
+                      No. resi: <span className="font-medium text-neutral-800">{row.tracking_number}</span>
+                    </div>
+                  ) : null}
                   <ul className="mt-3 space-y-2 border-t border-black/5 pt-3 text-[13px] text-neutral-600">
-                    {row.items.map((item, i) => (
+                    {row.items.map((item, i) => {
+                      const variantLabel = formatVariantSnapshot(item.variant_snapshot)
+                      const name = orderItemDisplayName(item.name, variantLabel)
+                      return (
                       <li key={`${row.id}-${i}`} className="space-y-2">
                         <div className="flex justify-between gap-2">
-                          <span>
-                            {item.name} × {item.qty}
+                          <span className="min-w-0">
+                            <span>
+                              {name} × {item.qty}
+                            </span>
+                            {variantLabel ? (
+                              <div className="mt-0.5 text-[12px] text-neutral-400">{variantLabel}</div>
+                            ) : null}
                           </span>
                           <span>{formatRupiah(item.line_total)}</span>
                         </div>
@@ -2996,7 +3012,8 @@ function AccountPage({ model }: { model: StorefrontRenderModel }) {
                           )
                         ) : null}
                       </li>
-                    ))}
+                      )
+                    })}
                   </ul>
                   <div className="mt-2 space-y-1 text-[12px] text-neutral-400">
                     {(row.shipping_cost ?? 0) > 0 || row.shipping_snapshot ? (

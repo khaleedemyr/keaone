@@ -623,6 +623,7 @@ Route::prefix('v1')->group(function () {
             Route::put('storefront/news/{storefrontNewsPost}', [StorefrontController::class, 'updateNewsPost']);
             Route::delete('storefront/news/{storefrontNewsPost}', [StorefrontController::class, 'destroyNewsPost']);
             Route::get('storefront/inquiries', [StorefrontController::class, 'inquiries']);
+            Route::post('storefront/inquiries', [StorefrontController::class, 'storeInquiry']);
             Route::get('storefront/inquiries/{storefrontInquiry}', [StorefrontController::class, 'showInquiry']);
             Route::post('storefront/inquiries/{storefrontInquiry}/read', [StorefrontController::class, 'markInquiryRead']);
             Route::post('storefront/inquiries/{storefrontInquiry}/archive', [StorefrontController::class, 'archiveInquiry']);
@@ -632,6 +633,7 @@ Route::prefix('v1')->group(function () {
             Route::post('storefront/shipping/cost', [StorefrontController::class, 'calculateShipping']);
             Route::post('storefront/orders/{storefrontOrder}/confirm', [StorefrontController::class, 'confirmOrder']);
             Route::post('storefront/orders/{storefrontOrder}/ship', [StorefrontController::class, 'shipOrder']);
+            Route::post('storefront/orders/{storefrontOrder}/tracking', [StorefrontController::class, 'updateOrderTracking']);
             Route::post('storefront/orders/{storefrontOrder}/deliver', [StorefrontController::class, 'deliverOrder']);
             Route::post('storefront/orders/{storefrontOrder}/cancel', [StorefrontController::class, 'cancelOrder']);
             Route::post('storefront/shop/auth/register', [StorefrontCustomerAuthController::class, 'register'])

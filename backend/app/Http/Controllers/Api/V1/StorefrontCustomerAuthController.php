@@ -149,6 +149,7 @@ class StorefrontCustomerAuthController extends Controller
             'customer_address' => $order->customer_address,
             'note' => $order->note,
             'shipping_snapshot' => $order->shipping_snapshot,
+            'tracking_number' => $order->tracking_number,
             'placed_at' => optional($order->placed_at)?->toIso8601String(),
             'paid_at' => optional($order->paid_at)?->toIso8601String(),
             'shipped_at' => optional($order->shipped_at)?->toIso8601String(),
@@ -159,6 +160,7 @@ class StorefrontCustomerAuthController extends Controller
                 'name' => $item->name_snapshot,
                 'qty' => $item->qty,
                 'line_total' => $item->line_total,
+                'variant_snapshot' => $item->variant_snapshot,
                 'reviewed' => isset($reviewedSet[$order->id.':'.$item->product_id]),
             ])->values()->all(),
         ]);

@@ -257,6 +257,11 @@ return [
                     // 10. Emergency
                     ['key' => 'emergency_label', 'type' => 'text', 'label' => 'Label emergency', 'section' => '10. Emergency', 'default' => 'Emergency number'],
                     ['key' => 'emergency_phone', 'type' => 'text', 'label' => 'Nomor emergency', 'section' => '10. Emergency', 'default' => '202-555-0104'],
+                    // 10b. Contact form
+                    ['key' => 'contact_kicker', 'type' => 'text', 'label' => 'Label kontak', 'section' => '10b. Contact', 'default' => 'Contact'],
+                    ['key' => 'contact_title', 'type' => 'text', 'label' => 'Judul kontak', 'section' => '10b. Contact', 'default' => 'Book an Appointment'],
+                    ['key' => 'contact_body', 'type' => 'textarea', 'label' => 'Teks kontak', 'section' => '10b. Contact', 'default' => 'Tell us how we can help. Our team will follow up to confirm your visit.'],
+                    ['key' => 'contact_form_cta', 'type' => 'text', 'label' => 'CTA form', 'section' => '10b. Contact', 'default' => 'Send message'],
                     // 11. Footer
                     ['key' => 'footer_tagline', 'type' => 'textarea', 'label' => 'Tagline footer', 'section' => '11. Footer', 'default' => 'Incididunt lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor ut labore et dolore magna aliqua.'],
                     ['key' => 'footer_col1_title', 'type' => 'text', 'label' => 'Footer kolom 1 — judul', 'section' => '11. Footer', 'default' => 'Departments'],
@@ -847,6 +852,7 @@ return [
                 'name' => 'Avalon street',
                 'kind' => 'shop',
                 'description' => 'Street fashion Avalon-style: announcement bar, hero sale, On Sale, New Collection, Newest Products, categories, trust, footer.',
+                'has_news' => true,
                 'preset_blocks' => [],
                 'slots' => [
                     // 0. Announcement
